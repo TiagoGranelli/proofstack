@@ -1,10 +1,11 @@
 // The production path end to end, with Docker only: builds the image (prerender included), scans it with grype
-// (a fixable high or critical vulnerability fails, see scanImage), runs the bundled migrator twice against a
-// real Postgres (the second run must apply nothing), serves the app behind the reference edge
-// (deploy/Caddyfile) on a private network, checks it through the edge, and stops it gracefully. Everything it
-// starts is removed afterwards, except grype's database volume. CI's `docker` job and `pnpm ci:docker`.
+// (a fixable high or critical vulnerability fails, see scanImage), runs the bundled migrator three times at once
+// through PgBouncer in transaction mode (exactly one run applies the migrations) and once more directly (it
+// must apply nothing), serves the app through the pooler and behind the reference edge (deploy/Caddyfile) on a
+// private network, checks it through the edge, and stops it gracefully. Everything it starts is removed
+// afterwards, except grype's database volume. CI's `docker` job and `pnpm ci:docker`.
 // Usage: node scripts/docker-smoke.ts   (env: PROOFSTACK_DOCKER_PREFIX, KEEP_SMOKE_IMAGE=1)
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:net'
@@ -16,8 +17,17 @@ import { dockerPrefix, IMAGES, waitForPostgres } from './images.ts'
 const prefix = `${dockerPrefix()}-smoke-${process.pid}`
 const IMAGE = `${dockerPrefix()}-app:smoke`
 const NETWORK = prefix
-const [DB, APP, EDGE] = ['db', 'app', 'edge'].map((role) => `${prefix}-${role}`) as [string, string, string]
-const DATABASE_URL = 'postgres://proofstack:proofstack-smoke@db:5432/proofstack'
+const [DB, POOLER, APP, EDGE] = ['db', 'pooler', 'app', 'edge'].map((role) => `${prefix}-${role}`) as [
+  string,
+  string,
+  string,
+  string,
+]
+const DIRECT_URL = 'postgres://proofstack:proofstack-smoke@db:5432/proofstack'
+/** PgBouncer in transaction mode, as Neon and Supabase pool connections (docs/operations.md, "Connection poolers"). */
+const POOLED_URL = 'postgres://proofstack:proofstack-smoke@pooler:5432/proofstack'
+const MIGRATIONS = (JSON.parse(readFileSync('drizzle/meta/_journal.json', 'utf8')) as { entries: unknown[] }).entries
+  .length
 /** srvx drains in-flight requests for up to 5 s (SERVER_SHUTDOWN_TIMEOUT); an idle server stops at once. */
 const MAX_STOP_MS = 5_000
 
@@ -34,6 +44,38 @@ const docker = (args: string[], options: { quiet?: boolean; allowFailure?: boole
     )
   return ((result.stdout as string | null) ?? '').trim()
 }
+
+/** `docker` without blocking, for containers that must run at the same time. Resolves with the output. */
+const dockerAsync = (args: string[]) =>
+  new Promise<string>((done, reject) => {
+    const child = spawn('docker', args, { stdio: ['ignore', 'pipe', 'pipe'] })
+    let [stdout, stderr] = ['', '']
+    child.stdout.on('data', (chunk: Buffer) => (stdout += chunk.toString()))
+    child.stderr.on('data', (chunk: Buffer) => (stderr += chunk.toString()))
+    child.once('error', reject)
+    child.once('exit', (code) =>
+      code === 0
+        ? resolve(stdout.trim())
+        : reject(new Error(`docker ${args.slice(0, 2).join(' ')} failed (${code})\n${stderr}`)),
+    )
+  })
+
+/** The `applied` count of the migrator's last log line. */
+const appliedBy = (output: string) => {
+  const last = JSON.parse(output.split('\n').at(-1) ?? '{}') as { msg?: string; applied?: number }
+  if (last.msg !== 'migrations applied') throw new Error(`unexpected migrator output: ${output}`)
+  return last.applied
+}
+
+/** One run of the image's migrator on the smoke network, with `env` (NAME=value). */
+const migrateOnce = (env: string[]) =>
+  dockerAsync(
+    ['run', '--rm', '--network', NETWORK, '--memory', '256m', ...env.flatMap((e) => ['--env', e])].concat([
+      IMAGE,
+      'node',
+      '.output/migrate.mjs',
+    ]),
+  )
 
 const step = async <T>(name: string, run: () => T | Promise<T>): Promise<T> => {
   const started = performance.now()
@@ -124,7 +166,7 @@ const running = (name: string) =>
   docker(['inspect', '--format', '{{.State.Running}}', name], { quiet: true }) === 'true'
 
 const cleanup = () => {
-  docker(['rm', '--force', '--volumes', APP, EDGE, DB], { quiet: true, allowFailure: true })
+  docker(['rm', '--force', '--volumes', APP, EDGE, POOLER, DB], { quiet: true, allowFailure: true })
   docker(['network', 'rm', NETWORK], { quiet: true, allowFailure: true })
   if (process.env.KEEP_SMOKE_IMAGE !== '1') docker(['image', 'rm', IMAGE], { quiet: true, allowFailure: true })
 }
@@ -145,7 +187,7 @@ try {
   // Reported now, failed at the end: the rest of the smoke test still runs.
   scanProblems = await step('scan the image for vulnerabilities (grype)', scanImage)
 
-  await step('start Postgres', async () => {
+  await step('start Postgres and PgBouncer (transaction mode)', async () => {
     docker(['network', 'create', NETWORK], { quiet: true })
     docker(
       ['run', '--detach', '--name', DB, '--network', NETWORK, '--network-alias', 'db', '--memory', '512m']
@@ -154,33 +196,60 @@ try {
       { quiet: true },
     )
     await waitForPostgres(DB)
+    // Behind a pooler the app sends no timeouts; the role carries them (docs/operations.md, "Connection poolers").
+    const role = ['statement_timeout = 15000', 'idle_in_transaction_session_timeout = 30000']
+    docker(
+      ['exec', DB, 'psql', '-U', 'proofstack', '-c', role.map((s) => `alter role proofstack set ${s};`).join(' ')],
+      {
+        quiet: true,
+      },
+    )
+    // Two server connections for every client: runs and requests share them, as on a managed pooler.
+    docker(
+      ['run', '--detach', '--name', POOLER, '--network', NETWORK, '--network-alias', 'pooler', '--memory', '64m']
+        .concat(['--env', 'DB_HOST=db', '--env', 'DB_USER=proofstack', '--env', 'DB_PASSWORD=proofstack-smoke'])
+        .concat(['--env', 'DB_NAME=proofstack', '--env', 'AUTH_TYPE=scram-sha-256', '--env', 'POOL_MODE=transaction'])
+        .concat(['--env', 'DEFAULT_POOL_SIZE=2', IMAGES.pgbouncer]),
+      { quiet: true },
+    )
+    await waitForPostgres(POOLER)
   })
 
-  await step('migrate twice (the second run must apply nothing)', () => {
-    for (const run of [1, 2]) {
-      const output = docker(
-        ['run', '--rm', '--network', NETWORK, '--memory', '512m', '--env', `DATABASE_URL=${DATABASE_URL}`].concat([
-          IMAGE,
-          'node',
-          '.output/migrate.mjs',
-        ]),
-        { quiet: true },
-      )
-      console.log(`  run ${run}: ${output}`)
-      if (run === 2 && !output.includes('"applied":0')) throw new Error('the second migration run applied something')
-    }
+  await step('migrate: three runs at once through the pooler, then one direct run that applies nothing', async () => {
+    const outputs = await Promise.all([1, 2, 3].map(() => migrateOnce([`DATABASE_URL=${POOLED_URL}`])))
+    for (const output of outputs) console.log(`  pooled: ${output}`)
+    const applied = outputs.map((output) => appliedBy(output)).toSorted((a, b) => (a ?? 0) - (b ?? 0))
+    if (applied.join() !== `0,0,${MIGRATIONS}`)
+      throw new Error(`expected one run to apply ${MIGRATIONS} migrations and two to apply none, got ${applied.join()}`)
+    // MIGRATION_DATABASE_URL (direct) wins over DATABASE_URL (the pooler).
+    const direct = await migrateOnce([`DATABASE_URL=${POOLED_URL}`, `MIGRATION_DATABASE_URL=${DIRECT_URL}`])
+    console.log(`  direct: ${direct}`)
+    if (appliedBy(direct) !== 0) throw new Error('the direct run applied something')
+    const locks = docker(
+      ['exec', DB, 'psql', '-U', 'proofstack', '-Atc', "select count(*) from pg_locks where locktype = 'advisory'"],
+      { quiet: true },
+    )
+    if (locks !== '0') throw new Error(`${locks} advisory lock(s) left behind on the pooler's server connections`)
   })
 
   const port = await freePort()
   const origin = `http://localhost:${port}`
+  const secret = randomBytes(32).toString('base64')
   await step(`serve behind the edge at ${origin}`, async () => {
     const subnet = docker(['network', 'inspect', NETWORK, '--format', '{{range .IPAM.Config}}{{.Subnet}},{{end}}'], {
       quiet: true,
     }).replace(/,$/, '')
     docker(
       ['run', '--detach', '--name', APP, '--network', NETWORK, '--network-alias', 'app', '--memory', '512m']
-        .concat(['--env', `DATABASE_URL=${DATABASE_URL}`, '--env', `APP_URL=${origin}`])
-        .concat(['--env', `BETTER_AUTH_SECRET=${randomBytes(32).toString('base64')}`])
+        .concat([
+          '--env',
+          `DATABASE_URL=${POOLED_URL}`,
+          '--env',
+          'DATABASE_URL_POOLED=true',
+          '--env',
+          `APP_URL=${origin}`,
+        ])
+        .concat(['--env', `BETTER_AUTH_SECRET=${secret}`])
         // The edge connects from this network: its X-Forwarded-For (the client IP it resolved) is believed.
         .concat(['--env', `TRUSTED_PROXIES=${subnet}`, IMAGE]),
       { quiet: true },

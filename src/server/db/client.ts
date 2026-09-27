@@ -14,8 +14,10 @@ export const pool = new Pool({
   // Fail fast instead of queueing forever when Postgres is unreachable or the pool is exhausted,
   // so /api/ready reports 503 promptly and requests do not pile up.
   connectionTimeoutMillis: 5_000,
-  // Server-side cap for a single statement; nothing in this app should come close.
-  statement_timeout: 15_000,
+  // Server-side caps for a single statement and for a transaction left idle; nothing in this app should come
+  // close. pg sends them as startup parameters, which a pooler refuses ("unsupported startup parameter"), so
+  // behind one they are set on the role instead (docs/operations.md, "Connection poolers").
+  ...(env.databaseUrlPooled ? {} : { statement_timeout: 15_000, idle_in_transaction_session_timeout: 30_000 }),
   application_name: 'proofstack',
 })
 pool.on('error', (error) => log('error', 'postgres pool error', { error }))

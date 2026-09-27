@@ -69,9 +69,13 @@ const administer = async (testUrl: string, statements: (name: string) => string[
 export const dropTestDatabase = (testUrl: string) =>
   administer(testUrl, (name) => [`drop database if exists "${name}" with (force)`])
 
+/** Recreates the test database, empty. */
+export const emptyTestDatabase = (testUrl: string) =>
+  administer(testUrl, (name) => [`drop database if exists "${name}" with (force)`, `create database "${name}"`])
+
 /** Recreates an empty test database and applies every migration in drizzle/. */
 export const resetTestDatabase = async (testUrl: string) => {
-  await administer(testUrl, (name) => [`drop database if exists "${name}" with (force)`, `create database "${name}"`])
+  await emptyTestDatabase(testUrl)
   const pool = new Pool({ connectionString: testUrl })
   // Postgres NOTICEs ("schema drizzle already exists, skipping") are noise here.
   pool.on('connect', (client) => client.on('notice', () => {}))

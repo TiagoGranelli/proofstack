@@ -7,7 +7,7 @@ How to configure, deploy and run ProofStack in production. The app is a single N
 
 The server validates the variables read by `src/server/env.ts` while it starts (loaded by the Nitro
 plugin `src/server/nitro/startup.ts`): `DATABASE_URL`, `APP_URL`, `BETTER_AUTH_SECRET`,
-`TRUSTED_PROXIES`, `DATABASE_POOL_MAX`, `AUTH_SIGN_UP`, `SMTP_URL` and `MAIL_FROM`. An invalid value stops
+`TRUSTED_PROXIES`, `DATABASE_POOL_MAX`, `DATABASE_URL_POOLED`, `AUTH_SIGN_UP`, `SMTP_URL` and `MAIL_FROM`. An invalid value stops
 the process with exit code 1 and a message naming the variable, before the port opens. So does the removed
 `TRUSTED_IP_HEADER`, with a pointer to `TRUSTED_PROXIES`. The other variables are read by Nitro and srvx
 without validation: a non-numeric port silently falls back to 3000, and a non-numeric
@@ -20,6 +20,7 @@ without validation: a non-numeric port silently falls back to 3000, and a non-nu
 | `BETTER_AUTH_SECRET` | yes | At least 32 characters; signs session cookies. Generate with `openssl rand -base64 32`. |
 | `TRUSTED_PROXIES` | behind a proxy | Addresses or CIDR ranges of your reverse proxies, comma-separated (`127.0.0.1/32`, `10.0.0.0/8`). See [Client IP](#client-ip-and-rate-limiting). |
 | `DATABASE_POOL_MAX` | no | Postgres connections per process, 1 to 100. Default 10. |
+| `DATABASE_URL_POOLED` | behind a pooler | `true` when `DATABASE_URL` is a connection pooler (PgBouncer, Neon's `-pooler` host, Supabase's pooler). Default `false`. See [Connection poolers](#connection-poolers). |
 | `AUTH_SIGN_UP` | no | `closed` (default): accounts come from `pnpm user:create`. `open`: anyone can sign up at `/sign-up`; needs `SMTP_URL`. See [Accounts and mail](#accounts-and-mail). |
 | `SMTP_URL` | for mail | `smtps://user:password@smtp.example.com:465` (TLS) or `smtp://...:587` (STARTTLS when offered); credentials percent-encoded. Unset: mail is only logged. |
 | `MAIL_FROM` | with `SMTP_URL` | Sender, such as `ProofStack <no-reply@example.com>`. |
@@ -28,10 +29,11 @@ without validation: a non-numeric port silently falls back to 3000, and a non-nu
 | `SERVER_SHUTDOWN_TIMEOUT` | no | Seconds to drain requests on SIGTERM. Default 5. |
 | `NODE_ENV` | no | The production build behaves as production regardless; the Docker image sets it anyway. |
 
-The migration script (`node .output/migrate.mjs`, `pnpm db:migrate`) reads `DATABASE_URL` and:
+The migration script (`node .output/migrate.mjs`, `pnpm db:migrate`) reads:
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
+| `MIGRATION_DATABASE_URL` | `DATABASE_URL` | Where to migrate. Set it to a direct connection when `DATABASE_URL` goes through a pooler. |
 | `MIGRATIONS_FOLDER` | `drizzle` | Folder with the SQL files and `meta/_journal.json`, relative to the working directory. |
 | `MIGRATE_LOCK_TIMEOUT` | `5min` | Longest wait for another instance's migration run (Postgres `lock_timeout` syntax). |
 | `MIGRATE_DDL_LOCK_TIMEOUT` | `5s` | Longest wait for each table lock the DDL takes. See [Build and deploy](#build-and-deploy). |
@@ -71,22 +73,40 @@ Deploy sequence:
    ```sh
    docker run --rm -e DATABASE_URL=... proofstack node .output/migrate.mjs
    ```
-   Several copies may start at once (for example as an init container per replica): a Postgres
-   advisory lock serializes them, and migrations already recorded in `drizzle.__drizzle_migrations` are
-   skipped. Without the lock, concurrent runs fail with duplicate-object errors. The script waits up to
-   `MIGRATE_LOCK_TIMEOUT` (default `5min`) for the lock and exits non-zero on failure.
+   Several copies may start at once (for example as an init container per replica). Each run is one
+   transaction that first takes a transaction-scoped advisory lock (`pg_advisory_xact_lock`), so the
+   runs queue, and each reads `drizzle.__drizzle_migrations` only once it holds the lock: migrations
+   already recorded there are skipped. Without the lock, concurrent runs fail with duplicate-object
+   errors. The script waits up to `MIGRATE_LOCK_TIMEOUT` (default `5min`) for the lock and exits
+   non-zero on failure. Its settings are `SET LOCAL`, so the run also works through a pooler in
+   transaction mode (see [Connection poolers](#connection-poolers)); `tests/db/migrate.test.ts` starts
+   three runs at once, and `pnpm ci:docker` does the same through PgBouncer.
    While it runs DDL, every table lock it waits for is bounded by `MIGRATE_DDL_LOCK_TIMEOUT` (default
    `5s`): a migration stuck behind a long query on a busy table would otherwise make every later query
    on that table queue behind it. On a lock timeout the run rolls back (all pending migrations share
-   one transaction) and is retried: up to 5 attempts in total, with pauses of 1, 2, 3 and 4 s between
-   them, then it fails.
+   one transaction, which also releases the advisory lock) and is retried: up to 5 attempts in total,
+   with pauses of 1, 2, 3 and 4 s between them, then it fails. The run turns off `statement_timeout` and
+   `idle_in_transaction_session_timeout` for its transaction (`SET LOCAL ... = 0`), so the role-level
+   timeouts meant for the app (see [Connection poolers](#connection-poolers)) cut short neither the wait
+   for another run nor a long migration.
 3. Start the new version. Route traffic when `GET /api/ready` returns 200.
 4. Stop the old version with SIGTERM.
 
 Migrations must stay backward compatible with the version still running during the rollout: add
-columns and tables first, and remove them in a later deploy. Drizzle runs them inside a transaction, so
-`CREATE INDEX` is not `CONCURRENTLY` and blocks writes to that table while the index builds; on a large
-table, create the index by hand with `CREATE INDEX CONCURRENTLY` before the deploy (see below).
+columns and tables first, and remove them in a later deploy (expand, then contract). All pending
+migrations run in one transaction, which has consequences:
+
+- `CREATE INDEX CONCURRENTLY` cannot run in a transaction, and a plain `CREATE INDEX` blocks writes to the
+  table while it builds. On a large table, build the index by hand before the deploy (see below).
+- `ADD CONSTRAINT ... NOT VALID` followed by `VALIDATE CONSTRAINT` in the same run gains nothing: the
+  validation scan runs while the transaction still holds the exclusive lock the `ADD` took. Put the
+  `VALIDATE` in a migration of the next deploy.
+- A data backfill in the same transaction as the DDL holds the DDL's locks for the whole backfill. Backfill
+  large tables in batches between two deploys.
+
+Migrations are forward only: there are no down migrations. To undo a change, write a new migration that
+reverts it and deploy that. When a migration destroyed data, restore from a backup
+([Backups and restore](#backups-and-restore)).
 
 ### Migration safety
 
@@ -131,6 +151,39 @@ its dependencies installed. The script loads the server's auth configuration, so
 requires `DATABASE_URL`, `APP_URL` and `BETTER_AUTH_SECRET`; use the production values. It cannot run
 from the Docker image, which contains only `.output/` and `drizzle/`. Accounts it creates have a verified
 address and can sign in at once ([ADR 0003](decisions/0003-sign-up-policy.md)).
+
+### Connection poolers
+
+Managed Postgres often hands out two connection strings: a direct one and one through a pooler in
+transaction mode (PgBouncer, Neon's `-pooler` host, Supabase's pooler on port 6543). In transaction mode
+each transaction may run on a different server connection, so session state does not work: `SET`, session
+advisory locks, `LISTEN` and SQL `PREPARE` ([PgBouncer's feature table](https://www.pgbouncer.org/features.html)).
+PgBouncer also refuses startup parameters it does not track
+([`ignore_startup_parameters`](https://www.pgbouncer.org/config.html#ignore_startup_parameters)), and Neon
+recommends a direct connection for schema migrations.
+
+- **The app** uses no session state: every query is a single statement or a Drizzle transaction, and pg
+  uses unnamed protocol-level statements. It sends two startup parameters PgBouncer does not track:
+  `statement_timeout` (15 s) and `idle_in_transaction_session_timeout` (30 s). With
+  `DATABASE_URL_POOLED=true` it leaves both out; put them on the app's role instead, where every server
+  connection the pooler opens picks them up (a pooler configured with `ignore_startup_parameters` would
+  otherwise drop them silently):
+  ```sql
+  ALTER ROLE app_user SET statement_timeout = '15s';
+  ALTER ROLE app_user SET idle_in_transaction_session_timeout = '30s';
+  ```
+  Do the same on a direct connection: the role setting also bounds a `psql` session as that role, and the
+  startup parameters then only repeat it. Without the flag, every connection through PgBouncer fails with
+  `unsupported startup parameter: statement_timeout`, and `/api/ready` answers 503.
+- **Migrations** work through a transaction pooler (see step 2 above), but prefer a direct connection:
+  set `MIGRATION_DATABASE_URL`. A migration that must run outside a transaction (`CREATE INDEX
+  CONCURRENTLY`) is run by hand anyway ([Migration safety](#migration-safety)).
+- **`user:create`** loads the app's database client, so it follows `DATABASE_URL` and
+  `DATABASE_URL_POOLED` like the app.
+
+`pnpm ci:docker` runs three migrators at once through PgBouncer 1.25 in transaction mode (two server
+connections, the timeouts on the role), then serves the app through it
+with `DATABASE_URL_POOLED=true`.
 
 ## Reverse proxy
 
@@ -362,7 +415,7 @@ entry can appear on the same line in a log collector. `node .output/migrate.mjs`
 - `request error`: an error that reached Nitro's `error` hook from the request pipeline (`tags`,
   `method`, `path`). Nitro answers it with a bare JSON 500.
 - `starting` and `shutdown complete` bracket the process lifetime. `starting` records `appUrl`,
-  `trustedProxies` and `databasePoolMax`; `shutdown complete` lists the cleanups that ran (the Postgres
+  `trustedProxies`, `databasePoolMax` and `databaseUrlPooled`; `shutdown complete` lists the cleanups that ran (the Postgres
   pool, the Effect runtime, pending background tasks and the mailer).
 - `shutdown cleanup failed`: a cleanup (`cleanup` field) rejected during shutdown.
 - `uncaught exception, exiting` and `unhandled rejection`: see below.
@@ -476,7 +529,7 @@ browsers, Postgres and (for `verify`) Mailpit, and moves artifacts. The logic li
 | `pnpm ci:build` | `pnpm build` with placeholder configuration (the same as the Dockerfile's) |
 | `pnpm ci:verify` | `verify:app` on all five Playwright projects (needs Mailpit: the `mailpit` service) |
 | `pnpm ci:lighthouse` | `pnpm lighthouse --runs=5`, through the edge. Exit 2 means inconclusive (see AGENTS.md) |
-| `pnpm ci:docker` | `scripts/docker-smoke.ts`: builds the image, scans it with grype (see below), migrates twice, serves it behind Caddy on a private network, checks pages through the edge, stops it gracefully. Brings its own Postgres. Needs Docker. |
+| `pnpm ci:docker` | `scripts/docker-smoke.ts`: builds the image, scans it with grype (see below), migrates with three runs at once through PgBouncer (transaction mode) and once directly, serves it through the pooler and behind Caddy on a private network, checks pages through the edge, stops it gracefully. Brings its own Postgres and PgBouncer. Needs Docker. |
 
 `pnpm ci:local [job ...]` is the faithful local equivalent (default: every job, in CI order). It runs the
 container jobs (`static`, `supply-chain`, `drift`, `build`, `verify`, `lighthouse`) in the official Playwright image

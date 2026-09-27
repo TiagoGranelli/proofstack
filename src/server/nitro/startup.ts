@@ -10,6 +10,7 @@ export default definePlugin((nitroApp) => {
     appUrl: env.appUrl,
     trustedProxies: env.trustedProxies,
     databasePoolMax: env.databasePoolMax,
+    databaseUrlPooled: env.databaseUrlPooled,
   })
 
   // srvx handles SIGTERM/SIGINT, drains in-flight requests, then closes Nitro: release what server code
