@@ -56,7 +56,7 @@ const dockerAsync = (args: string[]) =>
     child.once('error', reject)
     child.once('exit', (code) =>
       code === 0
-        ? resolve(stdout.trim())
+        ? done(stdout.trim())
         : reject(new Error(`docker ${args.slice(0, 2).join(' ')} failed (${code})\n${stderr}`)),
     )
   })
