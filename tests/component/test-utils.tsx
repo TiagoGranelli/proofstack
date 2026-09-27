@@ -1,7 +1,7 @@
 // Renders a component the way the app does: inside a TanStack Router (memory history, so links and
 // navigation work without touching the page URL) and a TanStack Query client. Network calls go to the MSW
 // worker (tests/component/api-mocks.ts).
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { type QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import {
   type AnyRoute,
   createMemoryHistory,
@@ -15,6 +15,7 @@ import type { ReactNode } from 'react'
 import { expect } from 'vitest'
 import { render } from 'vitest-browser-react'
 import { page, userEvent } from 'vitest/browser'
+import { createQueryClient } from '#/lib/query-client.ts'
 
 /** The app's page paths, so that links and redirects under test land on a route. */
 const PATHS = [
@@ -29,9 +30,9 @@ const PATHS = [
   '/account',
 ]
 
-/** Like src/router.tsx, minus retries: a failed request shows its error state at once. */
+/** Like src/router.tsx (the same MutationCache), minus retries: a failed request shows its error state at once. */
 export const testQueryClient = () =>
-  new QueryClient({ defaultOptions: { queries: { staleTime: 30_000, retry: false }, mutations: { retry: false } } })
+  createQueryClient({ defaultOptions: { queries: { staleTime: 30_000, retry: false }, mutations: { retry: false } } })
 
 /**
  * Renders `ui` on every route, starting at `url`. `route` puts a real file route of src/routes at `path`

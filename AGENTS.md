@@ -49,8 +49,10 @@ The UI follows [Bulletproof React](https://github.com/alan2207/bulletproof-react
 - Where new code goes:
   - Data access for a feature: `features/<name>/api/<verb>-<noun>.ts`. Queries export
     `get<Noun>QueryOptions()` bound to `client: apiClient()` over `#/sdk/@tanstack/react-query.gen.ts`.
-    Mutations export a `use<Verb><Noun>({ mutationConfig })` hook that owns cache updates and invalidation
-    and runs the caller's `onSuccess` before invalidating (`useCreatePost`, `useSignIn`, `useSignOut`). Where
+    Mutations export a `use<Verb><Noun>({ mutationConfig })` hook that owns cache updates and declares its
+    invalidation in `meta` (`invalidates`, `clearsCache`), never by hand: the `MutationCache` in
+    `src/lib/query-client.ts` clears before the caller's `onSuccess` and refetches after it (`useCreatePost`,
+    `useSignIn`, `useSignOut`). Where
     the user goes afterwards is the caller's `onSuccess`, never the hook's. Components never spread a generated
     `*Mutation()` themselves, and component files export components, not hooks. Cache helpers shared by a
     feature's hooks go in `api/<noun>-cache.ts`.

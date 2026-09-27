@@ -6,7 +6,7 @@ import { PostList } from '#/features/posts/components/post-list.tsx'
 export const Route = createFileRoute('/')({
   // Dynamic public content: SSR on every request, never prerendered. On the server this fetches the first
   // page; in the browser it returns the cached pages at once. Writes in this tab refetch the cached list
-  // before they finish (invalidatePosts), so a revisit never shows posts older than the last write.
+  // before they finish (postListsChanged), so a revisit never shows posts older than the last write.
   loader: ({ context }) => context.queryClient.infiniteQuery({ ...getPublicPostsQueryOptions(), staleTime: 'static' }),
   head: () => ({ meta: [{ title: 'Latest posts · ProofStack' }] }),
   // The HTML carries a per-request CSP nonce, so shared caches must not store it; browsers revalidate.

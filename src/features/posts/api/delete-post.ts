@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { dropMyPost, invalidatePosts } from '#/features/posts/api/posts-cache.ts'
+import { dropMyPost, postListsChanged } from '#/features/posts/api/posts-cache.ts'
 import { apiErrorTag } from '#/lib/api-error.ts'
 import { myPostsRemoveMutation } from '#/sdk/@tanstack/react-query.gen.ts'
 
@@ -14,18 +14,14 @@ export const isPostNotFound = (error: unknown) => apiErrorTag(error) === 'PostNo
  */
 export function useDeletePost({ mutationConfig }: { mutationConfig?: DeletePostConfig } = {}) {
   const queryClient = useQueryClient()
-  const { onSuccess, onError, ...config } = mutationConfig ?? {}
+  const { onSuccess, ...config } = mutationConfig ?? {}
   return useMutation({
     ...config,
     ...myPostsRemoveMutation(),
+    meta: { invalidates: postListsChanged(), invalidatesOnError: isPostNotFound },
     onSuccess: async (...args) => {
       dropMyPost(queryClient, args[1].path.id)
       await onSuccess?.(...args)
-      await invalidatePosts(queryClient)
-    },
-    onError: async (...args) => {
-      if (isPostNotFound(args[0])) await invalidatePosts(queryClient)
-      await onError?.(...args)
     },
   })
 }
