@@ -1,13 +1,14 @@
-// Every page route in src/routes must be covered by the accessibility suites (tests/AGENTS.md, "Accessibility"): at least one
-// axe state in STATES (tests/e2e/a11y.spec.ts), a landmark snapshot in its `landmarks` block, and a row in the
-// tab-order table of tests/e2e/keyboard.spec.ts. Reads the files only (no browser, well under 0.1 s), so it
-// runs in `pnpm check`: a new page cannot ship without them.
+// Every page route in src/routes must be covered by the accessibility suites (tests/AGENTS.md, "Accessibility"): at
+// least one axe state in STATES (tests/e2e/a11y.spec.ts), a landmark snapshot in the `landmarks` block of
+// tests/e2e/landmarks.spec.ts, and a row in the tab-order table of tests/e2e/keyboard.spec.ts. Reads the files only
+// (no browser, well under 0.1 s), so it runs in `pnpm check`: a new page cannot ship without them.
 // Usage: node scripts/route-coverage.ts   (exit 1 and a list of what is missing when a page is not covered)
 import { readdirSync, readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 
 const ROUTES = 'src/routes'
 const A11Y = 'tests/e2e/a11y.spec.ts'
+const LANDMARKS = 'tests/e2e/landmarks.spec.ts'
 const KEYBOARD = 'tests/e2e/keyboard.spec.ts'
 
 /**
@@ -73,10 +74,11 @@ const between = (spec: Spec, start: string, end?: string) => {
 /** What each page lacks, as `path: missing, missing`; empty when every page is covered. */
 export const routeCoverageProblems = (): string[] => {
   const a11y = readSpec(A11Y)
+  const landmarks = readSpec(LANDMARKS)
   const keyboard = readSpec(KEYBOARD)
   const suites: Array<[string, Set<string>]> = [
     [`an axe state in STATES (${A11Y})`, reachedPaths(between(a11y, 'const STATES', "test.describe('axe'"))],
-    [`a landmark snapshot (${A11Y})`, reachedPaths(between(a11y, "test.describe('landmarks'"))],
+    [`a landmark snapshot (${LANDMARKS})`, reachedPaths(between(landmarks, "test.describe('landmarks'"))],
     [`a tab-order row (${KEYBOARD})`, reachedPaths(between(keyboard, "test.describe('tab order'", "test.describe('"))],
   ]
   return pageRoutes().flatMap((path) => {

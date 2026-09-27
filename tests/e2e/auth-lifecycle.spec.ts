@@ -1,7 +1,8 @@
+import type { APIRequestContext, Locator } from '@playwright/test'
 // The account lifecycle on the open server (AUTH_SIGN_UP=open, mail to Mailpit). Every test works on
 // a throwaway account (./support/accounts.ts), never the worker's `author`, and every browser context has its
 // own client IP.
-import type { APIRequestContext, Locator } from '@playwright/test'
+import { FLASH_MESSAGES } from '#/lib/flash.ts'
 import {
   createAccount,
   expectFormSignInRefused,
@@ -15,7 +16,7 @@ import {
   signInWithForm,
   signUpWithForm,
 } from './support/accounts.ts'
-import { type Author, expect, followLink, signIn, test, visit } from './support/app.ts'
+import { type Author, expect, expectFlash, followLink, signIn, test, visit } from './support/app.ts'
 
 /** Better Auth's own sign-in endpoint refuses `account` until its address is confirmed. */
 const expectApiSignInUnverified = async (request: APIRequestContext, account: Author) => {
@@ -24,6 +25,13 @@ const expectApiSignInUnverified = async (request: APIRequestContext, account: Au
   })
   expect(early.status()).toBe(403)
   expect(await early.json()).toMatchObject({ code: 'EMAIL_NOT_VERIFIED' })
+}
+
+/** A failure the server pinned on `field`: said next to it, which is invalid, described by it and focused. */
+const expectFieldIssue = async (field: Locator, message: string) => {
+  await expect(field).toHaveAttribute('aria-invalid', 'true')
+  await expect(field).toHaveAccessibleDescription(message)
+  await expect(field).toBeFocused()
 }
 
 /** Types `password` into the delete-account form (`deletion`) and presses Delete account. */
@@ -71,7 +79,7 @@ test('resets a forgotten password from the mailed link, which ends every session
   const newPassword = `pw-${crypto.randomUUID()}`
   const link = await mailLink(account.email, 'Reset your password', '/reset-password')
   await setPasswordWithLink(page, link, newPassword)
-  await expect(page.getByRole('status')).toContainText('Your password is changed')
+  await expectFlash(page, /\/login$/, FLASH_MESSAGES['password-reset'])
 
   // The link works once.
   await setPasswordWithLink(page, link, `pw-${crypto.randomUUID()}`)
@@ -120,7 +128,7 @@ test('lists the sessions and signs out another one', async ({ browser, page }, t
   await expect(sessions).toHaveCount(1)
 
   await page.getByRole('button', { name: 'Sign out everywhere' }).click()
-  await expect(page).toHaveURL(/\/login$/)
+  await expectFlash(page, /\/login$/, FLASH_MESSAGES['signed-out-everywhere'])
   await expectSignedOut(page)
   await elsewhere.close()
 })
@@ -137,10 +145,11 @@ test('deletes the account after the password and an explicit confirmation', asyn
   await expect(deletion.getByRole('checkbox')).toBeFocused()
   await deletion.getByRole('checkbox').check()
   await deletion.getByRole('button', { name: 'Delete account' }).click()
-  await expect(deletion.getByRole('alert')).toContainText('That password is not correct')
+  // A wrong password is about the password field, so it is said there.
+  await expectFieldIssue(deletion.getByLabel('Password', { exact: true }), 'That password is not correct.')
 
   await submitDeletion(deletion, account.password)
-  await expect(page).toHaveURL(/\/$/)
+  await expectFlash(page, /\/$/, FLASH_MESSAGES['account-deleted'])
   await expectSignedOut(page)
   await expectFormSignInRefused(page, account, 'Wrong email or password')
 })

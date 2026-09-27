@@ -26,7 +26,7 @@ description: Add or change a page (route) in this repo's UI, with its accessibil
    presses, so it keeps focus (a `disabled` button loses it).
 6. **Accessibility tests** (`tests/unit/route-coverage.test.ts` in `pnpm check` fails without all three):
    - an entry in `STATES` in `tests/e2e/a11y.spec.ts` for the page and each new UI state (axe, WCAG 2.2 AA);
-   - a landmark snapshot in its `landmarks` block;
+   - a landmark snapshot in the `landmarks` block of `tests/e2e/landmarks.spec.ts`;
    - a row in the tab-order table of `tests/e2e/keyboard.spec.ts` if the page has controls.
 7. **Component tests** for pending, disabled, error and limit states: `renderInApp(ui, { route })` mounts the
    real route file (read `tests/AGENTS.md`).

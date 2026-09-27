@@ -43,8 +43,8 @@ test('SSR pages load every module and route chunk under the nonce policy', async
   // Client-side navigation loads each route's chunks through dynamic import and Vite's preload helper.
   await navLink(page, 'About').click()
   await expect(page.getByRole('heading', { name: 'About' })).toBeVisible()
-  await navLink(page, 'Dashboard').click()
-  await expect(page).toHaveURL(/\/login\?redirect=/)
+  await navLink(page, 'Sign in').click()
+  await expect(page).toHaveURL(/\/login$/)
   await expect(page.getByRole('button', { name: 'Sign in' })).toBeEnabled()
 
   await signIn(page, author)

@@ -84,9 +84,18 @@ export const visit = async (page: Page, path: string) => {
   return response
 }
 
-/** Follows the link named `name`, expects to land on `url` and waits for that page to hydrate. */
+/** After an action that redirects: on `url`, with its one-time flash message (src/lib/flash.ts) under the heading. */
+export const expectFlash = async (page: Page, url: RegExp, message: string) => {
+  await expect(page).toHaveURL(url)
+  await expect(page.getByTestId('flash')).toHaveText(message)
+}
+
+/**
+ * Follows the page's link named `name` (in `main`: the header has a "Sign in" of its own), expects to land on `url`
+ * and waits for that page to hydrate.
+ */
 export const followLink = async (page: Page, name: string, url: RegExp) => {
-  await page.getByRole('link', { name }).click()
+  await page.getByRole('main').getByRole('link', { name }).click()
   await expect(page).toHaveURL(url)
   await expect(page.locator('body[data-hydrated="true"]')).toBeAttached()
 }

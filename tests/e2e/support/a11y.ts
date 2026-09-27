@@ -114,10 +114,32 @@ export async function tabOrder(page: Page, max?: number) {
   }
 }
 
-/** The page-level landmarks every page has: the site header with the main navigation, then `main`. */
-export const SITE_HEADER = `
+const ACCOUNT_LINKS = {
+  'signed out': `
+    - link "Sign in"`,
+  'signed in': `
+    - text: /\\S/
+    - link "Dashboard"
+    - link "Account"
+    - button "Sign out"`,
+}
+
+/**
+ * What every page starts with, as an ARIA snapshot: the skip link, then the site header with the main
+ * navigation, whose account links depend on `session`; the page's own `main` follows.
+ */
+export const siteHeader = (session: keyof typeof ACCOUNT_LINKS) => `
+- link "Skip to content"
 - banner:
   - navigation "Main":
     - link "${APP_NAME}"
-    - link "About"
-    - link "Dashboard"`
+    - link "About"${ACCOUNT_LINKS[session]}`
+
+/** The footer every page ends with: what the app is and the theme choice. */
+export const SITE_FOOTER = `
+- contentinfo:
+  - paragraph
+  - group "Theme":
+    - radio "System"
+    - radio "Light"
+    - radio "Dark"`

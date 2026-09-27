@@ -20,7 +20,12 @@ import {
 
 test.skip(({ isMobile }) => isMobile, 'keyboard navigation is a desktop concern')
 
-const NAV = [`link "${APP_NAME}"`, 'link "About"', 'link "Dashboard"']
+// Every page starts with the skip link and the header, whose account links depend on the session, and ends with
+// the footer's theme choice: one Tab stop for the radio group, on its checked radio.
+const NAV = ['link "Skip to content"', `link "${APP_NAME}"`, 'link "About"']
+const SIGNED_OUT = [...NAV, 'link "Sign in"']
+const SIGNED_IN = [...NAV, 'link "Dashboard"', 'link "Account"', 'button "Sign out"']
+const FOOTER = ['radio "System"']
 
 // Links are Tab stops in every engine here. Safari leaves them out by default ("Press Tab to highlight each item"),
 // but Playwright's WebKit 1.63 includes them, as `pnpm ci:local verify` showed.
@@ -28,38 +33,75 @@ const NAV = [`link "${APP_NAME}"`, 'link "About"', 'link "Dashboard"']
 test.describe('tab order', () => {
   const pages: Array<[string, (page: Page, author: Author) => Promise<unknown>, string[]]> = [
     // The seed project publishes more than a page of posts (seed.setup.ts), so `/` always ends in Load more.
-    ['home', (page) => visit(page, '/'), [...NAV, 'button "Load more posts"']],
-    ['about', (page) => visit(page, '/about'), NAV],
+    ['home', (page) => visit(page, '/'), [...SIGNED_OUT, 'button "Load more posts"', ...FOOTER]],
+    [
+      'home, flash message after signing out',
+      async (page, author) => {
+        await signIn(page, author)
+        await visit(page, '/dashboard')
+        await page.getByRole('button', { name: 'Sign out' }).click()
+        await expect(page.getByTestId('flash')).toBeVisible()
+      },
+      [...SIGNED_OUT, 'button "Load more posts"', ...FOOTER],
+    ],
+    [
+      'about',
+      // Prerendered: the header asks who is signed in once hydrated, and shows Dashboard until it knows.
+      async (page) => {
+        await visit(page, '/about')
+        await expect(
+          page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Sign in' }),
+        ).toBeVisible()
+      },
+      [...SIGNED_OUT, ...FOOTER],
+    ],
     [
       'login',
       (page) => visit(page, '/login'),
       // The open server (APP_URL) has open sign-up, so the page links to it.
       [
-        ...NAV,
+        ...SIGNED_OUT,
         'textbox "Email"',
         'textbox "Password"',
         'button "Sign in"',
         'link "Forgot your password?"',
         'link "Create one"',
+        ...FOOTER,
       ],
     ],
     [
       'sign-up',
       (page) => visit(page, '/sign-up'),
-      [...NAV, 'textbox "Name"', 'textbox "Email"', 'textbox "Password"', 'button "Create account"', 'link "Sign in"'],
+      [
+        ...SIGNED_OUT,
+        'textbox "Name"',
+        'textbox "Email"',
+        'textbox "Password"',
+        'button "Create account"',
+        'link "Sign in"',
+        ...FOOTER,
+      ],
     ],
     [
       'forgot password',
       (page) => visit(page, '/forgot-password'),
-      [...NAV, 'textbox "Email"', 'button "Send reset link"', 'link "Back to sign in"'],
+      [...SIGNED_OUT, 'textbox "Email"', 'button "Send reset link"', 'link "Back to sign in"', ...FOOTER],
     ],
     [
       'reset password',
       (page) => visit(page, '/reset-password?token=not-a-token'),
-      [...NAV, 'textbox "New password"', 'button "Set new password"'],
+      [...SIGNED_OUT, 'textbox "New password"', 'button "Set new password"', ...FOOTER],
     ],
-    ['reset password, no link', (page) => visit(page, '/reset-password'), [...NAV, 'link "Ask for a new one"']],
-    ['verify email', (page) => visit(page, '/verify-email?token=not-a-token'), [...NAV, 'button "Confirm email"']],
+    [
+      'reset password, no link',
+      (page) => visit(page, '/reset-password'),
+      [...SIGNED_OUT, 'link "Ask for a new one"', ...FOOTER],
+    ],
+    [
+      'verify email',
+      (page) => visit(page, '/verify-email?token=not-a-token'),
+      [...SIGNED_OUT, 'button "Confirm email"', ...FOOTER],
+    ],
     [
       'account',
       // A new account, so this browser holds its only session and the list has no Sign out buttons.
@@ -68,7 +110,7 @@ test.describe('tab order', () => {
         await visit(page, '/account')
       },
       [
-        ...NAV,
+        ...SIGNED_IN,
         'textbox "Current password"',
         'textbox "New password"',
         'button "Change password"',
@@ -77,9 +119,10 @@ test.describe('tab order', () => {
         'textbox "Password"',
         'checkbox "I understand that my account and all its data are deleted for good."',
         'button "Delete account"',
+        ...FOOTER,
       ],
     ],
-    ['not found', (page) => visit(page, '/no-such-page'), [...NAV, 'link "Go to the home page"']],
+    ['not found', (page) => visit(page, '/no-such-page'), [...SIGNED_OUT, 'link "Go to the home page"', ...FOOTER]],
     [
       'error page',
       async (page, author) => {
@@ -87,7 +130,7 @@ test.describe('tab order', () => {
         await navigateWithApiResponse(page, '/api/posts', { status: 503, json: {} })
         await expect(page.getByRole('button', { name: 'Try again' })).toBeVisible()
       },
-      [...NAV, 'button "Try again"', 'link "Go to the home page"'],
+      [...SIGNED_IN, 'button "Try again"', 'link "Go to the home page"', ...FOOTER],
     ],
     [
       'dashboard',
@@ -97,16 +140,24 @@ test.describe('tab order', () => {
         await expect(page.getByText('Second', { exact: true })).toBeVisible()
       },
       [
-        ...NAV,
-        'link "Account"',
-        'button "Sign out"',
+        ...SIGNED_IN,
         'textbox "New post"',
         // Publish is disabled until there is text, so it is not a Tab stop yet.
         'button "Edit post: First"',
         'button "Delete post: First"',
         'button "Edit post: Second"',
         'button "Delete post: Second"',
+        ...FOOTER,
       ],
+    ],
+    [
+      'dashboard, dark theme chosen',
+      async (page, author) => {
+        await signIn(page, author)
+        await navigateWithApiResponse(page, '/api/me/posts', { json: lastPage(fakePost('First')) })
+        await page.getByRole('radio', { name: 'Dark' }).check()
+      },
+      [...SIGNED_IN, 'textbox "New post"', 'button "Edit post: First"', 'button "Delete post: First"', 'radio "Dark"'],
     ],
   ]
 
@@ -123,7 +174,11 @@ test.describe('tab order', () => {
     await visit(page, '/login')
     await page.getByRole('button', { name: 'Sign in' }).focus()
     const stops = await tabThrough(page, { backwards: true })
-    expect(stops.map((stop) => stop.name)).toEqual(['textbox "Password"', 'textbox "Email"', ...NAV.toReversed()])
+    expect(stops.map((stop) => stop.name)).toEqual([
+      'textbox "Password"',
+      'textbox "Email"',
+      ...SIGNED_OUT.toReversed(),
+    ])
   })
 })
 
@@ -155,6 +210,7 @@ test.describe('editing from the keyboard', () => {
       'button "Save"',
       'button "Edit post: Second"',
       'button "Delete post: Second"',
+      ...FOOTER,
     ])
     expect(stops.filter((stop) => !stop.visibleFocus)).toEqual([])
   })
@@ -192,13 +248,21 @@ test.describe('editing from the keyboard', () => {
 })
 
 test.describe('announcements', () => {
-  test('publishing and deleting are announced; after a delete, focus moves to the list heading', async ({
-    page,
-    author,
-  }) => {
-    const { post } = await dashboardWithMyPost(page, author)
+  test('publishing is announced and puts focus back in the empty composer', async ({ page, author }) => {
+    await dashboardWithMyPost(page, author)
     await expect(page.getByRole('status')).toHaveText('Post published.')
-    await post.getByRole('button', { name: /^Delete/ }).focus()
+    await expect(page.getByLabel('New post')).toBeFocused()
+    await expect(page.getByLabel('New post')).toHaveValue('')
+  })
+
+  test('deleting asks first, is announced, and then moves focus to the list heading', async ({ page, author }) => {
+    const { post } = await dashboardWithMyPost(page, author)
+    await post.getByRole('button', { name: /^Delete post/ }).focus()
+    await page.keyboard.press('Enter')
+    const dialog = page.getByRole('alertdialog', { name: 'Delete this post?' })
+    await expect(dialog.getByRole('button', { name: 'Keep it' })).toBeFocused()
+    await page.keyboard.press('Tab')
+    await expect(dialog.getByRole('button', { name: 'Delete', exact: true })).toBeFocused()
     await page.keyboard.press('Enter')
     await expect(post).toHaveCount(0)
     await expect(page.getByRole('heading', { name: 'Published' })).toBeFocused()
@@ -232,5 +296,29 @@ test.describe('announcements', () => {
     await signOut.focus()
     await page.keyboard.press('Enter')
     await expect(page).toHaveURL(/\/$/)
+  })
+})
+
+test.describe('dialogs', () => {
+  test('the delete dialog keeps Tab inside it; Escape closes it and puts focus back on Delete', async ({
+    page,
+    author,
+  }) => {
+    // A document of its own: the dialog's scroll lock needs the SSR page's nonce (not /about's hash policy).
+    const { post } = await dashboardWithMyPost(page, author)
+    const remove = post.getByRole('button', { name: /^Delete post/ })
+    await remove.focus()
+    await page.keyboard.press('Enter')
+    const dialog = page.getByRole('alertdialog', { name: 'Delete this post?' })
+    const stops: string[] = []
+    for (let press = 0; press < 3; press++) {
+      await page.keyboard.press('Tab')
+      stops.push((await page.locator(':focus').textContent()) ?? '')
+    }
+    // A modal dialog is the one deliberate trap: focus cycles through its own buttons.
+    expect(stops).toEqual(['Delete', 'Keep it', 'Delete'])
+    await page.keyboard.press('Escape')
+    await expect(dialog).toHaveCount(0)
+    await expect(remove).toBeFocused()
   })
 })

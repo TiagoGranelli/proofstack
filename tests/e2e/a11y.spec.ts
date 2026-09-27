@@ -1,14 +1,13 @@
-// axe (WCAG 2.2 AA + best practices) on every page and UI state the app has, and the landmark structure
-// of each page as an ARIA snapshot. To cover a new page or state, add one entry to STATES: a name and the
-// steps that reach it (helpers in ./support/app.ts).
+// axe (WCAG 2.2 AA + best practices) on every page and UI state the app has. To cover a new page or state, add
+// one entry to STATES: a name and the steps that reach it (helpers in ./support/app.ts); its landmark snapshot goes
+// in ./landmarks.spec.ts.
 import type { APIRequestContext, Page } from '@playwright/test'
 import { APP_NAME } from '#/config/app.ts'
-import { expectAccessible, SITE_HEADER } from './support/a11y.ts'
+import { expectAccessible } from './support/a11y.ts'
 import {
   dashboardWithMyPost,
   expect,
   failServerFunctionPosts,
-  fakePost,
   lastPage,
   navigateWithApiResponse,
   overTheLimit,
@@ -37,6 +36,16 @@ const STATES: Record<string, (fixtures: Fixtures) => Promise<unknown>> = {
     await page.route('**/api/posts', () => {})
     await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: APP_NAME }).click()
     await expect(page.getByText('Loading…')).toBeVisible()
+  },
+  'home, system dark theme': async ({ page }) => {
+    await page.emulateMedia({ colorScheme: 'dark' })
+    await visit(page, '/')
+  },
+  'home, flash message after signing out': async ({ page, author }) => {
+    await signIn(page, author)
+    await visit(page, '/dashboard')
+    await page.getByRole('button', { name: 'Sign out' }).click()
+    await expect(page.getByTestId('flash')).toHaveText('You are signed out.')
   },
   about: ({ page }) => visit(page, '/about'),
   login: ({ page }) => visit(page, '/login'),
@@ -80,6 +89,16 @@ const STATES: Record<string, (fixtures: Fixtures) => Promise<unknown>> = {
     await page.getByRole('button', { name: 'Save' }).click()
     await expect(page.getByRole('alert')).toContainText('Use at most 280 characters')
   },
+  'dashboard, dark theme chosen': async ({ page, author }) => {
+    await dashboardWithMyPost(page, author)
+    await page.getByRole('radio', { name: 'Dark' }).check()
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
+  },
+  'dashboard, delete dialog open': async ({ page, author }) => {
+    const { post } = await dashboardWithMyPost(page, author)
+    await post.getByRole('button', { name: /^Delete post/ }).click()
+    await expect(page.getByRole('alertdialog', { name: 'Delete this post?' })).toBeVisible()
+  },
   'dashboard, sign-out failed': async ({ page, author }) => {
     await signIn(page, author)
     await visit(page, '/dashboard')
@@ -121,6 +140,14 @@ const STATES: Record<string, (fixtures: Fixtures) => Promise<unknown>> = {
     await visit(page, '/account')
     await expect(page.getByTestId('sessions').getByRole('listitem')).not.toHaveCount(0)
   },
+  'account, wrong current password': async ({ page, author }) => {
+    await signIn(page, author)
+    await visit(page, '/account')
+    await page.getByLabel('Current password').fill('not the password at all')
+    await page.getByLabel('New password').fill(`pw-${crypto.randomUUID()}`)
+    await page.getByRole('button', { name: 'Change password' }).click()
+    await expect(page.getByLabel('Current password')).toHaveAttribute('aria-invalid', 'true')
+  },
   'not found': async ({ page }) => {
     await visit(page, '/no-such-page')
     await expect(page.getByRole('heading', { name: 'Page not found' })).toBeVisible()
@@ -141,137 +168,4 @@ test.describe('axe', () => {
       await expectAccessible(page, state)
     })
   }
-})
-
-// Landmarks and headings per page. Partial snapshots: only what is listed is checked, in order.
-test.describe('landmarks', () => {
-  test('home', async ({ page }) => {
-    await visit(page, '/')
-    await expect(page.locator('body')).toMatchAriaSnapshot(`${SITE_HEADER}
-- main:
-  - heading "Latest posts" [level=1]`)
-  })
-
-  test('about', async ({ page }) => {
-    await visit(page, '/about')
-    await expect(page.locator('body')).toMatchAriaSnapshot(`${SITE_HEADER}
-- main:
-  - heading "About" [level=1]
-  - paragraph`)
-  })
-
-  test('login', async ({ page }) => {
-    await visit(page, '/login')
-    await expect(page.locator('body')).toMatchAriaSnapshot(`${SITE_HEADER}
-- main:
-  - heading "Sign in" [level=1]
-  - text: Email
-  - textbox "Email"
-  - text: Password
-  - textbox "Password"
-  - button "Sign in"`)
-  })
-
-  test('sign-up', async ({ page }) => {
-    await visit(page, '/sign-up')
-    await expect(page.locator('body')).toMatchAriaSnapshot(`${SITE_HEADER}
-- main:
-  - heading "Create an account" [level=1]
-  - textbox "Name"
-  - textbox "Email"
-  - textbox "Password"
-  - button "Create account"`)
-  })
-
-  test('forgot password', async ({ page }) => {
-    await visit(page, '/forgot-password')
-    await expect(page.locator('body')).toMatchAriaSnapshot(`${SITE_HEADER}
-- main:
-  - heading "Forgot your password?" [level=1]
-  - textbox "Email"
-  - button "Send reset link"`)
-  })
-
-  test('reset password', async ({ page }) => {
-    await visit(page, '/reset-password?token=not-a-token')
-    await expect(page.locator('body')).toMatchAriaSnapshot(`${SITE_HEADER}
-- main:
-  - heading "Choose a new password" [level=1]
-  - textbox "New password"
-  - button "Set new password"`)
-  })
-
-  test('reset password, no link', async ({ page }) => {
-    await visit(page, '/reset-password')
-    await expect(page.locator('body')).toMatchAriaSnapshot(`${SITE_HEADER}
-- main:
-  - heading "Choose a new password" [level=1]
-  - paragraph:
-    - link "Ask for a new one"`)
-  })
-
-  test('verify email', async ({ page }) => {
-    await visit(page, '/verify-email?token=not-a-token')
-    await expect(page.locator('body')).toMatchAriaSnapshot(`${SITE_HEADER}
-- main:
-  - heading "Confirm your email" [level=1]
-  - paragraph
-  - button "Confirm email"`)
-  })
-
-  test('account', async ({ page, author }) => {
-    await signIn(page, author)
-    await visit(page, '/account')
-    await expect(page.locator('body')).toMatchAriaSnapshot(`${SITE_HEADER}
-- main:
-  - heading "Account" [level=1]
-  - region "Password":
-    - heading "Password" [level=2]
-  - region "Sessions":
-    - heading "Sessions" [level=2]
-    - list "Active sessions"
-  - region "Delete account":
-    - heading "Delete account" [level=2]`)
-  })
-
-  test('dashboard', async ({ page, author }) => {
-    await signIn(page, author)
-    await navigateWithApiResponse(page, '/api/me/posts', { json: lastPage(fakePost('One of mine')) })
-    await expect(page.getByText('One of mine', { exact: true })).toBeVisible()
-    await expect(page.locator('body')).toMatchAriaSnapshot(`${SITE_HEADER}
-- main:
-  - heading /'s posts$/ [level=1]
-  - link "Account"
-  - button "Sign out"
-  - text: New post
-  - textbox "New post"
-  - button "Publish" [disabled]
-  - region "Published":
-    - heading "Published" [level=2]
-    - list:
-      - listitem:
-        - paragraph: One of mine
-        - 'button "Edit post: One of mine"'
-        - 'button "Delete post: One of mine"'
-  - status`)
-  })
-
-  test('not found', async ({ page }) => {
-    await visit(page, '/no-such-page')
-    await expect(page.locator('body')).toMatchAriaSnapshot(`${SITE_HEADER}
-- main:
-  - heading "Page not found" [level=1]
-  - link "Go to the home page"`)
-  })
-
-  test('error page', async ({ page, author }) => {
-    await signIn(page, author)
-    await navigateWithApiResponse(page, '/api/posts', { status: 503, json: {} })
-    await expect(page.locator('body')).toMatchAriaSnapshot(`${SITE_HEADER}
-- main:
-  - heading [level=1]
-  - alert
-  - button "Try again"
-  - link "Go to the home page"`)
-  })
 })
