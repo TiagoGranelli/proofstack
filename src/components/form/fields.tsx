@@ -1,8 +1,9 @@
-import type { ComponentProps, ReactNode } from 'react'
+import { type ComponentProps, type ReactNode, use } from 'react'
 import { Input } from '#/components/ui/input.tsx'
 import { Label } from '#/components/ui/label.tsx'
 import { describedBy, fieldErrorMessage } from './field-messages.ts'
 import { useFieldContext } from './form-context.ts'
+import { ServerIssues } from './server-issues.ts'
 
 /** A field's error, announced when it appears (after a submit, or while fixing a field that failed one). */
 export function FieldError(props: { id: string; message: string | undefined }) {
@@ -16,10 +17,14 @@ export function FieldError(props: { id: string; message: string | undefined }) {
 
 type InputProps = Omit<ComponentProps<'input'>, 'name' | 'value' | 'checked' | 'onChange' | 'onBlur'>
 
-/** A labelled input bound to its form field. The hint and the field's error are read out with it. */
+/**
+ * A labelled input bound to its form field. The hint and the field's error, its own or one the server reported
+ * for it (ServerIssues), are read out with it.
+ */
 export function TextField({ label, hint, id, ...input }: InputProps & { id: string; label: string; hint?: string }) {
   const field = useFieldContext<string>()
-  const error = fieldErrorMessage(field.state.meta.errors)
+  const serverIssue = use(ServerIssues)[field.name]
+  const error = fieldErrorMessage(field.state.meta.errors) ?? serverIssue
   const hintId = hint ? `${id}-hint` : undefined
   const errorId = `${id}-error`
   return (

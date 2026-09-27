@@ -71,3 +71,20 @@ export function describeAuthFailure(error: unknown): string {
   // A code from a newer server than this client is not in the table.
   return Object.hasOwn(MESSAGES, error.code) ? MESSAGES[error.code] : GENERIC
 }
+
+/** Which field of a form each failure code is about, for the codes that form can pin on a field. */
+export type AuthFieldCodes = Partial<Record<AuthFailureCode, string>>
+
+/**
+ * A failure that is about one field of the form that sent it, as `{ [field]: sentence }` for the form's
+ * ServerIssues (src/components/form/server-issues.ts), or `{}` when it concerns the whole form. The same code can
+ * mean different fields: a wrong password is the current password when changing it, the password when deleting
+ * the account.
+ *
+ * @example authFieldIssues(error, { INVALID_PASSWORD: 'currentPassword' }) // { currentPassword: 'That password is not correct.' }
+ */
+export function authFieldIssues(error: unknown, fields: AuthFieldCodes): Record<string, string> {
+  if (!(error instanceof AuthActionError)) return {}
+  const field = fields[error.code]
+  return field === undefined ? {} : { [field]: describeAuthFailure(error) }
+}

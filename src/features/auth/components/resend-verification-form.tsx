@@ -30,6 +30,7 @@ export function ResendVerificationForm() {
       schema={schema}
       pending={resend.isPending}
       error={resend.error}
+      fieldCodes={{ INVALID_EMAIL: 'email' }}
     >
       <form.AppField name="email">
         {(field) => <field.TextField id="email" label="Email" type="email" autoComplete="email" required />}
