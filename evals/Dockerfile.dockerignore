@@ -11,7 +11,7 @@ test-results/
 playwright-report/
 lighthouse-report/
 sbom/
-repos/
+.repos/
 jobs/
 *.log
 .env

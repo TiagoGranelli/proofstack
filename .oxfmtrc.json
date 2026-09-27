@@ -24,7 +24,7 @@
     ".tanstack/**",
     ".fallow/**",
     "drizzle/**",
-    "repos/**",
+    ".repos/**",
     "src/sdk/**",
     "src/routeTree.gen.ts",
     "openapi.json",

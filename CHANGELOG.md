@@ -22,6 +22,7 @@ repository created from the template.
 - The lefthook, gitleaks, grype and squawk configurations live in `.config/` (`lefthook.yml`, `gitleaks.toml`,
   `gitleaksignore`, `grype.yaml`, `squawk.toml`). lefthook finds `.config/lefthook.yml` by itself; the scripts
   pass the others by flag.
+- Upstream reading snapshots go in `.repos/` (was `repos/`); every tool's ignore list names the new path.
 
 ### Fixed
 
@@ -37,6 +38,8 @@ repository created from the template.
 - Move your copies of `lefthook.yml`, `.gitleaks.toml`, `.gitleaksignore`, `.grype.yaml` and `.squawk.toml` into
   `.config/` under the names above, and `renovate.json` into `.github/`. A personal `lefthook-local.yml` stays at
   the root.
+- Move any snapshot you fetched into `repos/` to `.repos/` (`mv repos/* .repos/ && rm -r repos`). Once
+  `repos/.gitignore` is gone, git and the linters would see what is left in `repos/`.
 
 ## [0.1.0] - 2026-09-27
 

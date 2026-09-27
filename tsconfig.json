@@ -88,5 +88,5 @@
     ]
   },
   "include": ["src", "scripts", "tests", "*.config.ts"],
-  "exclude": ["node_modules", ".output", "repos"]
+  "exclude": ["node_modules", ".output", ".repos"]
 }

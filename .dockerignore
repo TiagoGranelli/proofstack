@@ -30,7 +30,7 @@ lefthook-local.yml
 .vscode/
 .agents/
 .claude/
-repos/
+.repos/
 docs/
 deploy/
 tests/

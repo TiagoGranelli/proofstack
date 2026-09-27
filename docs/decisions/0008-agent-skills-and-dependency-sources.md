@@ -6,7 +6,7 @@ Status: Accepted (2026-09-27)
 
 Coding agents write better code for fast-moving RC libraries when they read the docs for the installed
 version. Options include official skills from GitHub, docs shipped inside npm packages, and copies of
-upstream source (the Effect blog suggests `git subtree` into `repos/`). Anything committed must be pinned,
+upstream source (the Effect blog suggests `git subtree` into `.repos/`). Anything committed must be pinned,
 licensed for redistribution, and excluded from tooling.
 
 ## Decision
@@ -18,7 +18,7 @@ licensed for redistribution, and excluded from tooling.
 - Better Auth's skills have no license, so they are loaded on demand only (`skills use`) and never
   committed.
 - Do not commit upstream sources. Partial, sparse git clones fetch filtered snapshots (1–2 MB each) at
-  the lockfile's version into the git-ignored `repos/` (since 2026-09-27; before, `scripts/vendor-source.ts`
+  the lockfile's version into the git-ignored `.repos/` (since 2026-09-27; before, `scripts/vendor-source.ts`
   read GitHub tarballs).
 
 ## Evidence

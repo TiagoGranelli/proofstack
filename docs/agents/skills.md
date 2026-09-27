@@ -112,7 +112,7 @@ The Better Auth docs for the installed version are MIT and can be fetched with a
 ## Tooling exclusions
 
 Skill files are Markdown, JSON, YAML, and PNG, with no JS or TS. `.oxfmtrc.json` ignores `.agents/**`,
-`.claude/**`, `skills-lock.json`, `repos/**`, and `**/*.md`. `.oxlintrc.json` ignores `.agents/**`,
-`.claude/**`, and `repos/**`; `.fallowrc.json` ignores `repos/**`. `tsconfig.json` includes only `src`,
-`scripts`, `tests`, and `*.config.ts`, and excludes `repos`. If a future skill ships `.ts` or `.js` files,
+`.claude/**`, `skills-lock.json`, `.repos/**`, and `**/*.md`. `.oxlintrc.json` ignores `.agents/**`,
+`.claude/**`, and `.repos/**`; `.fallowrc.json` ignores `.repos/**`. `tsconfig.json` includes only `src`,
+`scripts`, `tests`, and `*.config.ts`, and excludes `.repos`. If a future skill ships `.ts` or `.js` files,
 add `.agents/**` and `.claude/**` to the Fallow `ignorePatterns`; Oxlint already skips them.

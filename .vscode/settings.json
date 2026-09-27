@@ -30,7 +30,7 @@
     "**/.fallow/**": true,
     "**/test-results/**": true,
     "**/playwright-report/**": true,
-    "**/repos/**": true
+    "**/.repos/**": true
   },
   "search.exclude": {
     "**/.output": true,
@@ -39,7 +39,7 @@
     "**/.fallow": true,
     "**/test-results": true,
     "**/playwright-report": true,
-    "**/repos": true,
+    "**/.repos": true,
     "src/sdk/**": true,
     "src/routeTree.gen.ts": true,
     "pnpm-lock.yaml": true

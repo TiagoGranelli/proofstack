@@ -96,7 +96,7 @@ the checkout are skipped. About 0.1 to 1 s per edit. Try it:
   `tests/unit/repo-policy.test.ts` instead, because a new migration may still be adjusted before its first commit.
 - Skipping the pre-commit hook: `git commit --no-verify` and `git commit -n` (as the first or a later option),
   `git -c core.hooksPath...`, `LEFTHOOK=0 ...` and `lefthook uninstall` (also through `pnpm exec`).
-- Linters and formatters this repo does not use, whose default scope includes `node_modules` and `repos/`:
+- Linters and formatters this repo does not use, whose default scope includes `node_modules` and `.repos/`:
   `eslint`, `prettier` and `biome`, directly, through `npx` or through `pnpm dlx`.
 - Oxc runs without the ignore lists: any command with `--no-ignore` or `--ignore-path`, and oxlint or oxfmt with
   `-c` or `--config`.

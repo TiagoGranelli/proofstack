@@ -7,7 +7,7 @@
     ".tanstack/**",
     ".fallow/**",
     "drizzle/**",
-    "repos/**",
+    ".repos/**",
     "src/sdk/**",
     "src/routeTree.gen.ts",
     "test-results/**",
