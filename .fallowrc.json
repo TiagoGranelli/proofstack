@@ -16,6 +16,11 @@
   "ignoreDependencies": [
     // Loaded by oxlint through `jsPlugins` in .oxlintrc.json.
     "@shadcn/lint",
+    // Also oxlint `jsPlugins`: TanStack Query's rules (exhaustive-deps, stable-query-client, no-rest-destructuring,
+    // prefer-query-options) and Router's create-route-property-order. Pinned exactly; their peer eslint is
+    // installed but never run.
+    "@tanstack/eslint-plugin-query",
+    "@tanstack/eslint-plugin-router",
     // Invoked as a CLI (`pnpm exec lighthouse`) by scripts/lighthouse.ts.
     "lighthouse"
   ],

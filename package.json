@@ -83,6 +83,8 @@
     "@rolldown/plugin-babel": "0.2.4",
     "@shadcn/lint": "0.2.0",
     "@tailwindcss/vite": "4.3.3",
+    "@tanstack/eslint-plugin-query": "5.104.0",
+    "@tanstack/eslint-plugin-router": "1.162.0",
     "@types/node": "26.6.3",
     "@types/pg": "8.23.1",
     "@types/react": "19.3.0",
