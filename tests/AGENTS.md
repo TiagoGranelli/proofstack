@@ -28,7 +28,7 @@ limit) and four nested callbacks.
 - `pnpm test [filter ...]` (Vitest project `integration`) and `pnpm test:e2e [filter ...]` (Playwright) each
   start the built app themselves, after `pnpm build`, with Postgres and Mailpit (`pnpm mail:up`) running. Set no
   variables by hand: the runner's global setup (`tests/integration/global-setup.ts`, `tests/e2e/global-setup.ts`,
-  both through `startTestServers` in `scripts/app-server.ts`) refuses a stale `.output`, creates a fresh
+  both through `startTestServers` in `scripts/test-servers.ts`) refuses a stale `.output`, creates a fresh
   `app_<runner>_<pid>_test` database, starts the two servers described below with two verified authors, and
   stops them and drops the database at the end. App logs go to `test-results/app-server-<runner>*.log`. The
   same holds for `pnpm exec playwright test --ui` and the VS Code Playwright and Vitest extensions.

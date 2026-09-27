@@ -58,6 +58,6 @@ HEALTHCHECK --interval=10s --timeout=3s --start-period=15s --retries=3 \
 # Node's permission model (docs/decisions/0012-node-permission-model.md): the server may read only its own
 # bundle and use the network; no file writes, child processes, workers, native addons or WASI. --allow-net is
 # still experimental in Node 26, and its warning would be the only non-JSON line at startup.
-# scripts/app-server.ts starts the test and lighthouse servers with the same flags.
+# scripts/server-process.ts starts the test and lighthouse servers with the same flags.
 CMD ["node", "--permission", "--allow-fs-read=/app/.output", "--allow-net", "--disable-warning=ExperimentalWarning", \
      ".output/server/index.mjs"]

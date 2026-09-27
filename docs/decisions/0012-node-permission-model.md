@@ -27,7 +27,7 @@ node --permission --allow-fs-read=/app/.output --allow-net --disable-warning=Exp
 ```
 
 `--disable-warning=ExperimentalWarning` suppresses the one warning `--allow-net` prints at startup, which would
-be the only line in the log that is not JSON. `scripts/app-server.ts` starts the servers of the test runners and
+be the only line in the log that is not JSON. `scripts/server-process.ts` starts the servers of the test runners and
 `lighthouse` with the same flags, so every test runs the server as the image does, and the server logs
 `permissionModel: true` in its `starting` line, which `tests/integration/shutdown.test.ts` and `pnpm ci:docker`
 check.
@@ -53,7 +53,7 @@ migrator reads `drizzle/`, and an operator runs both by hand.
   files: add `--allow-fs-read=<path>` for each, or pass the PEM text in the variables instead.
 - A dependency that starts writing files, spawning processes or using worker threads fails with
   `ERR_ACCESS_DENIED` in `verify:app` before it reaches production. Allow the narrowest thing
-  (`--allow-fs-write=<dir>`, `--allow-worker`) in both the Dockerfile and `scripts/app-server.ts`, and say why
+  (`--allow-fs-write=<dir>`, `--allow-worker`) in both the Dockerfile and `scripts/server-process.ts`, and say why
   here.
 - Running `.output/server/index.mjs` without the flags (`pnpm start`, another platform's start command) still
   works; it only drops the restriction.
