@@ -35,10 +35,9 @@ updates:
         patterns: ['*']
         exclude-patterns: [effect, '@tanstack/react-start', nitro, oxfmt]
     ignore:
-      # `typescript` is an alias for TS 6 and `@typescript/native` provides TS 7 (ADR 0002); both are
-      # upgraded by hand together with Hey API.
-      - dependency-name: typescript
-      - dependency-name: '@typescript/native'
+      # Pinned to the `next` snapshot (ADR 0002). The stable 0.99.0 sorts higher but crashes on TS 7;
+      # `pnpm deps:check` reports when a newer stable release appears.
+      - dependency-name: '@hey-api/openapi-ts'
       # Tracks the Node major in .node-version.
       - dependency-name: '@types/node'
         update-types: [version-update:semver-major]

@@ -9,7 +9,7 @@ the repo. Each item names the principled replacement; nothing here patches a dep
 Every dependency is on its npm `latest` (`pnpm outdated` is empty) except `effect`, whose `latest` is still v3;
 v4 is used from the `rc` channel (4.0.0-rc.117, the newest). Not released yet and tracked: the Effect RC that
 renames `effect/unstable/httpapi` → `effect/http-api` (PRs #8354/#8365), Hey API without the TypeScript
-dependency (hey-api#4235; the TS 6 alias stays, accepted), Nitro `maxRequestBodySize` and `trustProxy`
+dependency (hey-api#4235; done differently: the project now uses TS 7 only with Hey API's `next` snapshot, ADR 0002), Nitro `maxRequestBodySize` and `trustProxy`
 passthrough (nitrojs/nitro#4620, #4654). Add a non-blocking `pnpm deps:check` report.
 
 ## 1. Architecture: Bulletproof React
