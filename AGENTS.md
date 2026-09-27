@@ -150,8 +150,8 @@ Test each behavior in the cheapest layer that can observe it:
   (or a list) chooses; `pnpm ci:local verify` runs all five.
 - **Coverage.** `pnpm test:fast` writes `coverage/index.html` for all of `src` (report only) and fails unless
   every module in `COVERAGE_GATE` is fully covered. Add security-critical pure modules there with their tests.
-- **api.** `tests/api/harness.ts`: `apiLayer({ databaseDown?, clockStepMicros? })` provides the real handlers and
-  `RequestValidation` over a fresh in-memory repository; `clientAs('alice' | 'bob' | 'forged' | 'none')`
+- **api.** `tests/api/harness.ts`: `apiLayer({ databaseDown?, clockStepMicros? })` provides the real handlers,
+  `RequestValidation` and `WriteRateLimit` over a fresh in-memory repository and rate-limit store; `clientAs('alice' | 'bob' | 'forged' | 'none')`
   is a typed client with that session (one client per identity: the client captures its middleware).
   The typed client refuses to encode invalid payloads, so send those through `webHandler()` as raw
   `Request`s. The project sets dummy env values (`vitest.config.ts`) because `src/server/env.ts` validates

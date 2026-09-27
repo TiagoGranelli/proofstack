@@ -221,6 +221,16 @@
                 }
               }
             }
+          },
+          "429": {
+            "description": "RateLimited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RateLimitedEncoded"
+                }
+              }
+            }
           }
         },
         "requestBody": {
@@ -299,6 +309,16 @@
                 }
               }
             }
+          },
+          "429": {
+            "description": "RateLimited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RateLimitedEncoded"
+                }
+              }
+            }
           }
         },
         "requestBody": {
@@ -365,6 +385,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PostNotFoundEncoded"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "RateLimited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RateLimitedEncoded"
                 }
               }
             }
@@ -547,6 +577,30 @@
         ],
         "additionalProperties": false
       },
+      "RateLimitedEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "RateLimited"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "retryAfter": {
+            "type": "integer",
+            "description": "Seconds until the next request can succeed."
+          }
+        },
+        "required": [
+          "_tag",
+          "message",
+          "retryAfter"
+        ],
+        "additionalProperties": false
+      },
       "PostNotFoundEncoded": {
         "type": "object",
         "properties": {
@@ -593,7 +647,7 @@
     },
     {
       "name": "My posts",
-      "description": "CRUD for the signed-in author."
+      "description": "CRUD for the signed-in author. Creating, editing and deleting count together against a limit of 60 per 60 s per user; past it they answer 429."
     }
   ]
 }

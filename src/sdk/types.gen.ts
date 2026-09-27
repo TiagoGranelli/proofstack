@@ -54,6 +54,15 @@ export type PostInput = {
     body: string;
 };
 
+export type RateLimitedEncoded = {
+    _tag: 'RateLimited';
+    message: string;
+    /**
+     * Seconds until the next request can succeed.
+     */
+    retryAfter: number;
+};
+
 export type PostNotFoundEncoded = {
     _tag: 'PostNotFound';
     id: string;
@@ -182,6 +191,10 @@ export type MyPostsCreateErrors = {
      * Unauthorized
      */
     401: UnauthorizedEncoded;
+    /**
+     * RateLimited
+     */
+    429: RateLimitedEncoded;
 };
 
 export type MyPostsCreateError = MyPostsCreateErrors[keyof MyPostsCreateErrors];
@@ -217,6 +230,10 @@ export type MyPostsRemoveErrors = {
      * PostNotFound
      */
     404: PostNotFoundEncoded;
+    /**
+     * RateLimited
+     */
+    429: RateLimitedEncoded;
 };
 
 export type MyPostsRemoveError = MyPostsRemoveErrors[keyof MyPostsRemoveErrors];
@@ -252,6 +269,10 @@ export type MyPostsUpdateErrors = {
      * PostNotFound
      */
     404: PostNotFoundEncoded;
+    /**
+     * RateLimited
+     */
+    429: RateLimitedEncoded;
 };
 
 export type MyPostsUpdateError = MyPostsUpdateErrors[keyof MyPostsUpdateErrors];

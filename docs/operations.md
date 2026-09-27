@@ -197,6 +197,13 @@ own database storage lets concurrent requests past the limit on Postgres (Drizzl
 replaced through `rateLimit.customStorage`. Rows idle for 10 minutes are deleted in the background.
 Requests for endpoints outside the allowlist are not counted and write nothing.
 
+The business API limits writes per user, not per IP, because with open sign-up anyone can hold a session:
+creating, editing and deleting posts (`POST`, `PATCH` and `DELETE /api/me/posts`) count together against
+60 per 60 seconds per account (`POST_WRITES_PER_WINDOW` in `src/contract/limits.ts`), in every build.
+Past that they answer 429 with a `RateLimited` body whose `retryAfter` is the wait in seconds, as the
+contract documents. The Effect middleware `WriteRateLimit` (`src/server/api/rate-limit.ts`) runs after
+authentication and before the body is read, on the same table and upsert with keys `api-write|<user id>`.
+
 ## Accounts and mail
 
 The sign-up policy is `AUTH_SIGN_UP` ([ADR 0003](decisions/0003-sign-up-policy.md)). In both modes an

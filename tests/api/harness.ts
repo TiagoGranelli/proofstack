@@ -1,7 +1,7 @@
-// In-memory harness for the Effect handlers: the real contract, handlers and RequestValidation middleware,
-// with PostsRepo kept in an array and Authentication faked by session token. No database, no Better Auth
-// call, no HTTP server: HttpApiTest sends the typed client's requests through the same encoding, routing,
-// middleware and decoding as the running API.
+// In-memory harness for the Effect handlers: the real contract, handlers, RequestValidation and WriteRateLimit
+// middleware, with PostsRepo and the rate-limit counters kept in memory and Authentication faked by session
+// token. No database, no Better Auth call, no HTTP server: HttpApiTest sends the typed client's requests through
+// the same encoding, routing, middleware and decoding as the running API.
 import { Data, Effect, Layer, Redacted } from 'effect'
 import { HttpClientRequest, HttpRouter, HttpServer } from 'effect/unstable/http'
 import { HttpApiBuilder, HttpApiMiddleware, HttpApiTest } from 'effect/unstable/httpapi'
@@ -11,6 +11,7 @@ import { Authentication, CurrentUser } from '#/contract/middleware.ts'
 import type { PageCursor, Post, PostPage } from '#/contract/posts.ts'
 import { MyPostsHandlers, PublicPostsHandlers, SystemHandlers } from '#/server/api/handlers.ts'
 import { RequestValidationLive } from '#/server/api/middleware.ts'
+import { RateLimitStore, WriteRateLimitLive } from '#/server/api/rate-limit.ts'
 import { PostsRepo, type PageRequest } from '#/server/posts/repo.ts'
 
 /** The authors the fake session store knows, keyed by session token. */
@@ -136,14 +137,37 @@ const FakeAuthentication = Layer.succeed(Authentication, {
 })
 
 /**
- * The handlers under test, over a fresh in-memory repository (provide it per test for isolation).
+ * RateLimitStore in memory, per layer: counts every request per key and never resets (a test does not outlive
+ * a window), refusing past `max` with the whole window as `retryAfter`.
+ */
+const memoryRateLimitStore = Layer.sync(RateLimitStore, () => {
+  const counts = new Map<string, number>()
+  return {
+    consume: (key, rule) =>
+      Effect.sync(() => {
+        const count = (counts.get(key) ?? 0) + 1
+        counts.set(key, count)
+        return count <= rule.max ? { allowed: true, retryAfter: null } : { allowed: false, retryAfter: rule.window }
+      }),
+  }
+})
+
+/**
+ * The handlers under test, over a fresh in-memory repository and rate-limit store (provide it per test for
+ * isolation).
  * Middleware is provided with `provideMerge` because the HTTP pipeline also resolves it when the routes
  * are built.
  */
 export const apiLayer = (options: RepoOptions = {}) =>
   Layer.mergeAll(SystemHandlers, PublicPostsHandlers, MyPostsHandlers).pipe(
     Layer.provide(memoryPostsRepo(options)),
-    Layer.provideMerge(Layer.mergeAll(FakeAuthentication, RequestValidationLive)),
+    Layer.provideMerge(
+      Layer.mergeAll(
+        FakeAuthentication,
+        RequestValidationLive,
+        WriteRateLimitLive.pipe(Layer.provide(memoryRateLimitStore)),
+      ),
+    ),
     Layer.merge(HttpServer.layerServices),
   )
 

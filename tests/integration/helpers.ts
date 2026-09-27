@@ -69,13 +69,13 @@ const CREATE_USER = fileURLToPath(new URL('../../scripts/create-user.ts', import
 
 /**
  * A throwaway verified account, created through scripts/create-user.ts (the operator path) with the app's
- * environment that verify:app passes to the tests. For tests that change or delete an account: never the shared
- * `users`.
+ * environment that verify:app passes to the tests, named after `label`. For tests that change or delete an
+ * account, or write more than the shared `users` can absorb under the per-user write limit.
  */
 export const createUser = async (label: string) => {
   const account = {
     email: `${label}-${crypto.randomUUID()}@example.test`,
-    name: 'Integration Account',
+    name: `Integration ${label}`,
     password: `pw-${crypto.randomUUID()}`,
   }
   await promisify(execFile)(process.execPath, [CREATE_USER, account.email, account.name], {
