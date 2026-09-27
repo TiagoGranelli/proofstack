@@ -13,28 +13,34 @@ import { auth } from '#/server/auth.ts'
 import { db, pool } from '#/server/db/client.ts'
 import { user } from '#/server/db/schema/index.ts'
 
-/** Asks on the terminal without echoing what is typed: readline writes the echo to a muted stream. */
+/** A stream to stderr that `mute` silences: readline writes the question, then the echo of what is typed, to it. */
+const mutableEcho = () => {
+  let muted = false
+  const output = new Writable({
+    write(chunk: Buffer | string, encoding: BufferEncoding, callback) {
+      if (!muted) stderr.write(chunk, encoding)
+      callback()
+    },
+  })
+  return { output, mute: () => (muted = true) }
+}
+
+/** Asks on the terminal without echoing what is typed. */
 const askHidden = (question: string) =>
   new Promise<string>((resolve, reject) => {
-    let muted = false
-    const output = new Writable({
-      write(chunk: Buffer | string, encoding: BufferEncoding, callback) {
-        if (!muted) stderr.write(chunk, encoding)
-        callback()
-      },
-    })
-    const rl = createInterface({ input: stdin, output, terminal: true, historySize: 0 })
+    const echo = mutableEcho()
+    const rl = createInterface({ input: stdin, output: echo.output, terminal: true, historySize: 0 })
     rl.on('SIGINT', () => {
       rl.close()
       stderr.write('\n')
-      reject(new Error('cancelled'))
+      reject(new Error('cancelled at the password prompt (Ctrl-C)'))
     })
     rl.question(question, (answer) => {
       rl.close()
       stderr.write('\n')
       resolve(answer)
     })
-    muted = true
+    echo.mute()
   })
 
 const readPassword = async () => {
@@ -66,9 +72,9 @@ try {
   // Checked here so the message can name the limits; Better Auth only says "Password too short".
   const { minPasswordLength, maxPasswordLength } = auth.options.emailAndPassword
   if (password.length < minPasswordLength)
-    throw new Error(`password too short: use at least ${minPasswordLength} characters`)
+    throw new Error(`password too short (${password.length} characters): use at least ${minPasswordLength}`)
   if (password.length > maxPasswordLength)
-    throw new Error(`password too long: use at most ${maxPasswordLength} characters`)
+    throw new Error(`password too long (${password.length} characters): use at most ${maxPasswordLength}`)
   const [existing] = await db.select({ id: user.id }).from(user).where(eq(user.email, email))
   if (existing) throw new Error(`a user with email ${email} already exists`)
   // What sign-up does, minus the verification mail: Better Auth's password hash, user and credential account.

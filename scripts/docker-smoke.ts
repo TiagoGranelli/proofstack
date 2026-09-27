@@ -25,7 +25,8 @@ const MIGRATIONS = (JSON.parse(readFileSync('drizzle/meta/_journal.json', 'utf8'
  * to 5 s (SERVER_SHUTDOWN_TIMEOUT) and then exits even if a timer is still pending. One is, today: rendering a
  * form page on the server starts the connect loop of TanStack Form's devtools event client
  * (@tanstack/devtools-event-client, `startConnectLoop`), which outlives the shutdown, so the stop takes about 5 s
- * instead of 1 s after /login has been served.
+ * instead of 1 s after /login has been served. The client ships in production builds (TanStack/form#2132); once it
+ * no longer does, lower this bound to about 2 s so a slower shutdown shows.
  */
 const MAX_STOP_MS = 8_000
 
@@ -43,10 +44,12 @@ const COMPOSE = ['compose', '-p', PROJECT, '-f', 'deploy/compose.production.yaml
 
 /** `docker compose <args>` on the smoke project; returns stdout, throws with stderr when it fails. */
 const compose = (args: string[], input?: string) => {
-  const result = spawnSync('docker', [...COMPOSE, ...args], { env, input, encoding: 'utf8', maxBuffer: 64 * 2 ** 20 })
-  if (result.status !== 0)
-    throw new Error(`docker compose ${args.join(' ')} failed (${result.status ?? result.signal})\n${result.stderr}`)
-  return result.stdout.trim()
+  const run = spawnSync('docker', [...COMPOSE, ...args], { env, input, encoding: 'utf8', maxBuffer: 64 * 2 ** 20 })
+  if (run.status !== 0)
+    throw new Error(
+      `docker compose ${args.join(' ')} failed (exit ${run.status ?? run.signal}, expected 0)\n${run.stderr}`,
+    )
+  return run.stdout.trim()
 }
 
 /** `docker compose <args>` without blocking, for runs that must overlap. Resolves with stdout. */
@@ -60,7 +63,7 @@ const composeAsync = (args: string[]) =>
     child.once('exit', (code) =>
       code === 0
         ? done(stdout.trim())
-        : reject(new Error(`docker compose ${args.join(' ')} failed (${code})\n${stderr}`)),
+        : reject(new Error(`docker compose ${args.join(' ')} failed (exit ${code}, expected 0)\n${stderr}`)),
     )
   })
 
@@ -89,7 +92,8 @@ const scanImage = () =>
 /** The `applied` count of the migrator's last log line. */
 const appliedBy = (output: string) => {
   const last = JSON.parse(output.split('\n').at(-1) ?? '{}') as { msg?: string; applied?: number }
-  if (last.msg !== 'migrations applied') throw new Error(`unexpected migrator output: ${output}`)
+  if (last.msg !== 'migrations applied')
+    throw new Error(`the migrator's last log line is not {"msg":"migrations applied",...}. Its output:\n${output}`)
   return last.applied
 }
 
@@ -110,7 +114,8 @@ const migrateConcurrently = async () => {
 const migrateDirectly = async () => {
   const direct = await migrateOnce(`MIGRATION_DATABASE_URL=postgres://app:${env.APP_DB_PASSWORD}@db:5432/app`)
   console.log(`  direct: ${direct}`)
-  if (appliedBy(direct) !== 0) throw new Error('the direct run applied something')
+  const applied = appliedBy(direct)
+  if (applied !== 0) throw new Error(`the direct run applied ${applied} migration(s), expected 0`)
   const query = "select count(*) from pg_locks where locktype = 'advisory'"
   const locks = compose(['exec', '-T', 'db', 'psql', '-U', 'postgres', '-d', 'app', '-Atc', query])
   if (locks !== '0') throw new Error(`${locks} advisory lock(s) left behind on the pooler's server connections`)
@@ -133,9 +138,13 @@ const checkPages = async (base: string) => {
   }
   const home = await fetch(base, { headers: { 'accept-encoding': 'gzip' } })
   await home.arrayBuffer()
-  if (home.headers.get('content-encoding') !== 'gzip') problems.push('/ is not compressed by the edge')
+  const encoding = home.headers.get('content-encoding')
+  if (encoding !== 'gzip')
+    problems.push(`/ is not compressed by the edge (Content-Encoding ${encoding}, expected gzip)`)
   if (home.headers.get('cache-control') !== 'private, no-cache')
-    problems.push(`/ Cache-Control changed on the way: ${home.headers.get('cache-control')}`)
+    problems.push(
+      `/ Cache-Control changed on the way: ${home.headers.get('cache-control')}, expected private, no-cache`,
+    )
   if (problems.length) throw new Error(problems.join('; '))
 }
 
@@ -150,10 +159,19 @@ const signInAndReadPosts = async (base: string) => {
     .getSetCookie()
     .map((c) => c.split(';', 1)[0])
     .join('; ')
-  if (!signIn.ok || !cookie) throw new Error(`sign-in answered ${signIn.status}`)
+  if (!signIn.ok || !cookie)
+    throw new Error(`sign-in answered ${signIn.status} ${cookie ? 'with' : 'without'} a cookie, expected 200 with one`)
   const posts = await fetch(`${base}/api/me/posts`, { headers: { cookie } })
   const body = (await posts.json()) as { items?: unknown[] }
-  if (!posts.ok || !Array.isArray(body.items)) throw new Error(`GET /api/me/posts answered ${posts.status}`)
+  if (!posts.ok || !Array.isArray(body.items))
+    throw new Error(`GET /api/me/posts answered ${posts.status}, expected 200 with an \`items\` array`)
+}
+
+const checkPermissionModel = () => {
+  const logs = compose(['logs', '--no-log-prefix', 'app'])
+  if (logs.includes('"permissionModel":true')) return
+  const starting = logs.split('\n').find((line) => line.includes('"msg":"starting"')) ?? '(no such line)'
+  throw new Error(`the "starting" log line does not say "permissionModel":true: ${starting}`)
 }
 
 const stopGracefully = () => {
@@ -188,10 +206,7 @@ try {
   const base = `http://${compose(['port', 'edge', '8080'])}`
   await step(`check pages through the edge at ${base}`, () => checkPages(base))
   await step('sign in as the first account through the edge and read its posts', () => signInAndReadPosts(base))
-  await step("check that the server runs under Node's permission model", () => {
-    if (!compose(['logs', 'app']).includes('"permissionModel":true'))
-      throw new Error('the "starting" log line does not say permissionModel: true')
-  })
+  await step("check that the server runs under Node's permission model", checkPermissionModel)
   await step('stop the app gracefully', stopGracefully)
 } catch (error) {
   failed = true

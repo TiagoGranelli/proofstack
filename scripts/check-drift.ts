@@ -25,10 +25,10 @@ const MIGRATIONS = 'drizzle'
 const pnpm = (args: string[]) => {
   // A drizzle-kit rename prompt cannot be answered without a TTY; it ends here as a failure or a timeout
   // (tinyexec throws ETIMEDOUT).
-  const result = xSync('pnpm', args, { timeout: 120_000, nodeOptions: { stdio: ['ignore', 'pipe', 'pipe'] } })
-  const output = `${result.stdout}${result.stderr}`
-  if (result.exitCode !== 0)
-    throw new Error(`pnpm ${args.join(' ')} failed (${result.exitCode ?? result.signalCode})\n${output}`)
+  const run = xSync('pnpm', args, { timeout: 120_000, nodeOptions: { stdio: ['ignore', 'pipe', 'pipe'] } })
+  const output = `${run.stdout}${run.stderr}`
+  if (run.exitCode !== 0)
+    throw new Error(`pnpm ${args.join(' ')} failed (exit ${run.exitCode ?? run.signalCode}, expected 0)\n${output}`)
   return output
 }
 
@@ -50,7 +50,8 @@ const checks = {
     const dir = join(mkdtempSync(join(tmpdir(), 'check-drift-')), 'drizzle')
     try {
       cpSync(MIGRATIONS, dir, { recursive: true })
-      // drizzle-kit prefixes --out with './', so an absolute path breaks; a relative one reaches the temp dir.
+      // drizzle-kit prefixes --out with './', so an absolute path breaks; a relative one reaches the temp dir
+      // (drizzle-team/drizzle-orm#3807: pass `dir` itself once it is fixed).
       const out = relative(process.cwd(), dir)
       pnpm(['exec', 'drizzle-kit', 'generate', '--dialect=postgresql', `--schema=${SCHEMA}`, `--out=${out}`])
       pnpm(['exec', 'drizzle-kit', 'check', '--dialect=postgresql', `--out=${MIGRATIONS}`])
@@ -65,7 +66,7 @@ const checks = {
     // Better Auth's own check: every table, column, nullability and default the configuration writes exists in
     // the Drizzle schema (src/server/db/schema/auth.ts is application code, not generated). It only loads the
     // config, so placeholders let it run without a local .env.
-    const result = xSync('pnpm', ['exec', 'auth', 'check', 'schema', '--config', 'src/server/auth.ts'], {
+    const authCheck = xSync('pnpm', ['exec', 'auth', 'check', 'schema', '--config', 'src/server/auth.ts'], {
       timeout: 120_000,
       nodeOptions: {
         env: {
@@ -76,8 +77,8 @@ const checks = {
         stdio: ['ignore', 'pipe', 'pipe'],
       },
     })
-    if (result.exitCode === 0) return []
-    const report = `${result.stdout}${result.stderr}`.trim()
+    if (authCheck.exitCode === 0) return []
+    const report = `${authCheck.stdout}${authCheck.stderr}`.trim()
     return [`src/server/db/schema/auth.ts does not hold what src/server/auth.ts writes:\n${report}`]
   },
 
@@ -87,15 +88,8 @@ const checks = {
     try {
       const before = await fingerprint(url)
       // Without --strict, push applies whatever the schema needs; on a fresh migrated database that must be nothing.
-      const output = pnpm([
-        'exec',
-        'drizzle-kit',
-        'push',
-        '--dialect=postgresql',
-        `--schema=${SCHEMA}`,
-        `--url=${url}`,
-        '--force',
-      ])
+      const push = ['exec', 'drizzle-kit', 'push', '--dialect=postgresql', `--schema=${SCHEMA}`]
+      const output = pnpm([...push, `--url=${url}`, '--force'])
       if (before === (await fingerprint(url))) return []
       return [
         `migrations in ${MIGRATIONS}/ do not produce the Drizzle schema; drizzle-kit push had to change:\n${output.trim()}`,
@@ -107,24 +101,27 @@ const checks = {
 }
 
 // Everything drizzle-kit push can change in the public schema, in a stable order.
+const FINGERPRINT_QUERIES = [
+  `select table_name, column_name, data_type, udt_name, is_nullable, column_default, character_maximum_length
+     from information_schema.columns where table_schema = 'public' order by 1, 2`,
+  `select conrelid::regclass::text, conname, pg_get_constraintdef(oid) from pg_constraint
+     where connamespace = 'public'::regnamespace order by 1, 2`,
+  `select tablename, indexname, indexdef from pg_indexes where schemaname = 'public' order by 1, 2`,
+  `select t.typname, e.enumlabel from pg_enum e join pg_type t on t.oid = e.enumtypid order by 1, e.enumsortorder`,
+  // Drizzle cannot declare UNLOGGED (rate_limit, drizzle/0006; drizzle-team/drizzle-orm#5347): a push that
+  // re-creates the table would lose it.
+  `select relname, relpersistence from pg_class where relnamespace = 'public'::regnamespace and relkind = 'r'
+     order by 1`,
+]
+
 const fingerprint = async (url: string) => {
   const client = new Client({ connectionString: url })
   await client.connect()
   try {
-    const queries = [
-      `select table_name, column_name, data_type, udt_name, is_nullable, column_default, character_maximum_length
-         from information_schema.columns where table_schema = 'public' order by 1, 2`,
-      `select conrelid::regclass::text, conname, pg_get_constraintdef(oid) from pg_constraint
-         where connamespace = 'public'::regnamespace order by 1, 2`,
-      `select tablename, indexname, indexdef from pg_indexes where schemaname = 'public' order by 1, 2`,
-      `select t.typname, e.enumlabel from pg_enum e join pg_type t on t.oid = e.enumtypid order by 1, e.enumsortorder`,
-      // Drizzle cannot declare UNLOGGED (rate_limit, drizzle/0006): a push that re-creates the table would lose it.
-      `select relname, relpersistence from pg_class where relnamespace = 'public'::regnamespace and relkind = 'r'
-         order by 1`,
-    ]
-    const results = []
-    for (const query of queries) results.push((await client.query({ text: query, rowMode: 'array' })).rows)
-    return JSON.stringify(results)
+    const rowsPerQuery = []
+    for (const query of FINGERPRINT_QUERIES)
+      rowsPerQuery.push((await client.query({ text: query, rowMode: 'array' })).rows)
+    return JSON.stringify(rowsPerQuery)
   } finally {
     await client.end()
   }
@@ -134,20 +131,23 @@ type CheckName = keyof typeof checks
 const requested = process.argv.slice(2) as CheckName[]
 const unknown = requested.filter((name) => !(name in checks))
 if (unknown.length)
-  throw new Error(`unknown check(s): ${unknown.join(', ')}; expected ${Object.keys(checks).join(', ')}`)
+  throw new Error(`unknown check(s): ${unknown.join(', ')}; expected any of ${Object.keys(checks).join(', ')}`)
 
-let failed = false
-for (const name of requested.length ? requested : (Object.keys(checks) as CheckName[])) {
+/** Runs one check and prints its outcome; false when it found drift or could not run. */
+const passes = async (name: CheckName): Promise<boolean> => {
   try {
     const problems = await checks[name]()
     if (problems.length === 0) console.log(`ok    ${name}`)
-    else {
-      failed = true
-      console.error(`DRIFT ${name}\n${problems.map((p) => `  - ${p}`).join('\n')}`)
-    }
+    else console.error(`DRIFT ${name}\n${problems.map((p) => `  - ${p}`).join('\n')}`)
+    return problems.length === 0
   } catch (error) {
-    failed = true
     console.error(`ERROR ${name}: ${error instanceof Error ? error.message : String(error)}`)
+    return false
   }
+}
+
+let failed = false
+for (const name of requested.length ? requested : (Object.keys(checks) as CheckName[])) {
+  if (!(await passes(name))) failed = true
 }
 process.exitCode = failed ? 1 : 0

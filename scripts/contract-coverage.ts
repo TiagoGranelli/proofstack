@@ -31,32 +31,32 @@ export const operations = (spec: {
     })),
   )
 
+type LogEntry = { msg?: unknown; method?: unknown; path?: unknown; status?: unknown; aborted?: unknown }
+
+/** A JSON log line; startup banners and other plain text are skipped. */
+const parseLogLine = (line: string): LogEntry | undefined => {
+  if (!line.startsWith('{')) return undefined
+  try {
+    return JSON.parse(line) as LogEntry
+  } catch {
+    return undefined
+  }
+}
+
+/** A request log entry whose client received the response (an `aborted` one, logged as 499, was not). */
+const answeredRequest = (entry: LogEntry | undefined): Observation | undefined => {
+  if (entry?.msg !== 'request' || entry.aborted === true) return undefined
+  const { method, path, status } = entry
+  if (typeof method !== 'string' || typeof path !== 'string' || typeof status !== 'number') return undefined
+  return { method, path, status }
+}
+
 /**
  * Requests from Nitro's request log lines; other lines (startup, errors) are skipped, and so are requests whose
  * client disconnected first (`aborted`, logged as 499): nobody received their response.
  */
 export const logObservations = (text: string): Observation[] =>
-  text.split('\n').flatMap((line) => {
-    if (!line.startsWith('{')) return []
-    try {
-      const entry = JSON.parse(line) as {
-        msg?: unknown
-        method?: unknown
-        path?: unknown
-        status?: unknown
-        aborted?: unknown
-      }
-      return entry.msg === 'request' &&
-        entry.aborted !== true &&
-        typeof entry.method === 'string' &&
-        typeof entry.path === 'string' &&
-        typeof entry.status === 'number'
-        ? [{ method: entry.method, path: entry.path, status: entry.status }]
-        : []
-    } catch {
-      return []
-    }
-  })
+  text.split('\n').flatMap((line) => answeredRequest(parseLogLine(line)) ?? [])
 
 const matches = (entry: AllowEntry, operation: string, status: number) =>
   (entry.operation === '*' || entry.operation === operation) && entry.status === status
