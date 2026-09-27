@@ -54,6 +54,20 @@ const abandonSignIn = async (app: RunningApp) => {
   connection.socket.destroy()
 }
 
+/**
+ * After the drain: the abandoned sign-in finished, logged as 499 (aborted), before "shutdown complete", which lists
+ * the pool, and no query ran on a closed pool.
+ */
+const expectSignInFinishedBeforePoolClosed = () => {
+  const log = logLines()
+  const complete = log.findIndex((line) => line.includes('"shutdown complete"'))
+  const signIn = log.findIndex((line) => line.includes('"/api/auth/sign-in/email"') && line.includes('"aborted":true'))
+  expect(signIn, 'the abandoned sign-in is logged (499, aborted) before "shutdown complete"').not.toBe(-1)
+  expect(signIn).toBeLessThan(complete)
+  expect(log[complete], '"shutdown complete" lists the pool').toContain('postgres-pool')
+  expect(log.filter((line) => /Failed query|Cannot use a pool after calling end/.test(line))).toEqual([])
+}
+
 let app: RunningApp
 const databaseUrl = testDatabaseUrl('shutdown')
 
@@ -88,15 +102,7 @@ describe('shutdown', () => {
 
     expect(response.split('\r\n', 1)[0], '/api/ready during the drain').toMatch(/^HTTP\/1\.1 503 /)
     expect(response, '/api/ready during the drain closes its connection').toMatch(/^connection: close\r$/im)
-    const log = logLines()
-    const complete = log.findIndex((line) => line.includes('"shutdown complete"'))
-    const signIn = log.findIndex(
-      (line) => line.includes('"/api/auth/sign-in/email"') && line.includes('"aborted":true'),
-    )
-    expect(signIn, 'the abandoned sign-in is logged (499, aborted) before "shutdown complete"').not.toBe(-1)
-    expect(signIn).toBeLessThan(complete)
-    expect(log[complete], '"shutdown complete" lists the pool').toContain('postgres-pool')
-    expect(log.filter((line) => /Failed query|Cannot use a pool after calling end/.test(line))).toEqual([])
+    expectSignInFinishedBeforePoolClosed()
     expect(stopped).toMatchObject({ code: 0, signal: null })
     expect(stopped.ms).toBeLessThanOrEqual(MAX_SHUTDOWN_MS)
     // The process is gone, so are its sockets; Postgres may take a moment to reap the backends.

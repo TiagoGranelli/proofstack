@@ -14,6 +14,11 @@ const count = () => page.getByText(/^\d+\/280/)
 /** The form has no accessible name (so no `form` role): reach it from its field. */
 const form = () => page.elementLocator(field().element().closest('form')!)
 
+const publishDraft = async (draft: string) => {
+  await field().fill(draft)
+  await publish().click()
+}
+
 describe('PostComposer', () => {
   it('starts empty, with Publish disabled until there is non-blank text', async () => {
     await renderInApp(<PostComposer />)
@@ -61,8 +66,7 @@ describe('PostComposer', () => {
     const { queryClient } = await renderInApp(<PostComposer onPublished={onPublished} />)
     queryClient.setQueryData(getPublicPostsQueryOptions().queryKey, postPages(postPage([])))
 
-    await field().fill('  hello \n')
-    await publish().click()
+    await publishDraft('  hello \n')
     await expect.element(publish()).toBeDisabled()
     await expect.element(form()).toHaveAttribute('aria-busy', 'true')
     await expect.poll(() => sent).toEqual([{ body: 'hello' }])
@@ -78,8 +82,7 @@ describe('PostComposer', () => {
     // No handler: a request would fail the test (setup.ts).
     const onPublished = vi.fn<() => void>()
     await renderInApp(<PostComposer onPublished={onPublished} />)
-    await field().fill('x'.repeat(POST_MAX_LENGTH + 1))
-    await publish().click()
+    await publishDraft('x'.repeat(POST_MAX_LENGTH + 1))
 
     const error = page.getByRole('alert')
     await expect.element(error).toHaveTextContent(`Use at most ${POST_MAX_LENGTH} characters.`)
@@ -95,8 +98,7 @@ describe('PostComposer', () => {
   it('flags a pasted NUL character on Publish without sending it, with the API message', async () => {
     // No handler: a request would fail the test (setup.ts). Postgres cannot store U+0000 (src/contract/stored-text.ts).
     await renderInApp(<PostComposer />)
-    await field().fill('before\u0000after')
-    await publish().click()
+    await publishDraft('before\u0000after')
     await expect
       .element(page.getByRole('alert'))
       .toHaveTextContent('Remove the invisible NUL character (U+0000) from the text.')
@@ -142,8 +144,7 @@ describe('PostComposer', () => {
     worker.use(handler())
     const onPublished = vi.fn<() => void>()
     await renderInApp(<PostComposer onPublished={onPublished} />)
-    await field().fill('keep me')
-    await publish().click()
+    await publishDraft('keep me')
 
     await expect.element(page.getByRole('alert')).toHaveTextContent(message)
     await expect.element(field()).toHaveValue('keep me')

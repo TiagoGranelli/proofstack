@@ -2,7 +2,7 @@
 // signed-in browser, and form sign-in. The open server under test has AUTH_SIGN_UP=open and sends its mail
 // to Mailpit (MAILPIT_URL).
 import type { Browser, BrowserContext, Page, TestInfo } from '@playwright/test'
-import { type Author, createAuthor, expect, nextClientIp } from './app.ts'
+import { type Author, createAuthor, expect, followLink, nextClientIp, signIn, visit } from './app.ts'
 
 /** Same default as playwright.config.ts. */
 const appUrl = process.env.APP_URL ?? 'http://localhost:3000'
@@ -58,6 +58,54 @@ export const signInWithForm = async (page: Page, account: Pick<Author, 'email' |
   await page.getByRole('textbox', { name: 'Email', exact: true }).fill(account.email)
   await page.getByLabel('Password', { exact: true }).fill(account.password)
   await page.getByRole('button', { name: 'Sign in' }).click()
+}
+
+/** Signs in through the form on /login and expects the form to refuse, saying `message`. */
+export const expectFormSignInRefused = async (
+  page: Page,
+  account: Pick<Author, 'email' | 'password'>,
+  message: string,
+) => {
+  await visit(page, '/login')
+  await signInWithForm(page, account)
+  await expect(page.getByRole('alert')).toContainText(message)
+}
+
+/** Fills the sign-up form (on /sign-up) with `account` and submits it. */
+export const signUpWithForm = async (page: Page, account: Author) => {
+  await page.getByLabel('Name').fill(account.name)
+  await page.getByRole('textbox', { name: 'Email', exact: true }).fill(account.email)
+  await page.getByLabel('Password').fill(account.password)
+  await page.getByRole('button', { name: 'Create account' }).click()
+}
+
+/** From /login, follows "Forgot your password?" and asks for a reset link for `email`. */
+export const requestPasswordReset = async (page: Page, email: string) => {
+  await visit(page, '/login')
+  await followLink(page, 'Forgot your password?', /\/forgot-password$/)
+  await page.getByRole('textbox', { name: 'Email', exact: true }).fill(email)
+  await page.getByRole('button', { name: 'Send reset link' }).click()
+}
+
+/** Opens a mailed reset `link` and sets `password` with it. */
+export const setPasswordWithLink = async (page: Page, link: string, password: string) => {
+  await visit(page, link)
+  await page.getByLabel('New password').fill(password)
+  await page.getByRole('button', { name: 'Set new password' }).click()
+}
+
+/** `account` signed in on a second browser context (see `newClient`); close it at the end of the test. */
+export const signedInElsewhere = async (browser: Browser, testInfo: TestInfo, account: Author) => {
+  const elsewhere = await newClient(browser, testInfo)
+  await signIn(elsewhere.request, account)
+  return elsewhere
+}
+
+/** A throwaway account signed in on `page` and on a second browser context, `elsewhere` (close it at the end). */
+export const signedInHereAndElsewhere = async (page: Page, browser: Browser, testInfo: TestInfo) => {
+  const account = await createAccount()
+  const [elsewhere] = await Promise.all([signedInElsewhere(browser, testInfo, account), signIn(page, account)])
+  return { account, elsewhere }
 }
 
 /** The page's context has no working session: a private page redirects to sign-in. */

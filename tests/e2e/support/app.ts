@@ -77,9 +77,17 @@ export const test = base.extend<object, { author: Author }>({
 })
 export { expect }
 
-/** Loads a page and waits for hydration (input before it is lost). */
+/** Loads a page and waits for hydration (input before it is lost). Returns the document's response. */
 export const visit = async (page: Page, path: string) => {
-  await page.goto(path)
+  const response = await page.goto(path)
+  await expect(page.locator('body[data-hydrated="true"]')).toBeAttached()
+  return response
+}
+
+/** Follows the link named `name`, expects to land on `url` and waits for that page to hydrate. */
+export const followLink = async (page: Page, name: string, url: RegExp) => {
+  await page.getByRole('link', { name }).click()
+  await expect(page).toHaveURL(url)
   await expect(page.locator('body[data-hydrated="true"]')).toBeAttached()
 }
 

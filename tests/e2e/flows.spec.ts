@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test'
 import { APP_NAME } from '#/config/app.ts'
 import { signInWithForm } from './support/accounts.ts'
-import { expect, failServerFunctionPosts, signIn, test, visit } from './support/app.ts'
+import { type Author, expect, failServerFunctionPosts, signIn, test, visit } from './support/app.ts'
 
 /**
  * On the dashboard, hydrated and rendered. Leaving a page before that (a `goto`, cleared cookies) races with
@@ -35,8 +35,70 @@ const publish = async (page: Page, body: string) => {
   await expect(myPost(page, body)).toBeVisible()
 }
 
+/** Opens the editor of post `body`, types `draft` and saves it. */
+const editPost = async (page: Page, body: string, draft: string) => {
+  await myPost(page, body).getByRole('button', { name: /^Edit/ }).click()
+  await page.getByLabel('Edit post').fill(draft)
+  await page.getByRole('button', { name: 'Save' }).click()
+}
+
+/** Opens the editor of post `body`, types a draft and leaves with `how`: the original text stays. */
+const expectEditDiscarded = async (page: Page, body: string, how: 'the Cancel button' | 'Escape') => {
+  await myPost(page, body).getByRole('button', { name: /^Edit/ }).click()
+  await expect(page.getByLabel('Edit post')).toHaveValue(body)
+  await page.getByLabel('Edit post').fill(`${body} (discarded)`)
+  if (how === 'Escape') await page.keyboard.press('Escape')
+  else await page.getByRole('button', { name: 'Cancel' }).click()
+  await expect(page.getByLabel('Edit post')).toHaveCount(0)
+  await expect(myPost(page, body)).toBeVisible()
+}
+
+/** After a save: the editor closed, `edited` took the place of `body`, and the API stores `edited` alone. */
+const expectPostReplaced = async (page: Page, body: string, edited: string) => {
+  await expect(page.getByLabel('Edit post')).toHaveCount(0)
+  await expect(myPost(page, edited)).toBeVisible()
+  await expect(myPost(page, body)).toHaveCount(0)
+  const saved = (await (await page.request.get('/api/me/posts')).json()) as { items: Array<{ body: string }> }
+  expect(saved.items.filter((post) => post.body.includes(body)).map((post) => post.body)).toEqual([edited])
+}
+
+const deletePost = async (page: Page, body: string) => {
+  await myPost(page, body)
+    .getByRole('button', { name: /^Delete/ })
+    .click()
+  await expect(myPost(page, body)).toHaveCount(0)
+}
+
 const navLink = (page: Page, name: string) =>
   page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name, exact: true })
+
+/**
+ * Signs in through the form on /login, and checks what that must never do: put the password in the URL, or let
+ * the session check that guards /dashboard (a GET server function) be cached.
+ */
+const signInThroughForm = async (page: Page, author: Author) => {
+  await visit(page, '/login')
+  const sessionCheck = page.waitForResponse((r) => r.url().includes('/_serverFn/') && r.request().method() === 'GET')
+  await signInWithForm(page, author)
+  await expectDashboard(page)
+  expect(page.url()).not.toContain('password')
+  expect((await sessionCheck).headers()['cache-control']).toContain('no-store')
+}
+
+/** Signs out from the dashboard: the app goes home, and /dashboard sends the visitor to sign in. */
+const signOutFromDashboard = async (page: Page) => {
+  await page.getByRole('button', { name: 'Sign out' }).click()
+  await expect(page).toHaveURL(/\/$/)
+  await page.goto('/dashboard')
+  await expect(page).toHaveURL(/\/login\?redirect=%2Fdashboard$/)
+}
+
+/** Goes to the dashboard by the main navigation, then hovers the public list's link, so the router preloads it. */
+const openDashboardPreloadingHome = async (page: Page) => {
+  await navLink(page, 'Dashboard').click()
+  await expect(page.getByLabel('New post')).toBeVisible()
+  await navLink(page, APP_NAME).hover()
+}
 
 type Frames = { publicListFrames?: string[] }
 /**
@@ -53,6 +115,17 @@ const recordPublicList = (page: Page) =>
     }).observe(document.body, { childList: true, subtree: true, characterData: true })
   })
 const publicListFrames = (page: Page) => page.evaluate(() => (window as Frames).publicListFrames ?? [])
+
+/**
+ * Goes to the public list by the main navigation and expects it to show `body` in every frame it rendered, never
+ * the list from before.
+ */
+const expectHomeShowsOnly = async (page: Page, body: string) => {
+  await recordPublicList(page)
+  await navLink(page, APP_NAME).click()
+  await expect(page.getByTestId('public-posts')).toContainText(body)
+  expect((await publicListFrames(page)).filter((text) => !text.includes(body))).toEqual([])
+}
 
 test('public page hydrates from SSR without refetching or console errors', async ({ page }) => {
   const apiCalls: string[] = []
@@ -124,40 +197,19 @@ test('author signs in, publishes, edits, sees the post publicly, deletes it and 
   page,
   author,
 }) => {
-  await visit(page, '/login')
-  // The session check that guards /dashboard is a GET server function: it must never be cached.
-  const sessionCheck = page.waitForResponse((r) => r.url().includes('/_serverFn/') && r.request().method() === 'GET')
-  await signInWithForm(page, author)
-  await expect(page).toHaveURL(/\/dashboard$/)
-  expect(page.url()).not.toContain('password')
-  expect((await sessionCheck).headers()['cache-control']).toContain('no-store')
+  await signInThroughForm(page, author)
 
   const body = `e2e post ${Date.now()}`
   await publish(page, body)
 
   // Cancel (button or Escape) keeps the original text.
-  for (const cancel of [
-    () => page.getByRole('button', { name: 'Cancel' }).click(),
-    () => page.keyboard.press('Escape'),
-  ]) {
-    await myPost(page, body).getByRole('button', { name: /^Edit/ }).click()
-    await expect(page.getByLabel('Edit post')).toHaveValue(body)
-    await page.getByLabel('Edit post').fill(`${body} (discarded)`)
-    await cancel()
-    await expect(page.getByLabel('Edit post')).toHaveCount(0)
-    await expect(myPost(page, body)).toBeVisible()
-  }
+  await expectEditDiscarded(page, body, 'the Cancel button')
+  await expectEditDiscarded(page, body, 'Escape')
 
   // Save replaces it, and the change is persisted, trimmed (the API rejects untrimmed bodies).
   const edited = `${body} (edited)`
-  await myPost(page, body).getByRole('button', { name: /^Edit/ }).click()
-  await page.getByLabel('Edit post').fill(`  ${edited} \n`)
-  await page.getByRole('button', { name: 'Save' }).click()
-  await expect(page.getByLabel('Edit post')).toHaveCount(0)
-  await expect(myPost(page, edited)).toBeVisible()
-  await expect(myPost(page, body)).toHaveCount(0)
-  const saved = (await (await page.request.get('/api/me/posts')).json()) as { items: Array<{ body: string }> }
-  expect(saved.items.filter((post) => post.body.includes(body)).map((post) => post.body)).toEqual([edited])
+  await editPost(page, body, `  ${edited} \n`)
+  await expectPostReplaced(page, body, edited)
   await page.reload()
   await expect(myPost(page, edited)).toBeVisible()
 
@@ -165,15 +217,8 @@ test('author signs in, publishes, edits, sees the post publicly, deletes it and 
   await expect(page.getByTestId('public-posts')).toContainText(edited)
 
   await visit(page, '/dashboard')
-  await myPost(page, edited)
-    .getByRole('button', { name: /^Delete/ })
-    .click()
-  await expect(myPost(page, edited)).toHaveCount(0)
-
-  await page.getByRole('button', { name: 'Sign out' }).click()
-  await expect(page).toHaveURL(/\/$/)
-  await page.goto('/dashboard')
-  await expect(page).toHaveURL(/\/login\?redirect=%2Fdashboard$/)
+  await deletePost(page, edited)
+  await signOutFromDashboard(page)
 })
 
 test('a rejected save shows the error in the post and keeps the draft', async ({ page, author }) => {
@@ -181,20 +226,15 @@ test('a rejected save shows the error in the post and keeps the draft', async ({
   await visit(page, '/dashboard')
   const body = `e2e rejected edit ${Date.now()}`
   await publish(page, body)
-  await myPost(page, body).getByRole('button', { name: /^Edit/ }).click()
   // Over the 280-character limit: the form refuses it with the API's own rule and stays open with the draft.
   const draft = 'x'.repeat(281)
-  await page.getByLabel('Edit post').fill(draft)
-  await page.getByRole('button', { name: 'Save' }).click()
+  await editPost(page, body, draft)
   await expect(editing(page).getByRole('alert')).toContainText('Use at most 280 characters')
   await expect(page.getByLabel('Edit post')).toHaveValue(draft)
 
   await page.getByRole('button', { name: 'Cancel' }).click()
   await expect(myPost(page, body)).toBeVisible()
-  await myPost(page, body)
-    .getByRole('button', { name: /^Delete/ })
-    .click()
-  await expect(myPost(page, body)).toHaveCount(0)
+  await deletePost(page, body)
 })
 
 test('client-side navigation shows a post published or edited moments ago, never the old list', async ({
@@ -204,48 +244,25 @@ test('client-side navigation shows a post published or edited moments ago, never
   await signIn(page, author)
   // The public list is cached in this tab, and hovering the link preloads it again before each write.
   await visit(page, '/')
-  await navLink(page, 'Dashboard').click()
-  await expect(page.getByLabel('New post')).toBeVisible()
-  await navLink(page, APP_NAME).hover()
+  await openDashboardPreloadingHome(page)
 
   const body = `e2e fresh ${Date.now()}`
   await publish(page, body)
-  await recordPublicList(page)
-  await navLink(page, APP_NAME).click()
-  await expect(page.getByTestId('public-posts')).toContainText(body)
-  expect((await publicListFrames(page)).filter((text) => !text.includes(body))).toEqual([])
+  await expectHomeShowsOnly(page, body)
 
-  await navLink(page, 'Dashboard').click()
-  await navLink(page, APP_NAME).hover()
+  await openDashboardPreloadingHome(page)
   const edited = `${body} (edited)`
-  await myPost(page, body).getByRole('button', { name: /^Edit/ }).click()
-  await page.getByLabel('Edit post').fill(edited)
-  await page.getByRole('button', { name: 'Save' }).click()
+  await editPost(page, body, edited)
   await expect(myPost(page, edited)).toBeVisible()
-  await recordPublicList(page)
-  await navLink(page, APP_NAME).click()
-  await expect(page.getByTestId('public-posts')).toContainText(edited)
-  expect((await publicListFrames(page)).filter((text) => !text.includes(edited))).toEqual([])
+  await expectHomeShowsOnly(page, edited)
 
   await navLink(page, 'Dashboard').click()
-  await myPost(page, edited)
-    .getByRole('button', { name: /^Delete/ })
-    .click()
-  await expect(myPost(page, edited)).toHaveCount(0)
+  await deletePost(page, edited)
 })
 
 test('signs in through the form and out again', async ({ page, author }) => {
-  await visit(page, '/login')
-  // The session check that guards /dashboard is a GET server function: it must never be cached.
-  const sessionCheck = page.waitForResponse((r) => r.url().includes('/_serverFn/') && r.request().method() === 'GET')
-  await signInWithForm(page, author)
-  await expectDashboard(page)
-  expect(page.url()).not.toContain('password')
-  expect((await sessionCheck).headers()['cache-control']).toContain('no-store')
-  await page.getByRole('button', { name: 'Sign out' }).click()
-  await expect(page).toHaveURL(/\/$/)
-  await page.goto('/dashboard')
-  await expect(page).toHaveURL(/\/login\?redirect=%2Fdashboard$/)
+  await signInThroughForm(page, author)
+  await signOutFromDashboard(page)
 })
 
 test('a failed sign-out says so and can be retried', async ({ page, author }) => {
