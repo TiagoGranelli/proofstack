@@ -4,6 +4,7 @@
 //   workflows   actionlint + zizmor on .github, and image pins (compose.yaml, ci.yml, Dockerfile) consistent
 //               with scripts/images.ts (Docker)
 //   static      pnpm check without its drift gate (the drift job runs every drift check)
+//   supply-chain registry signatures of every installed package, and the vulnerability gate (scripts/audit.ts)
 //   drift       every drift check, including the database one (DATABASE_URL)
 //   build       the production build, with placeholder configuration
 //   verify      verify:app on all five Playwright projects (DATABASE_URL, the build)
@@ -20,6 +21,17 @@ const run = (command: string, args: string[], env: NodeJS.ProcessEnv = {}) => {
 
 // GitHub Actions tests the build job's artifact: its file times say nothing about the checkout's.
 const downloadedBuild = process.env.GITHUB_ACTIONS === 'true' ? { ALLOW_STALE_BUILD: '1' } : {}
+
+/** Runs every step even after a failure, so one run shows every problem. */
+const sequence = (steps: [string, () => number][]) => {
+  const failed = steps.filter(([name, step]) => {
+    console.log(`\n▶ ${name}`)
+    const status = step()
+    console.log(status === 0 ? `ok    ${name}` : `FAIL  ${name}`)
+    return status !== 0
+  })
+  return failed.length ? 1 : 0
+}
 
 /** actionlint (with shellcheck) and zizmor from their pinned images, offline and read-only. */
 const workflows = () => {
@@ -43,13 +55,7 @@ const workflows = () => {
     ],
     ['image pins', imagePins],
   ]
-  const failed = steps.filter(([name, step]) => {
-    console.log(`\n▶ ${name}`)
-    const status = step()
-    console.log(status === 0 ? `ok    ${name}` : `FAIL  ${name}`)
-    return status !== 0
-  })
-  return failed.length ? 1 : 0
+  return sequence(steps)
 }
 
 /** Every reference to an image from scripts/images.ts in these files must be the same pinned reference. */
@@ -75,6 +81,12 @@ const imagePins = () => {
 const JOBS: Record<string, (args: string[]) => number> = {
   workflows,
   static: (args) => run('node', ['scripts/check.ts', '--skip=drift', ...args]),
+  // The install before it already verified the lockfile against minimumReleaseAge and trustPolicy.
+  'supply-chain': () =>
+    sequence([
+      ['registry signatures', () => run('pnpm', ['audit', 'signatures'])],
+      ['vulnerabilities', () => run('node', ['scripts/audit.ts'])],
+    ]),
   drift: (args) => run('node', ['scripts/check-drift.ts', ...args]),
   // Nitro prerenders /about during the build, which loads the server configuration. The placeholders only
   // satisfy its validation (the same ones as the Dockerfile); nothing connects, nothing lands in .output.
