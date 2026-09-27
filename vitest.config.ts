@@ -1,8 +1,11 @@
 import { defineConfig } from 'vitest/config'
 
 // Separate from vite.config.ts so tests do not load the Start/Nitro plugins.
-// Two projects: `unit` (pure functions, no app, run by `pnpm check`) and `integration` (the running app
-// that `pnpm verify:app` starts). Select one with `vitest run --project <name>`.
+// Projects (select with `vitest run --project <name>`):
+// - `unit`: pure functions, no app (run by `pnpm check`).
+// - `api`: Effect handlers through HttpApiTest with an in-memory repository and a fake session store.
+// - `integration`: the running app that `pnpm verify:app` starts.
+
 export default defineConfig({
   test: {
     projects: [
@@ -10,6 +13,23 @@ export default defineConfig({
         test: {
           name: 'unit',
           include: ['tests/unit/**/*.test.ts'],
+          testTimeout: 5_000,
+        },
+      },
+      {
+        test: {
+          name: 'api',
+          include: ['tests/api/**/*.test.ts'],
+          // src/server/env.ts validates the environment when it is imported, and the handlers import the
+          // database client and Better Auth. These values pass that validation; nothing connects to them
+          // (the harness replaces the repository and the session check).
+          env: {
+            DATABASE_URL: 'postgres://unused:unused@127.0.0.1:9/unused',
+            APP_URL: 'http://localhost:3000',
+            BETTER_AUTH_SECRET: 'api-handler-tests-only-not-a-secret-000',
+            TRUSTED_IP_HEADER: '',
+            NODE_ENV: 'test',
+          },
           testTimeout: 5_000,
         },
       },

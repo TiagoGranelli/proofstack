@@ -38,6 +38,7 @@
     "codegen": "pnpm openapi:generate && pnpm sdk:generate",
     "test": "vitest run --project integration",
     "test:unit": "vitest run --project unit",
+    "test:api": "vitest run --project api",
     "test:e2e": "playwright test",
     "verify:app": "node scripts/verify-app.ts",
     "check:drift": "node scripts/check-drift.ts",
@@ -62,6 +63,7 @@
   },
   "devDependencies": {
     "@babel/core": "8.0.6",
+    "@effect/vitest": "4.0.0-rc.117",
     "@hey-api/openapi-ts": "0.99.0",
     "@playwright/test": "1.63.0",
     "@rolldown/plugin-babel": "0.2.4",
