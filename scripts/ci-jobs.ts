@@ -143,7 +143,12 @@ const JOBS: Record<string, (args: string[]) => number> = {
   lighthouse: (args) =>
     run(
       'node',
-      ['scripts/lighthouse.ts', ...(args.some((a) => a.startsWith('--runs=')) ? [] : ['--runs=5']), ...args],
+      [
+        'scripts/lighthouse.ts',
+        '--bar=ci',
+        ...(args.some((a) => a.startsWith('--runs=')) ? [] : ['--runs=5']),
+        ...args,
+      ],
       {
         ...downloadedBuild,
       },

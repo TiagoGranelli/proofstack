@@ -117,11 +117,13 @@ applies project `allow` rules only after you accept the workspace trust dialog. 
 ## Lighthouse policy
 
 `POLICY` in `scripts/lighthouse-policy.ts`: per page and form factor, accessibility, best practices and SEO must score
-100 on every run; performance needs a median of at least 99, at most one run below 100 and none below 95; the
-median metrics must stay within the budgets. `agentic-browsing` is reported but not gated. SEO is not gated on
+100 on every run; performance needs a median of at least 99, at most one run below 100 and none below 95 (the
+`target` bar); the median metrics must stay within the budgets. `agentic-browsing` is reported but not gated. SEO is not gated on
 `/login` and `/dashboard` (noindex). Exit 2 means inconclusive, not failed: a run's `benchmarkIndex` was below
 1000 or Lighthouse warned about a slow CPU (each run's value and warnings are in
-`lighthouse-report/summary.json`). CI runs `pnpm lighthouse --runs=5`. A mobile 99 whose runs show a preload task of
+`lighthouse-report/summary.json`). CI runs `pnpm lighthouse --runs=5 --bar=ci`: performance only fails there when a
+run scores below 95, because GitHub's 2-vCPU runners score an unchanged page 99 on mobile (owner decision, ADR 0011);
+the other categories and the budgets are as strict as locally. A mobile 99 whose runs show a preload task of
 10 ms or more (`perRun[].preloadTaskMs`, and a note in `summary.md`) comes from a contended host, not from the page:
 Lantern then adds four times that task before every preloaded script ([ADR 0011](../decisions/0011-lighthouse-over-https-http2.md#the-preload-task-and-why-ci-scored-99)).
 

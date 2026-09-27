@@ -30,8 +30,16 @@ export const POLICY = {
    * The performance score comes from simulated throttling over a real trace, and simulated mobile FCP/LCP
    * move in ~150 ms steps, so single runs vary by a point or two. Judged by the median, with at most
    * `maxRunsBelow100` imperfect runs and none below `minRun`.
+   * - `target`, the project's bar, applies by default (`pnpm lighthouse`).
+   * - `ci` (`--bar=ci`, `pnpm ci:lighthouse`): on GitHub's 2-vCPU runners a Chrome task passes Lantern's 10 ms
+   *   cutoff and every mobile run of an unchanged page scores 99 (GoogleChrome/lighthouse#16539, ADR 0011). The
+   *   owner's bar there is no run below 95; the budgets and the other categories stay as strict. Back to `target`
+   *   once Lighthouse stops counting modulepreloads in FCP.
    */
-  performance: { minMedian: 99, maxRunsBelow100: 1, minRun: 95 },
+  performance: {
+    target: { minMedian: 99, maxRunsBelow100: 1, minRun: 95 },
+    ci: { minMedian: 95, maxRunsBelow100: Number.POSITIVE_INFINITY, minRun: 95 },
+  },
   /**
    * Hard budgets on the medians (ms, unitless CLS, bytes): a backstop ~30-50% above the measured values.
    * The score gate above is the tighter check.
@@ -51,6 +59,12 @@ export const POLICY = {
 const SLOW_CPU_WARNING = 'slower CPU than'
 
 export type Verdict = 'pass' | 'fail' | 'inconclusive'
+
+/** Which performance bar a run is judged by (POLICY.performance). */
+export type PerformanceBar = keyof typeof POLICY.performance
+
+/** How one page is measured: its form factor and the performance bar that applies. */
+export type Judging = { formFactor: FormFactor; performanceBar: PerformanceBar }
 
 /** One Lighthouse run, as the policy reads it. */
 export type RunSummary = {
@@ -85,24 +99,33 @@ const deterministicDefects = (page: Page, perRun: RunSummary[]): string[] => {
     })
 }
 
+/** Where complete performance scores miss the performanceBar: the median, the lowest run, the count of imperfect runs. */
+const scoreProblems = (values: number[], performanceBar: PerformanceBar): string[] => {
+  const { minMedian, minRun, maxRunsBelow100 } = POLICY.performance[performanceBar]
+  const below100 = values.filter((score) => score < 100).length
+  return [
+    ...(median(values) < minMedian ? [`performance: median ${median(values)} < ${minMedian}`] : []),
+    ...(Math.min(...values) < minRun
+      ? [`performance: unstable, one run scored ${Math.min(...values)} < ${minRun}`]
+      : []),
+    ...(below100 > maxRunsBelow100
+      ? [`performance: ${below100} runs below 100 (${values.join(', ')}); at most ${maxRunsBelow100} tolerated`]
+      : []),
+  ]
+}
+
 /** The performance score: `defects` when a run has none, `problems` when the scores miss POLICY.performance. */
-const performanceFindings = (page: Page, perRun: RunSummary[]): { defects: string[]; problems: string[] } => {
+const performanceFindings = (
+  page: Page,
+  perRun: RunSummary[],
+  performanceBar: PerformanceBar,
+): { defects: string[]; problems: string[] } => {
   if (!page.gated.includes('performance')) return { defects: [], problems: [] }
-  const { minMedian, minRun, maxRunsBelow100 } = POLICY.performance
   const scores = perRun.map((run) => run.scores.performance)
   const values = scores.filter((score): score is number => score !== null)
-  const below100 = values.filter((score) => score < 100).length
-  const defects = values.length === scores.length ? [] : ['performance: a run has no score']
-  const problems: string[] = []
-  if (defects.length === 0 && median(values) < minMedian)
-    problems.push(`performance: median ${median(values)} < ${minMedian}`)
-  if (Math.min(...values) < minRun)
-    problems.push(`performance: unstable, one run scored ${Math.min(...values)} < ${minRun}`)
-  if (below100 > maxRunsBelow100)
-    problems.push(
-      `performance: ${below100} runs below 100 (${values.join(', ')}); at most ${maxRunsBelow100} tolerated`,
-    )
-  return { defects, problems }
+  // A run without a score fails the page on its own (a defect); the performanceBar applies to complete sets only.
+  if (values.length !== scores.length) return { defects: ['performance: a run has no score'], problems: [] }
+  return { defects: [], problems: scoreProblems(values, performanceBar) }
 }
 
 /** Medians over the form factor's budget. A NaN median (the audit is missing) is over budget too. */
@@ -127,10 +150,10 @@ const slowMachineProblem = (slow: RunSummary[]): string =>
  */
 export const judge = (
   page: Page,
-  formFactor: FormFactor,
+  { formFactor, performanceBar }: Judging,
   measured: Measured,
 ): { verdict: Verdict; problems: string[] } => {
-  const performance = performanceFindings(page, measured.perRun)
+  const performance = performanceFindings(page, measured.perRun, performanceBar)
   const defects = [...deterministicDefects(page, measured.perRun), ...performance.defects]
   const overBudget = [...performance.problems, ...budgetProblems(formFactor, measured.metrics)]
   const slow = slowRuns(measured.perRun)

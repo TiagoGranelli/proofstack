@@ -128,6 +128,13 @@ of the first-paint graph. Meanwhile `lighthouse-report/summary.json` records eac
 (`perRun[].preloadTaskMs`) and the host's CPU count, and `summary.md` says when a run reached 10 ms. A 99 with
 the preload task under 10 ms points at the page; with it above, the host added the round trip.
 
+### CI's bar (owner decision, 2026-09-27)
+
+On the first GitHub run every mobile page scored 99 in four or five of five runs for the reason above. CI now
+judges performance with `--bar=ci` (`POLICY.performance.ci`): it fails only when a run scores below 95. The
+deterministic categories stay at 100 on every run, the metric budgets still apply, and `pnpm lighthouse` locally
+keeps the `target` bar. Back to `target` on CI once Lighthouse stops counting modulepreloads in FCP.
+
 ## Revisit when
 
 - TanStack/router#8520 ships: upgrade, check that `/` and `/dashboard` preload `useBaseQuery-*.js`, and
