@@ -1,10 +1,10 @@
-import { readFileSync } from 'node:fs'
+import { readFileSync, realpathSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import babel from '@rolldown/plugin-babel'
 import react, { reactCompilerPreset } from '@vitejs/plugin-react'
 import { playwright } from '@vitest/browser-playwright'
-import type { Plugin } from 'vite'
+import { type Plugin, searchForWorkspaceRoot } from 'vite'
 import { defineConfig } from 'vitest/config'
 
 // Separate from vite.config.ts so tests do not load the Start/Nitro plugins.
@@ -88,6 +88,10 @@ export default defineConfig({
       {
         // The same React transform as the app (vite.config.ts), so components run as they ship.
         plugins: [react(), babel({ presets: [reactCompilerPreset()] }), mswWorkerScript()],
+        // The pre-commit hook (.githooks/pre-commit) checks a temporary copy of the commit whose node_modules is a
+        // link to the checkout's. Vite serves the browser only files under the project root, and it resolves the
+        // link, so the real node_modules must be allowed too (the coverage runtime is loaded from there).
+        server: { fs: { allow: [searchForWorkspaceRoot(process.cwd()), realpathSync('node_modules')] } },
         // Pre-bundled up front: discovering them during the run makes Vite reload the page mid-test.
         optimizeDeps: {
           include: [
