@@ -234,11 +234,12 @@ test('client-side navigation shows a post published or edited moments ago, never
   await expect(myPost(page, edited)).toHaveCount(0)
 })
 
+// Sign-out is a server function (POST /_serverFn/...); the page's other server function calls are GETs.
+const abortPost = (route: Route) => (route.request().method() === 'POST' ? route.abort() : route.fallback())
+
 test('a failed sign-out says so and can be retried', async ({ page, baseURL }) => {
   await signInWithApi(page, baseURL!)
   await visit(page, '/dashboard')
-  // Sign-out is a server function (POST /_serverFn/...); the page's other server function calls are GETs.
-  const abortPost = (route: Route) => (route.request().method() === 'POST' ? route.abort() : route.fallback())
   await page.route('**/_serverFn/**', abortPost)
   await page.getByRole('button', { name: 'Sign out' }).click()
   await expect(page.getByRole('alert')).toContainText('Could not sign out')

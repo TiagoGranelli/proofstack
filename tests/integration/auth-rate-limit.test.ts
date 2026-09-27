@@ -26,7 +26,7 @@ describe.runIf(production)('auth rate limit', () => {
         postSignIn({ email: users.author.email, password: 'wrong-password-123' }, { 'x-forwarded-for': ip }),
       ),
     )
-    const statuses = attempts.map((res) => res.status).toSorted()
+    const statuses = attempts.map((res) => res.status).toSorted((a, b) => a - b)
     expect(statuses).toEqual([401, 401, 401, 429, 429, 429, 429, 429, 429, 429])
     // One shared row counts every attempt in the window (src/server/auth-rate-limit.ts); 3 were admitted.
     expect(await counters(ip)).toEqual([{ key: `${ip}|/sign-in/email`, count: 10 }])

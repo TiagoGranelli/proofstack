@@ -17,6 +17,13 @@ const newAccount = () => ({
   password: `pw-${crypto.randomUUID()}`,
 })
 
+/** What a sign-up answer reveals: whether it signed in, which user fields, and the verification state. */
+const shape = (body: { token: unknown; user: Record<string, unknown> }) => ({
+  token: body.token,
+  user: Object.keys(body.user).toSorted(),
+  emailVerified: body.user.emailVerified,
+})
+
 describe('closed sign-up', () => {
   it('has no sign-up endpoint', async () => {
     const res = await signUp(closedAppUrl, newAccount(), nextIp())
@@ -54,11 +61,6 @@ describe('open sign-up', () => {
     const fresh = await signUp(appUrl, newAccount(), nextIp())
     const taken = await signUp(appUrl, { ...newAccount(), email: users.other.email }, nextIp())
     expect([fresh.status, taken.status]).toEqual([200, 200])
-    const shape = (body: { token: unknown; user: Record<string, unknown> }) => ({
-      token: body.token,
-      user: Object.keys(body.user).toSorted(),
-      emailVerified: body.user.emailVerified,
-    })
     expect(shape(await taken.json())).toEqual(shape(await fresh.json()))
   })
 })
