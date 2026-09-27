@@ -19,6 +19,11 @@ const SESSION_COOKIE = 'better-auth.session_token'
  * `better-auth.session_token` otherwise, so the contract declares both as alternatives. Browsers send
  * the cookie by themselves; the implementation hands the request headers to Better Auth, which
  * verifies the signature and looks up the session.
+ *
+ * Its security handlers read the request itself, so their type requires what HttpApi's router provides to
+ * every request (the request, its search params, the route). That is the purpose of a request middleware,
+ * not an implementation detail that could be provided when the Layer is built:
+ * @effect-expect-leaking HttpServerRequest | ParsedSearchParams | RouteContext
  */
 export class Authentication extends HttpApiMiddleware.Service<Authentication, { provides: CurrentUser }>()(
   'proofstack/Authentication',

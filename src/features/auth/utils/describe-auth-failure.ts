@@ -27,10 +27,12 @@ export function describeAuthFailure(error: unknown): string {
     case 'UNAUTHORIZED':
     case 'SESSION_EXPIRED':
       return 'Your session has ended. Sign in again to continue.'
-    case 'RATE_LIMITED':
-      return error.retryAfter
-        ? `Too many attempts. Try again in ${error.retryAfter} second${error.retryAfter === 1 ? '' : 's'}.`
+    case 'RATE_LIMITED': {
+      const seconds = error.retryAfter ?? 0
+      return seconds > 0
+        ? `Too many attempts. Try again in ${seconds} second${seconds === 1 ? '' : 's'}.`
         : 'Too many attempts. Try again in a moment.'
+    }
     default:
       return 'Something went wrong. Try again.'
   }

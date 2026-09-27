@@ -1,4 +1,8 @@
 {
+  // Strictness beyond `strict`. Two flags stay off on purpose, measured on this code base:
+  // exactOptionalPropertyTypes (34 errors, all an optional `x?: T` receiving `T | undefined` from env or options
+  // plumbing, no bug among them) and noPropertyAccessFromIndexSignature (96 errors, mostly `process.env.X`, which
+  // src/server/env.ts validates). Turning either on means rewriting correct code, not catching mistakes.
   "compilerOptions": {
     "target": "ES2024",
     "lib": ["ES2024", "DOM", "DOM.Iterable"],
@@ -10,13 +14,19 @@
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
     "noFallthroughCasesInSwitch": true,
+    "noImplicitReturns": true,
+    "allowUnreachableCode": false,
+    "allowUnusedLabels": false,
     "verbatimModuleSyntax": true,
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "erasableSyntaxOnly": true
+    "erasableSyntaxOnly": true,
+    // Effect's diagnostics (floating effects, leaking requirements, missing yield*, …): in the editor through
+    // @effect/tsgo's language service, and in `pnpm check` as the `effect` gate (`effect-tsgo diagnostics`).
+    "plugins": [{ "name": "@effect/language-service" }]
   },
   "include": ["src", "scripts", "tests", "*.config.ts"],
   "exclude": ["node_modules", ".output", "repos"]

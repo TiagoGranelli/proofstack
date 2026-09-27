@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import type { ReactElement, ReactNode } from 'react'
 import { Card, CardContent, CardDescription } from '#/components/ui/card.tsx'
 import type { Post } from '#/sdk/types.gen.ts'
 
@@ -10,7 +10,7 @@ const dateFormat = new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeZone
  */
 export function PostCard(props: {
   post: Post
-  actions?: ReactNode
+  actions?: ReactElement
   alert?: ReactNode
   children?: ReactNode
   busy?: boolean

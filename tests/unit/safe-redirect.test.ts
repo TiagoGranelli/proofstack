@@ -10,6 +10,8 @@ describe('safeRedirect', () => {
     ['undefined', undefined],
     ['empty', ''],
     ['relative path', 'dashboard'],
+    // The attack this module must refuse, as test data.
+    // oxlint-disable-next-line no-script-url
     ['javascript: URL', 'javascript:alert(1)'],
     ['data: URL', 'data:text/html,<script>alert(1)</script>'],
     ['absolute URL', 'https://evil.example/'],

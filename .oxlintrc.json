@@ -18,11 +18,16 @@
     "coverage/**"
   ],
   "plugins": ["typescript", "unicorn", "oxc", "import", "react", "jsx-a11y", "promise"],
-  "jsPlugins": ["@shadcn/lint"],
+  "jsPlugins": ["@shadcn/lint", "@tanstack/eslint-plugin-query", "@tanstack/eslint-plugin-router"],
+  // Every rule is "error" or "off" (`pnpm lint` runs with --deny-warnings). `pedantic` is on as a whole; each rule
+  // turned off below was measured on this code base and says why. An escape hatch for one line is an
+  // `oxlint-disable-next-line <rule>` directly under a comment giving the reason (the `guards` gate in
+  // scripts/check.ts rejects a bare one, and `reportUnusedDisableDirectives` rejects a stale one).
   "categories": {
     "correctness": "error",
     "suspicious": "error",
-    "perf": "error"
+    "perf": "error",
+    "pedantic": "error"
   },
   "settings": {
     "shadcn": {
@@ -68,6 +73,121 @@
     "typescript/switch-exhaustiveness-check": "error",
     "typescript/no-unsafe-type-assertion": "off",
     "typescript/consistent-return": "off",
+
+    // pedantic, turned off. Style preferences that would rewrite correct code, or rules that fight a library's shape.
+    "typescript/prefer-readonly-parameter-types": "off",
+    "eslint/require-unicode-regexp": "off",
+    // Size limits: complexity and max-lines-per-function below measure what matters.
+    "eslint/max-lines": "off",
+    "eslint/max-depth": "off",
+    "eslint/max-classes-per-file": "off",
+    "import/max-dependencies": "off",
+    "typescript/strict-void-return": "off",
+    "unicorn/explicit-length-check": "off",
+    // `new Promise((resolve) => setTimeout(resolve, ms))` is the idiom it flags.
+    "eslint/no-promise-executor-return": "off",
+    "unicorn/no-useless-undefined": "off",
+    // Its fix changes behavior: `Number.parseFloat("2px")` is 2, `Number("2px")` is NaN (CSS values in tests/e2e).
+    "unicorn/prefer-number-coercion": "off",
+    // Better Auth hooks and TanStack loaders must be async functions even when they await nothing.
+    "eslint/require-await": "off",
+    "typescript/require-await": "off",
+    // Effect Schema declares a const and a type of the same name (`const Post = Schema.Struct(...)`, `type Post`).
+    "eslint/no-redeclare": "off",
+    "eslint/no-negated-condition": "off",
+    "unicorn/no-negated-condition": "off",
+    "unicorn/prefer-query-selector": "off",
+    "eslint/no-loop-func": "off",
+    "react/no-unescaped-entities": "off",
+
+    // pedantic, calibrated.
+    // Nullable strings, booleans and objects read naturally in conditions; numbers and any/unknown do not
+    // (`if (count)` hides 0, `if (error)` hides a falsy thrown value).
+    "typescript/strict-boolean-expressions": [
+      "error",
+      {
+        "allowString": true,
+        "allowNumber": true,
+        "allowNullableObject": true,
+        "allowNullableBoolean": true,
+        "allowNullableString": true,
+        "allowNullableNumber": false,
+        "allowNullableEnum": false,
+        "allowAny": false
+      }
+    ],
+    // TanStack Router's `throw redirect(...)` and `throw notFound()` are its control flow.
+    "typescript/only-throw-error": [
+      "error",
+      {
+        "allow": [{ "from": "package", "package": "@tanstack/router-core", "name": ["Redirect", "NotFoundError"] }]
+      }
+    ],
+    "typescript/no-confusing-void-expression": ["error", { "ignoreArrowShorthand": true }],
+    "typescript/prefer-nullish-coalescing": ["error", { "ignorePrimitives": { "string": true, "boolean": true } }],
+    "eslint/eqeqeq": ["error", "always", { "null": "ignore" }],
+
+    // Mistakes agents make: type escapes, dead conditions, suppressed checks, leftovers.
+    "typescript/no-unnecessary-condition": "error",
+    "typescript/prefer-optional-chain": "error",
+    "typescript/no-explicit-any": "error",
+    "typescript/no-non-null-assertion": "error",
+    "typescript/no-dynamic-delete": "error",
+    "typescript/no-empty-object-type": "error",
+    "typescript/no-invalid-void-type": "error",
+    "typescript/no-namespace": "error",
+    "typescript/no-require-imports": "error",
+    "typescript/use-unknown-in-catch-callback-variable": "error",
+    "typescript/consistent-type-imports": "error",
+    "typescript/no-import-type-side-effects": "error",
+    "typescript/dot-notation": "error",
+    "typescript/consistent-type-assertions": "error",
+    "typescript/no-inferrable-types": "error",
+    // `@ts-expect-error` needs a reason of at least 10 characters; `@ts-ignore` and `@ts-nocheck` are banned.
+    "typescript/ban-ts-comment": [
+      "error",
+      {
+        "ts-expect-error": "allow-with-description",
+        "ts-ignore": true,
+        "ts-nocheck": true,
+        "ts-check": false,
+        "minimumDescriptionLength": 10
+      }
+    ],
+    "unicorn/no-abusive-eslint-disable": "error",
+    "eslint/no-console": "error",
+    "eslint/no-empty": ["error", { "allowEmptyCatch": false }],
+    "eslint/no-warning-comments": ["error", { "terms": ["todo", "fixme", "xxx", "hack"] }],
+    "react/no-danger": "error",
+    "react/button-has-type": "error",
+    "react/jsx-no-target-blank": "error",
+    "eslint/no-new-func": "error",
+    "typescript/no-implied-eval": "error",
+    "eslint/no-script-url": "error",
+    "import/extensions": ["error", "always", { "ignorePackages": true }],
+    "import/no-duplicates": "error",
+    "import/first": "error",
+    "promise/no-nesting": "error",
+    "promise/no-return-wrap": "error",
+    "promise/prefer-catch": "error",
+    "promise/no-return-in-finally": "error",
+    // React Compiler bailouts: code the compiler cannot optimize, or a suppressed rule of React.
+    "react/syntax": "error",
+    "react/todo": "error",
+    "react/unsupported-syntax": "error",
+    "react/invariant": "error",
+    "react/rule-suppression": "error",
+    "jsx-a11y/anchor-ambiguous-text": "error",
+    "eslint/complexity": ["error", { "max": 20 }],
+    "eslint/max-lines-per-function": ["error", { "max": 130, "skipBlankLines": true, "skipComments": true }],
+
+    // TanStack Query and Router (ESLint plugins run by oxlint).
+    "@tanstack/query/exhaustive-deps": "error",
+    "@tanstack/query/stable-query-client": "error",
+    "@tanstack/query/no-rest-destructuring": "error",
+    "@tanstack/query/prefer-query-options": "error",
+    "@tanstack/router/create-route-property-order": "error",
+
     "shadcn/no-unknown-classes": "error",
     "shadcn/no-raw-colors": "error",
     "shadcn/no-arbitrary-values": "error",
@@ -103,24 +223,22 @@
       }
     },
     {
-      "files": ["src/components/**", "src/features/**"],
+      // UI code and page routes: data only through the SDK or a server function (AGENTS.md, "Architecture map").
+      "files": ["src/components/**", "src/features/**", "src/routes/**/*.tsx"],
+      "plugins": ["node"],
       "rules": {
+        "node/no-process-env": "error",
+        "no-restricted-globals": [
+          "error",
+          {
+            "name": "fetch",
+            "message": "UI code calls the API through the generated SDK (#/sdk) or a server function (#/lib/*.functions.ts), never raw fetch."
+          }
+        ],
         "no-restricted-imports": [
           "error",
           {
             "paths": [
-              {
-                "name": "drizzle-orm",
-                "message": "UI code must not touch the database. Call the API through the generated SDK (#/sdk)."
-              },
-              {
-                "name": "pg",
-                "message": "UI code must not touch the database. Call the API through the generated SDK (#/sdk)."
-              },
-              {
-                "name": "better-auth",
-                "message": "Better Auth runs on the server only. UI code calls the account server functions in #/lib/auth.functions.ts."
-              },
               {
                 "name": "@tanstack/react-start/server",
                 "message": "Server-only helpers. Use a server function in #/lib/*.functions.ts."
@@ -136,16 +254,12 @@
                 "message": "UI code must not import src/server/**. Go through the SDK (#/sdk) or a server function (#/lib/*.functions.ts)."
               },
               {
-                "regex": "^drizzle-orm/",
-                "message": "UI code must not touch the database."
+                "regex": "^(drizzle-orm|pg)(/|$)",
+                "message": "UI code must not touch the database. Call the API through the generated SDK (#/sdk)."
               },
               {
-                "regex": "^better-auth/",
+                "regex": "^(better-auth|@better-auth)(/|$)",
                 "message": "Better Auth runs on the server only, its client included. UI code calls the account server functions in #/lib/auth.functions.ts."
-              },
-              {
-                "regex": "^@better-auth/",
-                "message": "Better Auth runs on the server only. UI code calls the account server functions in #/lib/auth.functions.ts."
               }
             ]
           }
@@ -169,9 +283,29 @@
       }
     },
     {
-      "files": ["tests/integration/**"],
+      // Vitest and Playwright share the test API shape the vitest plugin checks.
+      "files": ["tests/**"],
       "plugins": ["vitest"],
       "rules": {
+        "typescript/no-non-null-assertion": "off",
+        // A `describe` callback is a list of tests, not a function to keep short.
+        "eslint/max-lines-per-function": "off",
+        "vitest/no-focused-tests": "error",
+        "vitest/no-disabled-tests": "error",
+        "vitest/expect-expect": [
+          "error",
+          {
+            "assertFunctionNames": ["expect", "expect.*", "assert.*", "expectAccessible", "tabOrder"]
+          }
+        ],
+        "vitest/no-identical-title": "error",
+        "vitest/no-duplicate-hooks": "error",
+        "vitest/prefer-hooks-on-top": "error",
+        "vitest/require-mock-type-parameters": "error",
+        "vitest/no-conditional-expect": "error",
+        // pedantic: flags every `??`, ternary and callback in a test body (29 findings, none a hidden branch of the
+        // test itself). no-conditional-expect above catches the harmful case: an assertion that may not run.
+        "vitest/no-conditional-in-test": "off",
         "vitest/valid-expect": [
           "error",
           {
@@ -181,7 +315,7 @@
         "vitest/no-standalone-expect": [
           "error",
           {
-            "additionalTestBlockFunctions": ["beforeAll", "beforeEach"]
+            "additionalTestBlockFunctions": ["beforeAll", "beforeEach", "afterEach"]
           }
         ]
       }
@@ -190,6 +324,14 @@
       "files": ["scripts/**", "tests/**"],
       "rules": {
         "no-await-in-loop": "off"
+      }
+    },
+    {
+      // Command-line tools: the console is their output.
+      "files": ["scripts/**"],
+      "rules": {
+        "eslint/no-console": "off",
+        "eslint/complexity": ["error", { "max": 30 }]
       }
     }
   ]

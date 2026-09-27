@@ -19,7 +19,7 @@ const plain = (text: string) => {
 }
 
 // Constants (t: 2): null, undefined, true, false. Objects and arrays are numbered in pre-order.
-const encode = (value: Json, ids = { next: 0 }): Node => {
+const encode = (value: Json, ids: { next: number }): Node => {
   if (value === null) return { t: 2, s: 0 }
   if (value === undefined) return { t: 2, s: 1 }
   if (typeof value === 'boolean') return { t: 2, s: value ? 2 : 3 }
@@ -27,7 +27,7 @@ const encode = (value: Json, ids = { next: 0 }): Node => {
   if (typeof value === 'string') return { t: 1, s: plain(value) }
   const i = ids.next++
   if (Array.isArray(value)) return { t: 9, i, a: value.map((item) => encode(item, ids)), o: 0 }
-  const keys = Object.keys(value).map(plain)
+  const keys = Object.keys(value).map((key) => plain(key))
   return { t: 10, i, p: { k: keys, v: keys.map((key) => encode(value[key], ids)) }, o: 0 }
 }
 
@@ -40,7 +40,7 @@ const decode = (node: Node): unknown => {
     case 2:
       return [null, undefined, true, false][node.s as number]
     case 9:
-      return (node.a as Node[]).map(decode)
+      return (node.a as Node[]).map((item) => decode(item))
     // Objects; 11 is one without a prototype (Start's `context`).
     case 10:
     case 11: {
@@ -77,7 +77,7 @@ export const callAuthFunction = async <F extends AuthFunction>(
   const url = new URL(`/_serverFn/${idOf(name)}`, options.baseUrl ?? appUrl)
   // The client sends Seroval's `toJSON` envelope (root node, feature flags, no marks); the answer is the root
   // node alone (`toCrossJSON`).
-  const payload = JSON.stringify({ t: encode({ data: options.data }), f: 127, m: [] })
+  const payload = JSON.stringify({ t: encode({ data: options.data }, { next: 0 }), f: 127, m: [] })
   if (method === 'GET') url.searchParams.set('payload', payload)
   const response = await fetch(url, {
     method,

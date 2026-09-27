@@ -31,7 +31,7 @@ export default defineConfig({
       // Radix and TanStack Query ship `"use client"` directives for React Server Components. They are
       // meaningless here and the bundler drops them, one warning per module. Everything else still shows.
       onLog(level, log, handler) {
-        if (log.code === 'MODULE_LEVEL_DIRECTIVE' && /use client/.test(log.message)) return
+        if (log.code === 'MODULE_LEVEL_DIRECTIVE' && log.message.includes('use client')) return
         handler(level, log)
       },
     },

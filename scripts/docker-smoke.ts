@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import { createServer } from 'node:net'
 import { resolve } from 'node:path'
-import { dockerPrefix, IMAGES } from './images.ts'
+import { dockerPrefix, IMAGES, waitForPostgres } from './images.ts'
 
 const prefix = `${dockerPrefix()}-smoke-${process.pid}`
 const IMAGE = `${dockerPrefix()}-app:smoke`
@@ -23,11 +23,12 @@ const docker = (args: string[], options: { quiet?: boolean; allowFailure?: boole
     stdio: options.quiet ? ['ignore', 'pipe', 'pipe'] : ['ignore', 'pipe', 'inherit'],
     maxBuffer: 64 * 1024 * 1024,
   })
+  // Node types these as strings, but a stream that is not piped, or a command that did not start, gives null.
   if (result.status !== 0 && !options.allowFailure)
     throw new Error(
-      `docker ${args.slice(0, 2).join(' ')} failed (${result.status ?? result.signal})\n${result.stderr ?? ''}`,
+      `docker ${args.slice(0, 2).join(' ')} failed (${result.status ?? result.signal})\n${(result.stderr as string | null) ?? ''}`,
     )
-  return (result.stdout ?? '').trim()
+  return ((result.stdout as string | null) ?? '').trim()
 }
 
 const step = async <T>(name: string, run: () => T | Promise<T>): Promise<T> => {
@@ -77,15 +78,7 @@ try {
         .concat(['--env', 'POSTGRES_DB=proofstack', IMAGES.postgres]),
       { quiet: true },
     )
-    for (let i = 0; i < 60; i++) {
-      // -h forces TCP: the image's init phase answers on the socket before the real server is up.
-      const ready = spawnSync('docker', ['exec', DB, 'pg_isready', '-h', '127.0.0.1', '-U', 'proofstack'], {
-        stdio: 'ignore',
-      })
-      if (ready.status === 0) return
-      await sleep(500)
-    }
-    throw new Error('Postgres did not become ready in 30 s')
+    await waitForPostgres(DB)
   })
 
   await step('migrate twice (the second run must apply nothing)', () => {

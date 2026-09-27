@@ -14,7 +14,7 @@ const expectDashboard = async (page: Page) => {
   await expect(page.getByLabel('New post')).toBeVisible()
 }
 
-const exactly = (text: string) => new RegExp(`^${text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`)
+const exactly = (text: string) => new RegExp(`^${text.replaceAll(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`)
 /** One of my posts, by its exact body (the body paragraph is replaced by the form while editing). */
 const myPost = (page: Page, body: string) =>
   page
@@ -48,7 +48,7 @@ const recordPublicList = (page: Page) =>
     ;(window as Frames).publicListFrames = frames
     new MutationObserver(() => {
       const list = document.querySelector('[data-testid="public-posts"]')
-      if (list) frames.push(list.textContent ?? '')
+      if (list) frames.push(list.textContent)
     }).observe(document.body, { childList: true, subtree: true, characterData: true })
   })
 const publicListFrames = (page: Page) => page.evaluate(() => (window as Frames).publicListFrames ?? [])

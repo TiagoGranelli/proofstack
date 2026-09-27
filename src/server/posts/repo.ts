@@ -106,7 +106,9 @@ export class PostsRepo extends Context.Service<
         }),
         create: Effect.fn('PostsRepo.create')(function* (author, body) {
           const [row] = yield* query(() => db.insert(post).values({ authorId: author.id, body }).returning())
-          return toPost(row!, author.name)
+          // INSERT … RETURNING yields the inserted row; none at all is a driver defect, not an outcome to handle.
+          if (!row) return yield* Effect.die(new Error('INSERT … RETURNING returned no row'))
+          return toPost(row, author.name)
         }),
         // Ownership is part of the WHERE clause, so another author's id behaves exactly like a missing id.
         update: Effect.fn('PostsRepo.update')(function* (author, id, body) {

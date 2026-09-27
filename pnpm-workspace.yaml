@@ -7,6 +7,8 @@ allowBuilds:
   # component tests serve the worker straight from node_modules (vitest.config.ts).
   msw: false
 engineStrict: true
+# `pnpm add` writes exact versions (package.json pins every dependency; the `guards` gate in scripts/check.ts checks).
+savePrefix: ''
 # pnpm's default minimumReleaseAge quarantines fresh releases; exceptions must name exact versions.
 minimumReleaseAgeExclude:
   - '@tanstack/query-core@5.104.0'
