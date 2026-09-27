@@ -7,6 +7,8 @@
     "tests/**/*.{test,spec}.ts",
     // Referenced by path string from vite.config.ts (nitro.plugins).
     "src/server/nitro/*.ts",
+    // Referenced by path string from vite.config.ts: replaces @tanstack/devtools-event-client in production builds.
+    "src/lib/no-devtools-event-client.ts",
     // Target of components.json `aliases.utils`; the shadcn CLI resolves it when adding components.
     "src/lib/utils.ts"
   ],
