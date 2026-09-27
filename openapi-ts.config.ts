@@ -3,7 +3,12 @@ import { defineConfig } from '@hey-api/openapi-ts'
 // openapi.json is generated from src/contract by `pnpm openapi:generate`; both are committed.
 export default defineConfig({
   input: './openapi.json',
-  output: { path: './src/sdk', clean: true },
+  output: {
+    path: './src/sdk',
+    clean: true,
+    // A codegen run is not a change we review: `fallow security` (the pre-commit `security` job) skips these files.
+    header: ({ defaultValue }) => [...defaultValue, '// fallow-ignore-file security-sink'],
+  },
   // An operation with a query parameter named `cursor` is paginated: the TanStack Query plugin gives it
   // `*InfiniteOptions` that pass each page param as `query.cursor`. Only `cursor`, so a future `page` or
   // `offset` parameter does not silently become an infinite query too.
