@@ -5,28 +5,31 @@ import { tanstackStartCookies } from 'better-auth/tanstack-start'
 import { db } from './db/client.ts'
 import * as schema from './db/schema/index.ts'
 import { env } from './env.ts'
+import { AUTH_BASE_PATH, endpointAllowlist, isExposedEndpoint } from './http/auth-endpoints.ts'
 import { log } from './log.ts'
 
 export const auth = betterAuth({
   appName: 'ProofStack',
   baseURL: env.appUrl,
+  basePath: AUTH_BASE_PATH,
   secret: env.authSecret,
   database: drizzleAdapter(db, { provider: 'pg', schema }),
   emailAndPassword: { enabled: true, autoSignIn: false, minPasswordLength: 12, maxPasswordLength: 128 },
   // Public sign-up is closed over HTTP. Accounts are created with `pnpm user:create`,
   // which calls the server API directly (disabledPaths only affects the HTTP router).
-  // The HTTP router is further restricted to an allowlist in ./http/auth-handler.ts.
+  // The HTTP router is further restricted to the endpoint allowlist in ./http/auth-endpoints.ts.
   disabledPaths: ['/sign-up/email'],
   // Built-in rules still apply on top of this default: /sign-in/* allows 3 requests per 10 s per IP.
   // Counters live in the rateLimit table, so every instance shares them; Better Auth increments them with
   // one conditional UPDATE, which is atomic under concurrent requests. /get-session is a read that every
-  // page guard makes, so it is not counted.
+  // page guard makes, so it is not counted. Neither are requests the endpoint allowlist answers with 404
+  // (Better Auth counts before plugins run), so invented paths cannot fill the table.
   rateLimit: {
     enabled: env.isProduction,
     window: 60,
     max: 100,
     storage: 'database',
-    customRules: { '/get-session': false },
+    customRules: { '/get-session': false, '/**': (request, rule) => (isExposedEndpoint(request) ? rule : false) },
   },
   advanced: {
     // Every request reaches Better Auth with the TCP peer as the last X-Forwarded-For hop
@@ -43,5 +46,5 @@ export const auth = betterAuth({
       log(level, message, { source: 'better-auth', ...(args.length ? { error: args[0] } : {}) }),
   },
   // Must stay last: forwards Set-Cookie through TanStack Start.
-  plugins: [tanstackStartCookies()],
+  plugins: [endpointAllowlist(), tanstackStartCookies()],
 })
