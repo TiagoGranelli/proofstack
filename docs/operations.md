@@ -781,7 +781,7 @@ browsers, Postgres and (for `verify`) Mailpit, and moves artifacts. The logic li
 `pnpm ci:local [job ...]` is the faithful local equivalent (default: every job, in CI order). It runs the
 container jobs (`static`, `supply-chain`, `drift`, `build`, `verify`, `lighthouse`) in the official Playwright image
 for `@playwright/test` 1.63.0 (Ubuntu 24.04, all browsers including WebKit), with Node from
-`.node-version`, pnpm from `packageManager` and the pinned Caddy binary added, next to Postgres 18.6 and
+the `node` image (the version in `devEngines`), pnpm from `packageManager` and the pinned Caddy binary added, next to Postgres 18.6 and
 Mailpit (`MAILPIT_HOST=mailpit` for `verify:app`) on a private Docker network. The host jobs (`workflows`, `secrets`, `docker`) drive Docker and run on the host.
 
 - The repository is mounted read-only. The container copies what a CI checkout would contain (tracked
@@ -846,25 +846,29 @@ What guards the dependencies, the image and the repository, and where each gate 
 | --- | --- | --- |
 | pnpm policies (`pnpm-workspace.yaml`) | every `pnpm install --frozen-lockfile` (CI setup, Dockerfile) | a lockfile entry younger than `minimumReleaseAge` (one day, strict) or published with weaker provenance than an earlier version (`trustPolicy: no-downgrade`, for versions under 30 days old); an unmet peer (`strictPeerDependencies`); a dependency build script not listed in `allowBuilds` |
 | `pnpm audit signatures` | CI `supply-chain` | a package whose registry signature does not verify |
-| `pnpm audit:check` | CI `supply-chain` | a high or critical advisory in any package, production or development, not in `security/audit-allowlist.json`; an expired or stale allowlist entry |
+| `pnpm audit:check` | CI `supply-chain` | a high or critical advisory in any package, production or development, not in `auditConfig.ignoreGhsas` (`pnpm-workspace.yaml`) |
 | `pnpm licenses:check` | `pnpm check` | a production dependency whose license is not allowed (`scripts/licenses.ts`) |
 | `pnpm check:migrations` | `pnpm check` | a migration statement that locks or rewrites a busy table ([Migration safety](#migration-safety)) |
 | `pnpm ci:secrets` | CI `secrets`; the pre-commit hook when a `gitleaks` binary is installed | a secret anywhere in the history (`.gitleaks.toml`) |
 | grype in `pnpm ci:docker` | CI `docker` | a high or critical vulnerability with a released fix in the production image, not in `security/image-allowlist.json` |
 
-- **Allowlists.** Both files in `security/` take `{ <id>, package, reason, expires }`; the expiry is at most
-  180 days ahead. A finding goes there only when it cannot apply here (the reason says why); the usual fix is
-  an upgrade, an exact `overrides` entry in `pnpm-workspace.yaml` naming the advisory, or a newer base image.
-- **Dependabot** proposes npm and GitHub Actions updates after a 7-day cooldown. It does not raise security
-  alerts for this project: GitHub's dependency graph reads pnpm 12 lockfiles as empty
-  (dependabot/dependabot-core#15904), so `pnpm audit:check` is the vulnerability gate. It does not update
-  container images either (the docker ecosystems would change only some of the copies of a pin, see
-  `.github/dependabot.yml`): `pnpm images:check` reports newer tags and rebuilt digests, and after editing
-  `scripts/images.ts`, `pnpm images:sync` rewrites the copies. A grype failure in `ci:docker` is usually fixed
-  by a rebuilt base image digest.
+- **Exceptions.** An advisory goes in `auditConfig.ignoreGhsas` (`pnpm-workspace.yaml`, with a comment giving the
+  reason and a review date), and an image finding in `security/image-allowlist.json` (`{ <id>, package, reason,
+  expires }`, at most 180 days ahead), only when it cannot apply here. The usual fix is an upgrade, an exact
+  `overrides` entry in `pnpm-workspace.yaml` naming the advisory, or a newer base image.
+- **Renovate** (`renovate.json`; install the Renovate GitHub App to turn it on) proposes updates for the npm
+  packages, pnpm (`packageManager`), Node (`devEngines`), every container image and the GitHub Actions, the
+  last two pinned by digest. An image pinned in several files (`scripts/images.ts`, the compose files, `ci.yml`,
+  the Dockerfiles) moves in one PR. It waits 7 days after a release, except for a vulnerability fix: its OSV
+  alerts (osv.dev) open that PR at once, since GitHub's dependency graph reads pnpm 12 lockfiles as empty
+  (dependabot/dependabot-core#15904) and GitHub's own alerts miss this project. A grype failure in `ci:docker`
+  is usually fixed by a rebuilt base image digest, which Renovate proposes.
 - **Runtime image.** Only `node`, `.output/` and `drizzle/`: the runtime stage deletes npm and npx, and the
   process runs as the unprivileged `node` user, under Node's permission model: it may read `.output/` and
   use the network, and nothing else (no file writes, child processes, workers or addons;
   [ADR 0012](decisions/0012-node-permission-model.md)). The tests run the server with the same flags.
-- **SBOM.** `pnpm sbom:release` writes CycloneDX documents for the production npm dependencies and for the
-  whole image (syft) into `sbom/`, to attach to a release.
+- **SBOM.** `pnpm sbom:release` runs pnpm's `pnpm sbom` and writes a CycloneDX document of the production npm
+  dependencies (with their licenses) to `sbom/proofstack.cdx.json`, to attach to a release. Nothing publishes
+  an image yet; a workflow that does should build it with `docker buildx build --sbom=true
+  --provenance=mode=max`, which attaches the image's SBOM (OS packages included) and a SLSA provenance
+  attestation to the pushed image.

@@ -19,7 +19,7 @@ The example application publishes short posts publicly and lets an authenticated
 
 ## Quick start
 
-Requirements: Node 26 (see `.node-version`), pnpm 12 (`npm install -g pnpm@12.6.0`; Node 26 no longer ships Corepack), and Docker for the local database.
+Requirements: pnpm 12 and Docker (for the local database). `pnpm install` downloads the Node version in `package.json#devEngines` and runs every script with it.
 
 ```sh
 pnpm install

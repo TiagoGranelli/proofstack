@@ -1,6 +1,6 @@
 ---
 name: upgrade-prerelease-deps
-description: Upgrade dependencies in this repo, above all the pinned pre-release ones (effect, @effect/vitest, nitro, @tanstack/react-start, oxfmt, @hey-api/openapi-ts). Use when bumping any package version, acting on pnpm deps:check or pnpm audit:check, or when an install fails the release quarantine.
+description: Upgrade dependencies in this repo, above all the pinned pre-release ones (effect, @effect/vitest, nitro, @tanstack/react-start, oxfmt, @hey-api/openapi-ts). Use when bumping any package version, reviewing a Renovate PR, acting on pnpm audit:check, or when an install fails the release quarantine.
 ---
 
 # Upgrade dependencies
@@ -15,8 +15,9 @@ description: Upgrade dependencies in this repo, above all the pinned pre-release
   `strictPeerDependencies` an unmet peer. Every frozen install checks the lockfile against these policies.
 - A vulnerable transitive package gets an exact `overrides` entry in `pnpm-workspace.yaml` naming the advisory
   (and an `ignoreDependencyOverrides` entry in `.fallowrc.json`, since the overridden version is no longer in
-  the lockfile). What cannot be fixed goes in `security/audit-allowlist.json` with a reason and an expiry.
-  Dependabot security alerts do not work with pnpm 12 lockfiles; `pnpm audit:check` is the gate.
+  the lockfile). An advisory that cannot apply here goes in `auditConfig.ignoreGhsas` in
+  `pnpm-workspace.yaml`, with a comment giving the reason and a review date (write it by hand; `pnpm audit
+  --ignore` adds the id without the comment). `pnpm audit:check` is the gate; Renovate's OSV alerts open fix PRs.
 - Pre-release packages, pinned exactly: `effect` and `@effect/vitest` (4.0.0 RCs from the `rc` dist-tag; npm
   `latest` is v3), `nitro` (its npm `latest` is a `-beta` build), `@tanstack/react-start` (npm `latest` is a 1.x
   release, but Start's docs still call it a Release Candidate), `oxfmt` (0.x, announced as beta) and
@@ -27,7 +28,8 @@ description: Upgrade dependencies in this repo, above all the pinned pre-release
 
 ## Steps
 
-1. `pnpm deps:check` reports what is newer (and the `rc` and `next` dist-tags).
+1. Renovate (`renovate.json`) opens the PRs, a week after each release; it follows the `rc` dist-tag for Effect
+   and `next` for Hey API. By hand, `pnpm outdated` lists what is newer.
 2. Upgrade one pre-release package per PR: `pnpm add --save-exact <name>@<version>`.
 3. Package-specific work:
    - **Effect:** starting with the next RC after `4.0.0-rc.117`, `effect/unstable/httpapi` becomes
@@ -35,7 +37,7 @@ description: Upgrade dependencies in this repo, above all the pinned pre-release
      PRs #8354 and #8365). Rewrite the imports in `src/contract`, `src/server/api` and `scripts/openapi.ts`, run
      `pnpm codegen`, and review the `openapi.json` diff. Upgrade `@effect/vitest` with it.
    - **Hey API:** stays on the `next` snapshot `0.0.0-next-20260824173136`. The stable 0.99.0 needs the JS
-     compiler API that TypeScript 7 no longer has, and crashes; Dependabot ignores it
+     compiler API that TypeScript 7 no longer has, and crashes; Renovate follows `next` only
      ([ADR 0002](../../../docs/decisions/0002-typescript-7.md)). After any bump, run `pnpm codegen` and review
      the `src/sdk` diff.
    - **@effect/tsgo** (0.x): the tsconfig plugin serves editors and `effect-tsgo diagnostics` is the `effect`

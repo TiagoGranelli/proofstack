@@ -1,6 +1,6 @@
-// The copies of scripts/images.ts pins in files that cannot import it. `pnpm ci:workflows` fails when a copy
-// differs (pinProblems); `pnpm images:sync` rewrites every copy from scripts/images.ts (syncPins).
-import { readFileSync, writeFileSync } from 'node:fs'
+// The copies of scripts/images.ts pins in files that cannot import it. Renovate moves every copy of an image in
+// one PR (same depName); `pnpm ci:workflows` fails when a hand edit leaves a copy behind.
+import { readFileSync } from 'node:fs'
 import { IMAGES } from './images.ts'
 
 const PINNED_COPIES = [
@@ -26,14 +26,4 @@ export const pinProblems = () =>
         .filter((match) => match[0] !== ref)
         .map((match) => `${file}: ${match[0]} (scripts/images.ts has ${ref})`),
     )
-  })
-
-/** Rewrites every stale copy; returns the files it changed. */
-export const syncPins = () =>
-  PINNED_COPIES.filter((file) => {
-    const text = readFileSync(file, 'utf8')
-    const synced = PATTERNS.reduce((current, { ref, pattern }) => current.replaceAll(pattern, ref), text)
-    if (synced === text) return false
-    writeFileSync(file, synced)
-    return true
   })
