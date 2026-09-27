@@ -199,7 +199,7 @@ change it, list and end their sessions, and delete the account at `/account`.
 
 | Mail | Sent when | Link |
 | --- | --- | --- |
-| Confirm your email address | Sign-up; a sign-in with the right password but an unverified address; `/verify-email` "send a new link" | `/verify-email?token=...`, valid 1 hour |
+| Confirm your email address | Sign-up; a sign-in with the right password but an unverified address; `/verify-email` "send a new link" | `/verify-email?token=...`, valid 1 hour. The page confirms only when its "Confirm email" button is pressed (a POST), so mail scanners that follow links confirm nothing |
 | Reset your password | `/forgot-password` | `/reset-password?token=...`, valid 1 hour, once. Setting the password ends every session |
 | Someone tried to sign up with your email address | Sign-up with an address that already has an account | Links to `/login` and `/forgot-password` |
 

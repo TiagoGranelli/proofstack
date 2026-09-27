@@ -106,8 +106,13 @@ const STATES: Record<string, (fixtures: Fixtures) => Promise<unknown>> = {
     await page.getByRole('button', { name: 'Set new password' }).click()
     await expect(page.getByRole('alert')).toContainText('This link is invalid or has expired')
   },
+  'verify email, link': async ({ page }) => {
+    await visit(page, '/verify-email?token=not-a-token')
+    await expect(page.getByRole('button', { name: 'Confirm email' })).toBeEnabled()
+  },
   'verify email, invalid link': async ({ page }) => {
     await visit(page, '/verify-email?token=not-a-token')
+    await page.getByRole('button', { name: 'Confirm email' }).click()
     await expect(page.getByRole('alert')).toContainText('This link is invalid or has expired')
   },
   account: async ({ page, author }) => {
@@ -184,6 +189,15 @@ test.describe('landmarks', () => {
   - heading "Forgot your password?" [level=1]
   - textbox "Email"
   - button "Send reset link"`)
+  })
+
+  test('verify email', async ({ page }) => {
+    await visit(page, '/verify-email?token=not-a-token')
+    await expect(page.locator('body')).toMatchAriaSnapshot(`${SITE_HEADER}
+- main:
+  - heading "Confirm your email" [level=1]
+  - paragraph
+  - button "Confirm email"`)
   })
 
   test('account', async ({ page, author }) => {

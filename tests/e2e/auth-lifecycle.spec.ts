@@ -4,7 +4,7 @@
 import { createAccount, expectSignedOut, mailLink, newAccount, newClient, signInWithForm } from './support/accounts.ts'
 import { expect, signIn, test, visit } from './support/app.ts'
 
-test('signs up, confirms the address from the mail, then signs in', async ({ page }) => {
+test('signs up, confirms the address from the mail, then signs in', async ({ page, request }) => {
   const account = newAccount()
 
   await visit(page, '/login')
@@ -22,7 +22,18 @@ test('signs up, confirms the address from the mail, then signs in', async ({ pag
   await signInWithForm(page, account)
   await expect(page.getByRole('alert')).toContainText('Confirm your email address first')
 
-  await visit(page, await mailLink(account.email, 'Confirm your email address', '/verify-email'))
+  const link = await mailLink(account.email, 'Confirm your email address', '/verify-email')
+  // Following the link, as a mail scanner or a link preview does, confirms nothing.
+  expect((await request.get(link)).status()).toBe(200)
+  const early = await request.post('/api/auth/sign-in/email', {
+    data: { email: account.email, password: account.password },
+  })
+  expect(early.status()).toBe(403)
+  expect(await early.json()).toMatchObject({ code: 'EMAIL_NOT_VERIFIED' })
+
+  // Its owner confirms with the button (a POST).
+  await visit(page, link)
+  await page.getByRole('button', { name: 'Confirm email' }).click()
   await expect(page.getByRole('status')).toContainText('Your email address is confirmed')
   await page.getByRole('link', { name: 'Sign in' }).click()
   await expect(page.locator('body[data-hydrated="true"]')).toBeAttached()

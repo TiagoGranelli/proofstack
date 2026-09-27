@@ -30,7 +30,9 @@ accounts are created.
   an hour, and the reset ends every session), change password (always ending the other sessions), the
   session list with per-session revoke, sign-out of the other sessions and everywhere, and account
   deletion behind the password and an explicit confirmation (posts go with the account).
-- Mail links point at the app's own pages (`/verify-email`, `/reset-password`), which call Better Auth.
+- Mail links point at the app's own pages (`/verify-email`, `/reset-password`), which call Better Auth when
+  their button is pressed, never on page load: with open sign-up, a link scanner that followed the link would
+  otherwise confirm an address someone else registered.
   Senders only schedule delivery through `advanced.backgroundTasks`, so response times do not reveal
   whether an account exists; shutdown drains pending sends.
 - The UI calls these endpoints through server functions (`src/lib/auth.functions.ts`) that dispatch into
