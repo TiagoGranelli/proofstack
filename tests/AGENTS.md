@@ -17,7 +17,8 @@ Test each behavior in the cheapest layer that can observe it:
 
 - `pnpm test:unit|test:api|test:component [filter ...]` runs one fast layer; `pnpm test:fast` runs all three with
   coverage. `pnpm test:db [filter ...]` runs the `db` layer against a fresh `proofstack_db_<pid>_test` database
-  next to `DATABASE_URL` (dropped afterwards; `KEEP_TEST_DB=1` keeps it). It needs Postgres, no build.
+  next to `DATABASE_URL` (dropped afterwards; `KEEP_TEST_DB=1` keeps it). It needs Postgres, no build. Creating
+  any per-run database also drops those of runs whose pid is gone (stopped with Ctrl-C, killed).
 - `pnpm build && pnpm verify:app [--no-db] [--no-e2e] [--no-integration] [--edge] [filter ...]` runs the `db`
   layer, then starts two built servers (open and closed sign-up) against a fresh per-run
   `proofstack_<purpose>_<pid>_test` database (dropped afterwards) and runs Vitest (`tests/integration`) and

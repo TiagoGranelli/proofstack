@@ -69,9 +69,40 @@ const administer = async (testUrl: string, statements: (name: string) => string[
 export const dropTestDatabase = (testUrl: string) =>
   administer(testUrl, (name) => [`drop database if exists "${name}" with (force)`])
 
-/** Recreates the test database, empty. */
-export const emptyTestDatabase = (testUrl: string) =>
-  administer(testUrl, (name) => [`drop database if exists "${name}" with (force)`, `create database "${name}"`])
+/** A per-run database name (`testDatabaseUrl`) and the pid of the run that made it. */
+const RUN_DATABASE = /^proofstack_[a-z]+_(\d+)_test$/
+
+/** Whether process `pid` still runs here: signal 0 only checks, and EPERM means it runs as another user. */
+const isRunning = (pid: number) => {
+  try {
+    return process.kill(pid, 0)
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'EPERM'
+  }
+}
+
+/**
+ * Drops the per-run databases of runs that are gone. A run stopped with Ctrl-C or killed never reaches the
+ * `finally` that drops its own, and each one would stay on the server for good.
+ */
+const dropAbandoned = async (testUrl: string) => {
+  const admin = await connectAdmin(testUrl)
+  try {
+    const { rows } = await admin.query<{ datname: string }>('select datname from pg_database')
+    for (const { datname } of rows) {
+      const pid = Number(RUN_DATABASE.exec(datname)?.[1])
+      if (pid && pid !== process.pid && !isRunning(pid)) await admin.query(`drop database "${datname}" with (force)`)
+    }
+  } finally {
+    await admin.end()
+  }
+}
+
+/** Recreates the test database, empty, after dropping the ones abandoned by runs that no longer exist. */
+export const emptyTestDatabase = async (testUrl: string) => {
+  await dropAbandoned(testUrl)
+  await administer(testUrl, (name) => [`drop database if exists "${name}" with (force)`, `create database "${name}"`])
+}
 
 /** Recreates an empty test database and applies every migration in drizzle/. */
 export const resetTestDatabase = async (testUrl: string) => {

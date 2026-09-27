@@ -6,7 +6,7 @@ import { computeMedianRun } from 'lighthouse/core/lib/median-run.js'
 import { Pool } from 'pg'
 import { xSync } from 'tinyexec'
 import { post, user } from '#/server/db/schema/index.ts'
-import { assertChromium, startApp } from './app-server.ts'
+import { assertChromium, type RunningApp, startApp } from './app-server.ts'
 // Lighthouse gate. Boots the built app against a fresh database with seeded posts and a signed-in author,
 // puts the reference edge in front of it (deploy/Caddyfile: HTTPS, HTTP/2, compression, as in production),
 // runs Lighthouse several times per page and form factor with Playwright's Chromium, and applies POLICY.
@@ -215,20 +215,22 @@ if (smallShm)
 rmSync(OUT, { recursive: true, force: true })
 mkdirSync(OUT, { recursive: true })
 const databaseUrl = testDatabaseUrl('lighthouse', process.env.LIGHTHOUSE_DATABASE_URL)
-const app = await startApp({
-  databaseUrl,
-  logFile: join(OUT, 'app-server.log'),
-  ...(direct ? {} : { edge: { logFile: join(OUT, 'edge.log'), tls } }),
-})
-// Chrome trusts exactly the key of the edge's local certificate (not every certificate error), so the page
-// is a secure https origin as in production, and best-practices audits see what users would see.
-if (app.edgeCertificateSpki) chromeFlags.push(`--ignore-certificate-errors-spki-list=${app.edgeCertificateSpki}`)
-if (protocol === 'h1') chromeFlags.push('--disable-http2', '--disable-quic')
-console.log(
-  `measuring ${app.url}${direct ? ' (Node server, no edge)' : ` (edge in front of ${app.directUrl}, ${protocol})`}`,
-)
 const results = []
+let app: RunningApp | undefined
+// startApp creates the database: it is dropped in the finally below even when a server or create-user fails.
 try {
+  app = await startApp({
+    databaseUrl,
+    logFile: join(OUT, 'app-server.log'),
+    ...(direct ? {} : { edge: { logFile: join(OUT, 'edge.log'), tls } }),
+  })
+  // Chrome trusts exactly the key of the edge's local certificate (not every certificate error), so the page
+  // is a secure https origin as in production, and best-practices audits see what users would see.
+  if (app.edgeCertificateSpki) chromeFlags.push(`--ignore-certificate-errors-spki-list=${app.edgeCertificateSpki}`)
+  if (protocol === 'h1') chromeFlags.push('--disable-http2', '--disable-quic')
+  console.log(
+    `measuring ${app.url}${direct ? ' (Node server, no edge)' : ` (edge in front of ${app.directUrl}, ${protocol})`}`,
+  )
   await seedPosts(databaseUrl, app.user.email)
   const cookie = pages.some((p) => p.auth)
     ? await signIn(app.url, { email: app.user.email, password: app.user.password })
@@ -351,7 +353,7 @@ try {
     }
   }
 } finally {
-  await app.stop()
+  await app?.stop()
   if (!process.env.LIGHTHOUSE_DATABASE_URL) await dropTestDatabase(databaseUrl)
 }
 
