@@ -109,7 +109,7 @@ Postgres and Mailpit (`pnpm mail:up`, the local inbox for account emails), and a
 
 | Command | Covers |
 | --- | --- |
-| `pnpm check` | `format:check`, `lint` (warnings are counted in the summary but do not fail), `typecheck`, `deadcode`, `tests` (`pnpm test:fast`: Vitest projects `unit`, `api` and `component` with the coverage gate, see [Tests](#tests)), the database-free drift checks (contract, migrations, auth) and repo guards (including kebab-case folder names). No database, no build, about 9 s. Needs Playwright's Chromium. Run it before every hand-off. |
+| `pnpm check` | `format:check`, `lint` (zero warnings: `--deny-warnings`, every rule is error or off), `typecheck`, `deadcode` (Fallow with `--fail-on-issues`: unused files, exports, types and dependencies, zones), `tests` (`pnpm test:fast`: Vitest projects `unit`, `api` and `component` with the coverage gate, see [Tests](#tests)), the database-free drift checks (contract, migrations, auth) and repo guards (including kebab-case folder names). No database, no build, about 9 s. Needs Playwright's Chromium. Run it before every hand-off. |
 | `pnpm test:unit\|test:api\|test:component [filter ...]` | One fast layer (see [Tests](#tests)); `pnpm test:fast` runs all three with coverage |
 | `pnpm format`, `pnpm lint:fix` | Autofixes |
 | `pnpm check:drift [contract\|migrations\|auth\|database]` | Checks that generated files match their sources and that the auth schema holds what Better Auth writes; `database` needs Postgres |
