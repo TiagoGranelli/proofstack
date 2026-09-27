@@ -130,7 +130,7 @@ const secrets = (args: string[]) => {
 const imagePins = () => {
   const problems = pinProblems()
   for (const problem of problems) console.error(problem)
-  if (problems.length) console.error('Run `pnpm images:sync` to copy the pins from scripts/images.ts.')
+  if (problems.length) console.error('Copy the pin from scripts/images.ts into each file listed.')
   return problems.length ? 1 : 0
 }
 

@@ -75,7 +75,7 @@ in and how each layer's harness works.
 | `pnpm ci:local [job ...]` | The CI jobs in the Playwright Ubuntu container (needs Docker) |
 
 Every gate's failure message says how to fix it. What each gate covers, how to make a reviewed exception, the
-Lighthouse policy and the less common commands (`deps:check`, `audit:check`, `images:*`, `sbom:release`) are in
+Lighthouse policy and the less common commands (`audit:check`, `sbom:release`) are in
 [docs/agents/gates.md](docs/agents/gates.md).
 
 ## Memory safety

@@ -33,5 +33,6 @@
 /.gitleaks.toml               @proofstack/maintainers
 /.squawk.toml                 @proofstack/maintainers
 
-# CI workflows, actions, Dependabot and this file.
+# CI workflows, actions, Renovate and this file.
 /.github/            @proofstack/maintainers
+/renovate.json       @proofstack/maintainers

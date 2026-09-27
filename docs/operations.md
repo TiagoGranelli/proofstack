@@ -851,13 +851,13 @@ What guards the dependencies, the image and the repository, and where each gate 
 - **Allowlists.** Both files in `security/` take `{ <id>, package, reason, expires }`; the expiry is at most
   180 days ahead. A finding goes there only when it cannot apply here (the reason says why); the usual fix is
   an upgrade, an exact `overrides` entry in `pnpm-workspace.yaml` naming the advisory, or a newer base image.
-- **Dependabot** proposes npm and GitHub Actions updates after a 7-day cooldown. It does not raise security
-  alerts for this project: GitHub's dependency graph reads pnpm 12 lockfiles as empty
-  (dependabot/dependabot-core#15904), so `pnpm audit:check` is the vulnerability gate. It does not update
-  container images either (the docker ecosystems would change only some of the copies of a pin, see
-  `.github/dependabot.yml`): `pnpm images:check` reports newer tags and rebuilt digests, and after editing
-  `scripts/images.ts`, `pnpm images:sync` rewrites the copies. A grype failure in `ci:docker` is usually fixed
-  by a rebuilt base image digest.
+- **Renovate** (`renovate.json`; install the Renovate GitHub App to turn it on) proposes updates for the npm
+  packages, pnpm (`packageManager`), Node (`devEngines`), every container image and the GitHub Actions, the
+  last two pinned by digest. An image pinned in several files (`scripts/images.ts`, the compose files, `ci.yml`,
+  the Dockerfiles) moves in one PR. It waits 7 days after a release, except for a vulnerability fix: its OSV
+  alerts (osv.dev) open that PR at once, since GitHub's dependency graph reads pnpm 12 lockfiles as empty
+  (dependabot/dependabot-core#15904) and GitHub's own alerts miss this project. A grype failure in `ci:docker`
+  is usually fixed by a rebuilt base image digest, which Renovate proposes.
 - **Runtime image.** Only `node`, `.output/` and `drizzle/`: the runtime stage deletes npm and npx, and the
   process runs as the unprivileged `node` user, under Node's permission model: it may read `.output/` and
   use the network, and nothing else (no file writes, child processes, workers or addons;

@@ -13,10 +13,10 @@ savePrefix: ''
 
 # Release quarantine: no version younger than one day is resolved. Set explicitly, which makes it strict: a
 # release inside the window fails the install (or prompts) instead of being appended silently to
-# minimumReleaseAgeExclude, as pnpm's implicit default does. One day, not Dependabot's 7-day cooldown: the
-# cooldown already keeps automated updates a week behind, and a 7-day cutoff here would reject 125 entries of
-# the current lockfile (the tree is kept current by hand). `pnpm install --frozen-lockfile` checks every
-# lockfile entry against this and trustPolicy (about 5 s; needs the registry).
+# minimumReleaseAgeExclude, as pnpm's implicit default does. Renovate waits 7 days before proposing a direct
+# dependency (renovate.json); this day is the floor for everything else: transitive versions, updates by hand
+# and Renovate's security PRs, which skip its wait. `pnpm install --frozen-lockfile` checks every lockfile entry
+# against this and trustPolicy (about 5 s; needs the registry).
 minimumReleaseAge: 1440
 minimumReleaseAgeStrict: true
 # `pnpm install`, `add`, `update` and `remove` drop exclude entries the lockfile no longer resolves.

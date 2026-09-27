@@ -1,6 +1,6 @@
 ---
 name: upgrade-prerelease-deps
-description: Upgrade dependencies in this repo, above all the pinned pre-release ones (effect, @effect/vitest, nitro, @tanstack/react-start, oxfmt, @hey-api/openapi-ts). Use when bumping any package version, acting on pnpm deps:check or pnpm audit:check, or when an install fails the release quarantine.
+description: Upgrade dependencies in this repo, above all the pinned pre-release ones (effect, @effect/vitest, nitro, @tanstack/react-start, oxfmt, @hey-api/openapi-ts). Use when bumping any package version, reviewing a Renovate PR, acting on pnpm audit:check, or when an install fails the release quarantine.
 ---
 
 # Upgrade dependencies
@@ -27,7 +27,8 @@ description: Upgrade dependencies in this repo, above all the pinned pre-release
 
 ## Steps
 
-1. `pnpm deps:check` reports what is newer (and the `rc` and `next` dist-tags).
+1. Renovate (`renovate.json`) opens the PRs, a week after each release; it follows the `rc` dist-tag for Effect
+   and `next` for Hey API. By hand, `pnpm outdated` lists what is newer.
 2. Upgrade one pre-release package per PR: `pnpm add --save-exact <name>@<version>`.
 3. Package-specific work:
    - **Effect:** starting with the next RC after `4.0.0-rc.117`, `effect/unstable/httpapi` becomes
@@ -35,7 +36,7 @@ description: Upgrade dependencies in this repo, above all the pinned pre-release
      PRs #8354 and #8365). Rewrite the imports in `src/contract`, `src/server/api` and `scripts/openapi.ts`, run
      `pnpm codegen`, and review the `openapi.json` diff. Upgrade `@effect/vitest` with it.
    - **Hey API:** stays on the `next` snapshot `0.0.0-next-20260824173136`. The stable 0.99.0 needs the JS
-     compiler API that TypeScript 7 no longer has, and crashes; Dependabot ignores it
+     compiler API that TypeScript 7 no longer has, and crashes; Renovate follows `next` only
      ([ADR 0002](../../../docs/decisions/0002-typescript-7.md)). After any bump, run `pnpm codegen` and review
      the `src/sdk` diff.
    - **@effect/tsgo** (0.x): the tsconfig plugin serves editors and `effect-tsgo diagnostics` is the `effect`
