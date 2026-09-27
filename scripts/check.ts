@@ -56,6 +56,30 @@ const security = () => {
   return tool('fallow', ['security', '--gate', 'new', ...source, 'src'])()
 }
 
+/**
+ * Any clone group fails (settings in .fallowrc.json `duplicates`). `fallow dupes` itself only fails above a
+ * duplication percentage, which a new 20-line copy in a growing code base would never reach.
+ */
+const dupes = () => {
+  const result = spawnSync(bin('fallow'), ['dupes', '--format', 'json', '--no-fragments'], {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'inherit'],
+    maxBuffer: 64 * 1024 * 1024,
+  })
+  let groups = Number.NaN
+  try {
+    groups = (JSON.parse(result.stdout) as { stats: { clone_groups: number } }).stats.clone_groups
+  } catch {
+    // Not a report (the tool failed): the human run below shows why.
+  }
+  if (result.status === 0 && groups === 0) {
+    console.log('No clone groups outside the ignored files.')
+    return true
+  }
+  tool('fallow', ['dupes'])()
+  return false
+}
+
 // ---------------------------------------------------------------------------------------------------------------
 // Guards: repository rules no tool checks. Each problem says what to do. The line guards take an exception on the
 // line directly above the flagged one: `// guards-allow <guard>: <reason, at least 10 characters>`.
@@ -376,7 +400,7 @@ const GATES: Gate[] = [
   },
   {
     name: 'dupes',
-    run: tool('fallow', ['dupes', '--fail-on-issues']),
+    run: dupes,
     fix:
       'extract the duplicated block into one function or module and call it from both places (`fallow dupes ' +
       '--trace <file>:<line>` shows every copy). A reviewed, deliberate clone goes in `duplicates.ignoredClones` ' +

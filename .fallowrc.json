@@ -51,10 +51,12 @@
   // fails. Cognitive 15 is SonarJS's default (nesting and broken flow weigh more than a flat switch); cyclomatic
   // 20 matches oxlint's `complexity` rule. Refactor an offender into named steps; a function that is genuinely
   // irreducible gets a `thresholdOverrides` entry here with its reason, never a higher global ceiling.
-  // The `dupes` gate in scripts/check.ts (`fallow dupes --fail-on-issues`): any clone group (defaults: 50 tokens and
+  // The `dupes` gate in scripts/check.ts (`fallow dupes`, JSON report): any clone group (defaults: 50 tokens and
   // 5 lines, `mild` mode) fails. Calibration: outside generated code the repository had two groups (13 lines, in
   // scripts) and now has none, so the gate starts at zero instead of at a percentage that a 20-line copy-paste
   // would not move. A reviewed, deliberate clone goes in `ignoredClones` as `<fingerprint>:<count>` with a comment.
+  // Test files (*.test.*, *.spec.*) stay out through Fallow's default ignores: they hold 5 small groups (59 lines) of
+  // repeated arrange-and-act steps, which read better inline than behind a helper.
   "duplicates": {
     "ignore": ["src/sdk/**", "src/routeTree.gen.ts"]
   },
