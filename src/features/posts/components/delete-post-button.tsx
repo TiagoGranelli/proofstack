@@ -1,62 +1,56 @@
-import { useRef } from 'react'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '#/components/ui/alert-dialog.tsx'
+import { lazy, Suspense, useRef, useState } from 'react'
 import { Button } from '#/components/ui/button.tsx'
 
+// The dialog and Radix's dialog code load on the first hover or focus of a Delete button, not with the dashboard:
+// preloaded with the page, they delayed its first paint on a throttled phone (Lighthouse FCP).
+const loadDialog = () =>
+  import('#/features/posts/components/delete-post-dialog.tsx').then((module) => ({ default: module.DeletePostDialog }))
+const DeletePostDialog = lazy(loadDialog)
+const preloadDialog = () => {
+  // A failed early load is retried by the lazy component when the dialog opens.
+  loadDialog().catch(() => {})
+}
+
 /**
- * Delete, asked first in an alert dialog (Radix: focus trapped inside, Escape and Cancel close it, focus returns to
- * this button). Cancel has the initial focus, so Enter alone never deletes. The deletion starts once the dialog
- * has closed and put focus back here, so focus is on a button that exists while the request runs (aria-disabled,
- * like every pending button); the page moves it on when the post is gone (`onDeleted` in MyPost).
+ * Delete, asked first (DeletePostDialog). Focus returns here when the dialog closes, and the deletion only starts
+ * then; the button stays (aria-disabled, like every pending button) while the request runs, and the page moves
+ * focus on once the post is gone (`onDeleted` in MyPost).
  */
 export function DeletePostButton(props: { body: string; pending: boolean; onConfirm: () => void }) {
-  const confirmed = useRef(false)
+  const button = useRef<HTMLButtonElement>(null)
+  const [open, setOpen] = useState(false)
+  // Mounted from the first opening on, so closing runs Radix's close (and its focus return) instead of unmounting.
+  const [asked, setAsked] = useState(false)
   return (
-    <AlertDialog>
-      <AlertDialogTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          aria-disabled={props.pending || undefined}
-          onClick={(event) => {
-            // Radix skips opening when the press was prevented.
-            if (props.pending) event.preventDefault()
-          }}
-        >
-          Delete<span className="sr-only"> post: {props.body.slice(0, 40)}</span>
-        </Button>
-      </AlertDialogTrigger>
-      <AlertDialogContent
-        onCloseAutoFocus={() => {
-          if (!confirmed.current) return
-          confirmed.current = false
-          props.onConfirm()
+    <>
+      <Button
+        ref={button}
+        type="button"
+        variant="ghost"
+        size="sm"
+        aria-disabled={props.pending || undefined}
+        aria-haspopup="dialog"
+        onPointerEnter={preloadDialog}
+        onFocus={preloadDialog}
+        onClick={() => {
+          if (props.pending) return
+          setAsked(true)
+          setOpen(true)
         }}
       >
-        <AlertDialogHeader>
-          <AlertDialogTitle>Delete this post?</AlertDialogTitle>
-          <AlertDialogDescription>
-            It will be gone for good, from your posts and from the public list.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <blockquote className="border-l-2 pl-3 text-sm break-words whitespace-pre-wrap">{props.body}</blockquote>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Keep it</AlertDialogCancel>
-          <AlertDialogAction variant="destructive" onClick={() => (confirmed.current = true)}>
-            Delete
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+        Delete<span className="sr-only"> post: {props.body.slice(0, 40)}</span>
+      </Button>
+      {asked ? (
+        <Suspense fallback={null}>
+          <DeletePostDialog
+            body={props.body}
+            open={open}
+            onOpenChange={setOpen}
+            onConfirm={props.onConfirm}
+            returnFocus={button}
+          />
+        </Suspense>
+      ) : null}
+    </>
   )
 }
