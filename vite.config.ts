@@ -41,8 +41,8 @@ export default defineConfig({
     tanstackStart({ server: { build: { inlineCss: true } } }),
     nitro({
       // startup: validates env before listening. http: security headers, CSP and request logs for
-      // every response, static files included. shutdown: closes the pool and the Effect runtime.
-      plugins: ['./src/server/nitro/startup.ts', './src/server/nitro/http.ts', './src/server/nitro/shutdown.ts'],
+      // every response, static files included.
+      plugins: ['./src/server/nitro/startup.ts', './src/server/nitro/http.ts'],
       // Start's own prerender output is not served by Nitro yet (TanStack/router#7473),
       // so finite static pages are prerendered by Nitro instead.
       // failOnError: a page that cannot be prerendered (e.g. missing env) fails the build instead of
