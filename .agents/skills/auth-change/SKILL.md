@@ -12,7 +12,7 @@ Read `src/server/AGENTS.md` first: it lists the Better Auth rules this code depe
 The browser reaches Better Auth only through server functions. An account action is:
 
 1. A server function in `src/lib/auth.functions.ts` that validates its input with Effect Schema
-   (`.validator(Schema.toStandardSchemaV1(...))`, the `server-fn-validator` guard) and calls
+   (`.validator(Schema.toStandardSchemaV1(...))`; a lint rule rejects any other validator) and calls
    `callAuthEndpoint`.
 2. Its `METHOD /path` in `EXPOSED` in `src/server/http/auth-endpoints.ts`. Not in `HTTP_ENDPOINTS`, which
    `/api/auth/*` answers from outside.

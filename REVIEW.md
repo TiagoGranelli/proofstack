@@ -10,7 +10,8 @@ For AI reviewers of pull requests (Claude Code Review reads this file; other too
   (`src/contract`, `src/routes`, `src/server/db/schema`, `package.json`). A hand edit of a generated file is
   Important.
 - What CI already enforces: formatting, lint, types, Effect diagnostics, dead code, complexity, duplication,
-  licenses, route accessibility coverage, and the guards in `scripts/check.ts`.
+  licenses, route accessibility coverage, the syntax rules in `.oxlintrc.json` and the repository rules in
+  `tests/unit/repo-policy.test.ts`.
 - The hidden eval checks in `evals/tasks/*/tests/`, whose imports resolve only after `evals/grade.sh` copies them.
 
 ## What Important means here
@@ -18,7 +19,7 @@ For AI reviewers of pull requests (Claude Code Review reads this file; other too
 Reserve Important for these; everything else is a Nit at most.
 
 - **Auth bypass.** A business operation outside the `Authentication` middleware, or an operation added to
-  `PUBLIC_OPERATIONS` (`scripts/check.ts`) without a reason. Authorization that relies on the `_authed` route
+  `PUBLIC_OPERATIONS` (`tests/api/public-operations.test.ts`) without a reason. Authorization that relies on the `_authed` route
   guard (a UX redirect only). A query on user data whose `WHERE` does not include the owner. A browser-triggered
   account action through `auth.api.*` instead of `callAuthEndpoint`, a Better Auth endpoint added to
   `HTTP_ENDPOINTS` when `EXPOSED` would do, or a server function whose validator is not Effect Schema. A new raw

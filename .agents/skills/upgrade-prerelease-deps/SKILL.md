@@ -7,7 +7,7 @@ description: Upgrade dependencies in this repo, above all the pinned pre-release
 
 ## Policy
 
-- `package.json` uses exact versions (`savePrefix: ''`; the `exact-versions` guard checks), and `pnpm-lock.yaml`
+- `package.json` uses exact versions (`savePrefix: ''`; `tests/unit/repo-policy.test.ts` checks), and `pnpm-lock.yaml`
   is committed with them. pnpm 12 blocks dependency build scripts (`allowBuilds`) and quarantines fresh
   releases (`minimumReleaseAge`, one day, strict: a younger version fails the install instead of being excluded
   silently). Each exception names an exact version and its reason in `pnpm-workspace.yaml`.

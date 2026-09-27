@@ -119,12 +119,11 @@ it under an exclusive lock, and so on. The configuration is `.squawk.toml`: Post
 to run in a transaction (`scripts/migrate.ts`), and three rules off because `scripts/migrate.ts` already
 covers them (`prefer-robust-stmts`, `require-lock-timeout`, `require-statement-timeout`; the file says
 why). Migrations 0000 to 0004 were applied before the lint existed and are grandfathered in its
-`excluded_paths`; every later one is linted. squawk is the release binary for the platform, pinned by
-sha256 in `scripts/check-migrations.ts` and cached in `~/.cache/proofstack/` (the first run downloads it,
-later runs are offline). Each run first checks that squawk still flags a plain `CREATE INDEX`.
+`excluded_paths`; every later one is linted. squawk comes from npm (`squawk-cli`, its platform binary as an
+optional dependency), so it runs offline.
 
 When a finding is expected, waive that one statement with `-- squawk-ignore <rule>` directly under a
-comment that gives the reason; a waiver without one fails the check.
+comment that gives the reason; a waiver without one fails `tests/unit/repo-policy.test.ts`.
 
 An index on a large table (the usual case) is built by hand before the deploy, outside any transaction,
 and the migration only records it:
@@ -812,9 +811,8 @@ The tooling targets Linux, macOS and Windows; CI runs everything on Linux and `p
   and one that `cmd.exe` could still expand (`"`, `%`) refused.
 - **Line endings.** `.gitattributes` keeps text files LF on every platform; with the CRLF that Git for
   Windows checks out by default, the format check would fail.
-- **The pre-commit hook** is POSIX `sh`. Git for Windows runs it with its own `sh`; there it links
-  `node_modules` into the temporary tree with a directory junction, because its `ln -s` copies without
-  Developer Mode. The Windows path has not been run yet; `git commit --no-verify` skips the hook if it fails.
+- **The pre-commit hook** is lefthook, a Go binary from npm; it runs each job through `sh`, which Git for
+  Windows provides. The Windows path has not been run yet; `git commit --no-verify` skips the hook if it fails.
 - **The edge** runs on the bridge network on macOS and Windows ([Edge proxy](#edge-proxy-caddy)). This
   path is written for Docker Desktop and has not been run there yet. On Linux it needs a host firewall that
   lets containers reach the host (it timed out on the maintainer's machine), which is why Linux keeps the

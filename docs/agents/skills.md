@@ -31,7 +31,7 @@ Rules for editing them:
 - Keep each `SKILL.md` well under 500 lines; link to docs for reference material instead of copying it.
 - `skills-lock.json` tracks only vendored skills; project skills are not in it.
 
-The `agent-docs` guard of `pnpm check` keeps the instruction files small. The root `AGENTS.md` stays under
+`tests/unit/repo-policy.test.ts` (part of `pnpm check`) keeps the instruction files small. The root `AGENTS.md` stays under
 14 KiB, because every session loads it. Nested `AGENTS.md` files (`tests/`, `src/server/`, `src/features/`) hold
 rules for one directory; give each a `CLAUDE.md` next to it containing `@AGENTS.md`, because Claude Code loads a subdirectory's `CLAUDE.md` when
 it reads a file there and, with a root `CLAUDE.md` present, does not read `AGENTS.md` files on its own. Codex reads

@@ -15,8 +15,9 @@ together and must agree; the running API and the tests must agree with all three
    free of Effect so client bundles do not pull in the schema runtime.
 2. Put a new endpoint that needs a session in a group behind the `Authentication` middleware (as `MyPosts` in
    `src/contract/posts.ts`). A public endpoint is a deliberate edit to `PUBLIC_OPERATIONS` in
-   `scripts/check.ts` (the `openapi-security` guard). Add endpoints to the contract, never as raw Start server
-   routes: the `server-routes` guard allows only `src/routes/api/$.ts` and `src/routes/api/auth/$.ts`.
+   `tests/api/public-operations.test.ts`, which expects 401 without a session from every other operation. Add
+   endpoints to the contract, never as raw Start server routes: a lint rule allows only `src/routes/api/$.ts` and
+   `src/routes/api/auth/$.ts`.
 3. Implement the handler in `src/server/api/handlers.ts` and any repository method it needs (for example
    `src/server/posts/repo.ts`). Keep the in-memory repository in `tests/api/harness.ts` in step with the real
    one. A change to stored data follows the `database-change` skill first.

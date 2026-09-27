@@ -20,7 +20,7 @@ shutdown (`lifecycle.ts`). Read this before you change anything here. The root `
   budget in `tests/db/query-budget.test.ts` (see `tests/AGENTS.md`).
 - Read settings through `env.ts`, which validates them at import. A new setting goes there, in `.env.example`,
   and in `tests/unit/env.test.ts` (`env.ts` is in the coverage gate). `import.meta.env.VITE_*` ships to the
-  browser; the `vite-env` guard rejects it.
+  browser; a lint rule rejects it.
 
 ## Effect v4 RC
 

@@ -36,9 +36,9 @@ layer. Imports flow one way: `components` → `features` → app (`routes/`).
 - UI shared by several features and free of feature knowledge: `src/components/` (`ui/`, `errors/`,
   `layouts/`); shadcn primitives go in `components/ui/` through `pnpm exec shadcn add`.
 - Route files hold the route definition and a small page component that composes features (skill `add-page`).
-- Naming: files and folders are kebab-case (Oxlint `unicorn/filename-case`; folders by the `folder-name`
-  guard). TanStack route names keep their prefixes (`__root.tsx`, `_authed.tsx`, `$.ts`, `-private/`,
-  `(group)/`). `src/sdk/` is generated and exempt.
+- Naming: files and folders are kebab-case (Oxlint `unicorn/filename-case`; folders by
+  `tests/unit/repo-policy.test.ts`). TanStack route names keep their prefixes (`__root.tsx`, `_authed.tsx`,
+  `$.ts`, `-private/`, `(group)/`). `src/sdk/` is generated and exempt.
 - Import the file that defines a symbol. Barrel files (`index.ts` re-exporting a folder) fail Oxlint
   `oxc/no-barrel-file`; the only one is `src/server/db/schema/index.ts`, Drizzle's schema entry.
 
@@ -65,7 +65,7 @@ in and how each layer's harness works.
 
 | Command | Covers |
 | --- | --- |
-| `pnpm check` | Every gate that needs no database and no build (format, type-aware lint, typecheck, Effect diagnostics, dead code, complexity, duplication, security sinks, unit/api/component tests with coverage, drift, migration lint, licenses, route a11y coverage, guards), about 12 s. Run it before every hand-off; the pre-commit hook runs it on what you commit |
+| `pnpm check` | Every gate that needs no database and no build (format, type-aware lint, typecheck, Effect diagnostics, dead code, complexity, duplication, security sinks, unit/api/component tests with coverage, drift, migration lint, licenses), about 13 s. Run it before every hand-off; the lefthook pre-commit hook runs the jobs your staged files touch |
 | `pnpm test:unit\|test:api\|test:component [filter ...]` | One fast layer; `pnpm test:fast` runs all three with coverage |
 | `pnpm test:db [filter ...]` | The `db` layer on a throwaway Postgres database. Needs Postgres, no build |
 | `pnpm format`, `pnpm lint:fix` | Autofixes |
@@ -98,8 +98,8 @@ a refused edit means change the source and run the command.
 
 - `src/sdk/**` and `openapi.json`: `pnpm codegen`
 - `src/routeTree.gen.ts`: `pnpm dev` or `pnpm build`
-- `drizzle/**`: `pnpm db:generate` (only the new SQL file may be adjusted by hand, before it is committed; the
-  `applied-migrations` guard rejects edits to migrations already in the journal)
+- `drizzle/**`: `pnpm db:generate` (only the new SQL file may be adjusted by hand, before it is committed;
+  `tests/unit/repo-policy.test.ts` rejects edits to migrations already in the journal)
 - `.agents/skills/shadcn/**` and `skills-lock.json`: the `skills` CLI ([docs/agents/skills.md](docs/agents/skills.md)).
   The other skills in `.agents/skills/` are this repo's own and are edited by hand.
 - `repos/**`: `scripts/vendor-source.ts`
@@ -124,7 +124,7 @@ policy; load it before changing `package.json` or `pnpm-workspace.yaml`.
   with classes, and put head scripts and styles through the route's `head()` so the router adds the nonce.
 - **Tailwind.** Keep `@import "tailwindcss" source("../")` in `src/styles/app.css`. Without it, Tailwind scans
   `.output`, SSR and client CSS hashes diverge, and the CSS returns 404 in production (guarded by
-  `tests/integration/assets.test.ts` and the `tailwind-source` guard).
+  `tests/integration/assets.test.ts` and `tests/unit/repo-policy.test.ts`).
 - **Origin.** `APP_URL` must be the public origin. SSR uses it as the SDK base URL, and a mismatch changes
   TanStack Query keys and causes a refetch after hydration. `src/start.ts` rejects state-changing requests from
   any other origin.
