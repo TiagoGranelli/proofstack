@@ -5,14 +5,22 @@
 import { readFileSync } from 'node:fs'
 import { connect } from 'node:net'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { type RunningApp, startApp } from '../../scripts/app-server.ts'
+import { LOOPBACK, type RunningApp, startApp } from '../../scripts/app-server.ts'
 import { dropTestDatabase, openConnections, testDatabaseUrl } from '../../scripts/test-db.ts'
 
 const LOG_FILE = 'test-results/app-server-shutdown.log'
 /** srvx drains requests, then the close hook from src/server/lifecycle.ts ends the pool; both are quick here. */
 const MAX_SHUTDOWN_MS = 3_000
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+/**
+ * Time for the server to read what the test sent. Without that read it treats the first connection as idle and
+ * never runs the sign-in.
+ */
+const settle = () =>
+  // A fixed wait on purpose: the server gives no sign that it has read part of a request (the headers of
+  // /api/ready) or a request whose client is gone, so there is no condition to wait for.
+  // oxlint-disable-next-line eslint-js/no-restricted-syntax
+  new Promise((resolve) => setTimeout(resolve, 20))
 const logLines = () => readFileSync(LOG_FILE, 'utf8').split('\n')
 
 /** A raw HTTP/1.1 connection to the Node server, so the test controls when each byte of a request leaves. */
@@ -42,25 +50,15 @@ const abandonSignIn = async (app: RunningApp) => {
     body,
   ]
   connection.socket.write(request.join('\r\n'))
-  await sleep(10)
+  await settle()
   connection.socket.destroy()
-}
-
-/** Connections to the database once the server is gone; Postgres may take a moment to reap the backends. */
-const connectionsLeft = async (databaseUrl: string) => {
-  let left = await openConnections(databaseUrl)
-  for (let i = 0; i < 10 && left.length; i++) {
-    await sleep(100)
-    left = await openConnections(databaseUrl)
-  }
-  return left
 }
 
 let app: RunningApp
 const databaseUrl = testDatabaseUrl('shutdown')
 
 beforeAll(async () => {
-  app = await startApp({ databaseUrl, logFile: LOG_FILE, trustedProxies: '127.0.0.1/32,::1/128' })
+  app = await startApp({ databaseUrl, logFile: LOG_FILE, trustedProxies: LOOPBACK })
 }, 60_000)
 
 afterAll(async () => {
@@ -101,6 +99,7 @@ describe('shutdown', () => {
     expect(log.filter((line) => /Failed query|Cannot use a pool after calling end/.test(line))).toEqual([])
     expect(stopped).toMatchObject({ code: 0, signal: null })
     expect(stopped.ms).toBeLessThanOrEqual(MAX_SHUTDOWN_MS)
-    expect(await connectionsLeft(databaseUrl)).toEqual([])
+    // The process is gone, so are its sockets; Postgres may take a moment to reap the backends.
+    await expect.poll(() => openConnections(databaseUrl), { timeout: 1_000 }).toEqual([])
   })
 })

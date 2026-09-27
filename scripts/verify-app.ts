@@ -14,7 +14,7 @@ const CONTRACT_OBSERVATIONS = 'test-results/contract-observations'
 const isServerLog = (name: string) => /^app-server.*\.log$/.test(name)
 const serverLogs = () =>
   readdirSync('test-results')
-    .filter(isServerLog)
+    .filter((name) => isServerLog(name))
     .map((name) => `test-results/${name}`)
 
 type Step = { name: string; command: () => string[]; env?: NodeJS.ProcessEnv }
@@ -56,7 +56,7 @@ rmSync(CONTRACT_OBSERVATIONS, { recursive: true, force: true })
 mkdirSync('test-results', { recursive: true })
 for (const log of serverLogs()) rmSync(log)
 
-const results = STEPS.map(run)
+const results = STEPS.map((step) => run(step))
 console.log('')
 for (const { name, ok, detail } of results) console.log(`${ok ? 'ok  ' : 'FAIL'}  ${name.padEnd(18)} ${detail}`)
 process.exitCode = results.every((result) => result.ok) ? 0 : 1
