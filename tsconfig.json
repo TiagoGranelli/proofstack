@@ -1,4 +1,8 @@
 {
+  // Strictness beyond `strict`. Two flags stay off on purpose, measured on this code base:
+  // exactOptionalPropertyTypes (34 errors, all an optional `x?: T` receiving `T | undefined` from env or options
+  // plumbing, no bug among them) and noPropertyAccessFromIndexSignature (96 errors, mostly `process.env.X`, which
+  // src/server/env.ts validates). Turning either on means rewriting correct code, not catching mistakes.
   "compilerOptions": {
     "target": "ES2024",
     "lib": ["ES2024", "DOM", "DOM.Iterable"],
@@ -10,6 +14,9 @@
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
     "noFallthroughCasesInSwitch": true,
+    "noImplicitReturns": true,
+    "allowUnreachableCode": false,
+    "allowUnusedLabels": false,
     "verbatimModuleSyntax": true,
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
