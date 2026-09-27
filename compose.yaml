@@ -1,9 +1,14 @@
 # Local development database: `pnpm db:up` / `pnpm db:down`. Compose reads COMPOSE_PROJECT_NAME,
 # POSTGRES_PORT and POSTGRES_PASSWORD from .env (see .env.example); DATABASE_URL must match them.
 # POSTGRES_PASSWORD only takes effect when the volume is first created.
+#
+# Profile `edge`: the production topology, for trying it locally (docs/operations.md, "Edge proxy (Caddy)"):
+# `docker compose --profile edge up --build --wait` builds the image, migrates, and serves the app behind
+# Caddy on http://localhost:${EDGE_PORT:-8080}. `pnpm dev` and `pnpm db:up` start only `db`.
+# Image pins are checked against scripts/images.ts by `pnpm ci:workflows`.
 services:
   db:
-    image: postgres:18.6
+    image: postgres:18.6@sha256:5a5a84b19854a9ffaa54082c166ff4ec27473a361e496e5ea167f298f2da9722
     environment:
       POSTGRES_USER: proofstack
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-proofstack-local}
@@ -18,5 +23,50 @@ services:
       timeout: 3s
       retries: 30
 
+  migrate:
+    profiles: [edge]
+    build: .
+    image: proofstack:local
+    command: [node, .output/migrate.mjs]
+    environment: &app-database
+      DATABASE_URL: postgres://proofstack:${POSTGRES_PASSWORD:-proofstack-local}@db:5432/proofstack
+    depends_on:
+      db:
+        condition: service_healthy
+
+  app:
+    profiles: [edge]
+    image: proofstack:local
+    environment:
+      <<: *app-database
+      # The public origin is the edge's.
+      APP_URL: http://localhost:${EDGE_PORT:-8080}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-}
+      # Set by the edge to the client IP it resolved (deploy/Caddyfile).
+      TRUSTED_IP_HEADER: x-real-ip
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    # No published port: only the edge reaches the app.
+    mem_limit: 512m
+
+  edge:
+    profiles: [edge]
+    image: caddy:2.11.4-alpine@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b
+    environment:
+      # A domain here (app.example.com) turns on automatic HTTPS; then publish 80 and 443 instead.
+      EDGE_ADDRESS: ':8080'
+      EDGE_UPSTREAM: app:3000
+    ports:
+      - 127.0.0.1:${EDGE_PORT:-8080}:8080
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - edge-data:/data
+    depends_on:
+      app:
+        condition: service_healthy
+    mem_limit: 128m
+
 volumes:
   db-data:
+  edge-data:
