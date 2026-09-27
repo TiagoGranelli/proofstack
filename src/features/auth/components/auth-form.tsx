@@ -1,12 +1,13 @@
 import { useHydrated } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
-import { focusFirstInvalid } from '#/components/form/field-messages.ts'
+import { loadOnInteraction, submitForm } from '#/components/form/lazy-schema.ts'
 import { Button } from '#/components/ui/button.tsx'
 import { describeAuthFailure } from '#/features/auth/utils/describe-auth-failure.ts'
 
 /**
  * The shell of an account form made with useAppForm: its fields are the children, validated in the browser with
- * the action's Effect Schema (src/lib/account-input.ts); a failed submit moves focus to the first invalid field.
+ * the action's Effect Schema (src/lib/account-input.ts), loaded on the first interaction (lazyFormSchema); a failed
+ * submit moves focus to the first invalid field.
  * Without an `action` the button stays disabled until hydration: a native submit before that would post the fields
  * (passwords included) to the page itself. While the action is pending the button is only `aria-disabled` and further submits
  * are ignored: a disabled button loses focus, so a keyboard user who pressed it would be dropped to <body> when the
@@ -19,6 +20,8 @@ export function AuthForm(props: {
   submitVariant?: 'default' | 'destructive'
   /** The form from useAppForm; its onSubmit starts the action. */
   form: { handleSubmit: () => Promise<void> }
+  /** The fields' schema (lazyFormSchema): loaded on the first focus or input, and awaited by a submit. */
+  schema?: { load: () => Promise<void> }
   /**
    * Where the browser posts the form itself before hydration (a server function's `url` that takes FormData).
    * With it the button works from the first paint; without it, it waits for hydration.
@@ -43,9 +46,9 @@ export function AuthForm(props: {
       onSubmit={(event) => {
         event.preventDefault()
         if (props.pending) return
-        const element = event.currentTarget
-        void props.form.handleSubmit().then(() => focusFirstInvalid(element))
+        void submitForm(event.currentTarget, props.form, props.schema)
       }}
+      {...(props.schema ? loadOnInteraction(props.schema) : {})}
     >
       {props.children}
       <div>

@@ -1,13 +1,11 @@
 import { revalidateLogic } from '@tanstack/react-form'
-import { Schema } from 'effect'
 import { useAppForm } from '#/components/form/app-form.ts'
+import { lazyFormSchema } from '#/components/form/lazy-schema.ts'
 import { useResendVerification } from '#/features/auth/api/resend-verification.ts'
 import { AuthForm } from '#/features/auth/components/auth-form.tsx'
 import { AuthStatus } from '#/features/auth/components/auth-status.tsx'
-import { EmailInput } from '#/lib/account-input.ts'
 
-const validator = Schema.toStandardSchemaV1(EmailInput)
-const decode = Schema.decodeSync(EmailInput)
+const schema = lazyFormSchema(() => import('#/lib/account-input.ts').then((module) => module.EmailInput))
 
 /** Asks for a new confirmation link. The answer does not reveal whether the address has an account. */
 export function ResendVerificationForm() {
@@ -15,8 +13,8 @@ export function ResendVerificationForm() {
   const form = useAppForm({
     defaultValues: { email: '' },
     validationLogic: revalidateLogic(),
-    validators: { onDynamic: validator },
-    onSubmit: ({ value }) => resend.mutate(decode(value)),
+    validators: { onDynamic: schema.validator },
+    onSubmit: ({ value }) => resend.mutate(schema.decode(value)),
   })
   if (resend.isSuccess)
     return (
@@ -29,6 +27,7 @@ export function ResendVerificationForm() {
       id="resend-verification"
       submitLabel="Send a new link"
       form={form}
+      schema={schema}
       pending={resend.isPending}
       error={resend.error}
     >

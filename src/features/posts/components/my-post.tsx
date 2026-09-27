@@ -2,8 +2,9 @@ import { revalidateLogic } from '@tanstack/react-form'
 import { useEffect, useRef, useState } from 'react'
 import { ApiErrorAlert } from '#/components/errors/api-error-alert.tsx'
 import { useAppForm } from '#/components/form/app-form.ts'
-import { describedBy, fieldErrorMessage, focusFirstInvalid } from '#/components/form/field-messages.ts'
+import { describedBy, fieldErrorMessage } from '#/components/form/field-messages.ts'
 import { FieldError } from '#/components/form/fields.tsx'
+import { loadOnInteraction, submitForm } from '#/components/form/lazy-schema.ts'
 import { Button } from '#/components/ui/button.tsx'
 import { Label } from '#/components/ui/label.tsx'
 import { Textarea } from '#/components/ui/textarea.tsx'
@@ -11,7 +12,7 @@ import { isPostNotFound, useDeletePost } from '#/features/posts/api/delete-post.
 import { useUpdatePost } from '#/features/posts/api/update-post.ts'
 import { CharacterCount, isTooLong } from '#/features/posts/components/character-count.tsx'
 import { PostCard } from '#/features/posts/components/post-card.tsx'
-import { postDraftValidator, toPostInput } from '#/features/posts/utils/post-draft.ts'
+import { postDraftSchema } from '#/features/posts/utils/post-draft-schema.ts'
 import { fieldIssue } from '#/lib/api-error.ts'
 import type { Post } from '#/sdk/types.gen.ts'
 
@@ -107,8 +108,8 @@ function EditPostForm(props: { post: Post; onClose: () => void; onUpdated: (() =
   const form = useAppForm({
     defaultValues: { body: post.body },
     validationLogic: revalidateLogic(),
-    validators: { onDynamic: postDraftValidator },
-    onSubmit: ({ value }) => update.mutate({ path: { id: post.id }, body: toPostInput(value) }),
+    validators: { onDynamic: postDraftSchema.validator },
+    onSubmit: ({ value }) => update.mutate({ path: { id: post.id }, body: postDraftSchema.decode(value) }),
   })
 
   useEffect(() => {
@@ -129,9 +130,9 @@ function EditPostForm(props: { post: Post; onClose: () => void; onUpdated: (() =
         onSubmit={(event) => {
           event.preventDefault()
           if (update.isPending) return
-          const element = event.currentTarget
-          void form.handleSubmit().then(() => focusFirstInvalid(element))
+          void submitForm(event.currentTarget, form, postDraftSchema)
         }}
+        {...loadOnInteraction(postDraftSchema)}
       >
         <form.AppField name="body">
           {(field) => {

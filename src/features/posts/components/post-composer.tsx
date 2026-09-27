@@ -1,14 +1,15 @@
 import { revalidateLogic } from '@tanstack/react-form'
 import { ApiErrorAlert } from '#/components/errors/api-error-alert.tsx'
 import { useAppForm } from '#/components/form/app-form.ts'
-import { describedBy, fieldErrorMessage, focusFirstInvalid } from '#/components/form/field-messages.ts'
+import { describedBy, fieldErrorMessage } from '#/components/form/field-messages.ts'
 import { FieldError } from '#/components/form/fields.tsx'
+import { loadOnInteraction, submitForm } from '#/components/form/lazy-schema.ts'
 import { Button } from '#/components/ui/button.tsx'
 import { Label } from '#/components/ui/label.tsx'
 import { Textarea } from '#/components/ui/textarea.tsx'
 import { useCreatePost } from '#/features/posts/api/create-post.ts'
 import { CharacterCount, isTooLong } from '#/features/posts/components/character-count.tsx'
-import { postDraftValidator, toPostInput } from '#/features/posts/utils/post-draft.ts'
+import { postDraftSchema } from '#/features/posts/utils/post-draft-schema.ts'
 import { fieldIssue } from '#/lib/api-error.ts'
 
 /**
@@ -27,8 +28,8 @@ export function PostComposer(props: { onPublished?: () => void }) {
   const form = useAppForm({
     defaultValues: { body: '' },
     validationLogic: revalidateLogic(),
-    validators: { onDynamic: postDraftValidator },
-    onSubmit: ({ value }) => create.mutate({ body: toPostInput(value) }),
+    validators: { onDynamic: postDraftSchema.validator },
+    onSubmit: ({ value }) => create.mutate({ body: postDraftSchema.decode(value) }),
   })
   const serverIssue = fieldIssue(create.error, 'body')
   const formError = create.isError && serverIssue === undefined ? create.error : null
@@ -41,9 +42,9 @@ export function PostComposer(props: { onPublished?: () => void }) {
         event.preventDefault()
         // Publish stays focusable while pending (aria-disabled, see below), so a second press lands here.
         if (create.isPending) return
-        const element = event.currentTarget
-        void form.handleSubmit().then(() => focusFirstInvalid(element))
+        void submitForm(event.currentTarget, form, postDraftSchema)
       }}
+      {...loadOnInteraction(postDraftSchema)}
     >
       <form.AppField name="body">
         {(field) => {

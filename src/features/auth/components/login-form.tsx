@@ -1,16 +1,14 @@
 import { revalidateLogic } from '@tanstack/react-form'
 import { useNavigate } from '@tanstack/react-router'
-import { Schema } from 'effect'
 import { useAppForm } from '#/components/form/app-form.ts'
+import { lazyFormSchema } from '#/components/form/lazy-schema.ts'
 import { AuthActionError } from '#/features/auth/api/auth-action.ts'
 import { useSignIn } from '#/features/auth/api/sign-in.ts'
 import { AuthForm } from '#/features/auth/components/auth-form.tsx'
 import { safeRedirect } from '#/features/auth/utils/safe-redirect.ts'
-import { SignInInput } from '#/lib/account-input.ts'
 import { type AuthFailure, signInFromForm } from '#/lib/auth.functions.ts'
 
-const validator = Schema.toStandardSchemaV1(SignInInput)
-const decode = Schema.decodeSync(SignInInput)
+const schema = lazyFormSchema(() => import('#/lib/account-input.ts').then((module) => module.SignInInput))
 
 /**
  * Email and password sign-in. On success it goes to `redirectTo` if that is a safe same-origin path. It also
@@ -25,8 +23,8 @@ export function LoginForm(props: { redirectTo?: string; failure?: AuthFailure })
   const form = useAppForm({
     defaultValues: { email: '', password: '' },
     validationLogic: revalidateLogic(),
-    validators: { onDynamic: validator },
-    onSubmit: ({ value }) => signIn.mutate(decode(value)),
+    validators: { onDynamic: schema.validator },
+    onSubmit: ({ value }) => signIn.mutate(schema.decode(value)),
   })
   // The failure of a post without JavaScript, until the script's own first attempt.
   const postedFailure = signIn.isIdle && props.failure ? new AuthActionError(props.failure) : null
@@ -35,6 +33,7 @@ export function LoginForm(props: { redirectTo?: string; failure?: AuthFailure })
       id="sign-in"
       submitLabel="Sign in"
       form={form}
+      schema={schema}
       action={signInFromForm.url}
       pending={signIn.isPending}
       error={signIn.error ?? postedFailure}

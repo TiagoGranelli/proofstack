@@ -16,9 +16,12 @@ Read this before you add or change a feature. The root `AGENTS.md` still applies
 - Components call these hooks, never a generated `*Mutation()` directly, and component files export only
   components.
 - Forms, buttons with behavior and lists live in `components/`; pure helpers in `utils/`.
-- Forms use `useAppForm` (`src/components/form/app-form.ts`) with the input's Effect Schema as Standard Schema
-  in `validators.onDynamic` and `validationLogic: revalidateLogic()`: the same schema the server validates
-  with (`src/contract/post-input.ts`, `src/lib/account-input.ts`). A `ValidationError` issue goes next to the
+- Forms use `useAppForm` (`src/components/form/app-form.ts`) with `validationLogic: revalidateLogic()` and the
+  input's Effect Schema, the same one the server validates with (`src/contract/post-input.ts`,
+  `src/lib/account-input.ts`), through `lazyFormSchema(() => import(...))` (`src/components/form/lazy-schema.ts`):
+  `.validator` in `validators.onDynamic`, `.decode` in `onSubmit`, `loadOnInteraction` on the `<form>` and
+  `submitForm` in its `onSubmit` (`AuthForm` does both). Never import `effect` or a schema module statically in
+  a form: the Schema runtime would be preloaded on the page (`tests/integration/client-bundle.test.ts`). A `ValidationError` issue goes next to the
   field its path names (`fieldIssue` in `src/lib/api-error.ts`); any other failure under the form.
 - Every error the UI shows goes through `describeApiError` (`src/lib/api-error.ts`) or
   `describeAuthFailure` (`auth/utils/describe-auth-failure.ts`), so raw server output never reaches the page.

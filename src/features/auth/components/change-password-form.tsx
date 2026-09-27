@@ -1,14 +1,12 @@
 import { revalidateLogic } from '@tanstack/react-form'
-import { Schema } from 'effect'
 import { useAppForm } from '#/components/form/app-form.ts'
+import { lazyFormSchema } from '#/components/form/lazy-schema.ts'
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '#/contract/limits.ts'
 import { useChangePassword } from '#/features/auth/api/change-password.ts'
 import { AuthForm } from '#/features/auth/components/auth-form.tsx'
 import { AuthStatus } from '#/features/auth/components/auth-status.tsx'
-import { ChangePasswordInput } from '#/lib/account-input.ts'
 
-const validator = Schema.toStandardSchemaV1(ChangePasswordInput)
-const decode = Schema.decodeSync(ChangePasswordInput)
+const schema = lazyFormSchema(() => import('#/lib/account-input.ts').then((module) => module.ChangePasswordInput))
 
 /** Changes the password. Every other session of the account is signed out; this one continues. */
 export function ChangePasswordForm() {
@@ -16,8 +14,8 @@ export function ChangePasswordForm() {
   const form = useAppForm({
     defaultValues: { currentPassword: '', newPassword: '' },
     validationLogic: revalidateLogic(),
-    validators: { onDynamic: validator },
-    onSubmit: ({ value }) => change.mutate(decode(value)),
+    validators: { onDynamic: schema.validator },
+    onSubmit: ({ value }) => change.mutate(schema.decode(value)),
   })
   return (
     <div className="grid gap-3">
@@ -25,6 +23,7 @@ export function ChangePasswordForm() {
         id="change-password"
         submitLabel="Change password"
         form={form}
+        schema={schema}
         pending={change.isPending}
         error={change.error}
       >

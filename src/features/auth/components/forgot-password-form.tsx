@@ -1,13 +1,11 @@
 import { revalidateLogic } from '@tanstack/react-form'
-import { Schema } from 'effect'
 import { useAppForm } from '#/components/form/app-form.ts'
+import { lazyFormSchema } from '#/components/form/lazy-schema.ts'
 import { useRequestPasswordReset } from '#/features/auth/api/request-password-reset.ts'
 import { AuthForm } from '#/features/auth/components/auth-form.tsx'
 import { AuthStatus } from '#/features/auth/components/auth-status.tsx'
-import { EmailInput } from '#/lib/account-input.ts'
 
-const validator = Schema.toStandardSchemaV1(EmailInput)
-const decode = Schema.decodeSync(EmailInput)
+const schema = lazyFormSchema(() => import('#/lib/account-input.ts').then((module) => module.EmailInput))
 
 /** Asks for a reset link. The answer does not reveal whether the address has an account. */
 export function ForgotPasswordForm() {
@@ -15,8 +13,8 @@ export function ForgotPasswordForm() {
   const form = useAppForm({
     defaultValues: { email: '' },
     validationLogic: revalidateLogic(),
-    validators: { onDynamic: validator },
-    onSubmit: ({ value }) => request.mutate(decode(value)),
+    validators: { onDynamic: schema.validator },
+    onSubmit: ({ value }) => request.mutate(schema.decode(value)),
   })
   if (request.isSuccess)
     return (
@@ -30,6 +28,7 @@ export function ForgotPasswordForm() {
       id="forgot-password"
       submitLabel="Send reset link"
       form={form}
+      schema={schema}
       pending={request.isPending}
       error={request.error}
     >

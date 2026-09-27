@@ -1,14 +1,12 @@
 import { revalidateLogic } from '@tanstack/react-form'
-import { Schema } from 'effect'
 import { useAppForm } from '#/components/form/app-form.ts'
+import { lazyFormSchema } from '#/components/form/lazy-schema.ts'
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '#/contract/limits.ts'
 import { useSignUp } from '#/features/auth/api/sign-up.ts'
 import { AuthForm } from '#/features/auth/components/auth-form.tsx'
 import { AuthStatus } from '#/features/auth/components/auth-status.tsx'
-import { SignUpInput } from '#/lib/account-input.ts'
 
-const validator = Schema.toStandardSchemaV1(SignUpInput)
-const decode = Schema.decodeSync(SignUpInput)
+const schema = lazyFormSchema(() => import('#/lib/account-input.ts').then((module) => module.SignUpInput))
 
 /**
  * Creates an account. The answer is the same whether or not the address already has one (no enumeration):
@@ -19,8 +17,8 @@ export function SignUpForm() {
   const form = useAppForm({
     defaultValues: { name: '', email: '', password: '' },
     validationLogic: revalidateLogic(),
-    validators: { onDynamic: validator },
-    onSubmit: ({ value }) => signUp.mutate(decode(value)),
+    validators: { onDynamic: schema.validator },
+    onSubmit: ({ value }) => signUp.mutate(schema.decode(value)),
   })
   if (signUp.isSuccess)
     return (
@@ -30,7 +28,14 @@ export function SignUpForm() {
       </AuthStatus>
     )
   return (
-    <AuthForm id="sign-up" submitLabel="Create account" form={form} pending={signUp.isPending} error={signUp.error}>
+    <AuthForm
+      id="sign-up"
+      submitLabel="Create account"
+      form={form}
+      schema={schema}
+      pending={signUp.isPending}
+      error={signUp.error}
+    >
       <form.AppField name="name">
         {(field) => <field.TextField id="name" label="Name" autoComplete="name" maxLength={100} required />}
       </form.AppField>

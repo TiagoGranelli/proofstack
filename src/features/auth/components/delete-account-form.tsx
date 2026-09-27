@@ -1,12 +1,11 @@
 import { revalidateLogic } from '@tanstack/react-form'
 import { useNavigate } from '@tanstack/react-router'
-import { Schema } from 'effect'
 import { useAppForm } from '#/components/form/app-form.ts'
+import { lazyFormSchema } from '#/components/form/lazy-schema.ts'
 import { useDeleteAccount } from '#/features/auth/api/delete-account.ts'
 import { AuthForm } from '#/features/auth/components/auth-form.tsx'
-import { DeleteAccountFields } from '#/lib/account-input.ts'
 
-const validator = Schema.toStandardSchemaV1(DeleteAccountFields)
+const schema = lazyFormSchema(() => import('#/lib/account-input.ts').then((module) => module.DeleteAccountFields))
 
 /**
  * Deletes the account and its posts. Two confirmations: the password (checked by Better Auth) and an explicit
@@ -18,7 +17,7 @@ export function DeleteAccountForm() {
   const form = useAppForm({
     defaultValues: { password: '', confirm: false },
     validationLogic: revalidateLogic(),
-    validators: { onDynamic: validator },
+    validators: { onDynamic: schema.validator },
     onSubmit: ({ value }) => remove.mutate({ password: value.password }),
   })
   return (
@@ -27,6 +26,7 @@ export function DeleteAccountForm() {
       submitLabel="Delete account"
       submitVariant="destructive"
       form={form}
+      schema={schema}
       pending={remove.isPending}
       error={remove.error}
     >
