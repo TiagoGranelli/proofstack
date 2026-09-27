@@ -1,7 +1,7 @@
 # Contributing
 
 Thanks for helping. This file covers changes to the template itself. If you are building an app from it,
-see [docs/adopting.md](docs/adopting.md) instead.
+see [docs/adopting.md](../docs/adopting.md) instead.
 
 ## Before you start
 
@@ -12,7 +12,7 @@ see [docs/adopting.md](docs/adopting.md) instead.
 
 ## Making a change
 
-Set up as in the [README](README.md#quick-start). [AGENTS.md](AGENTS.md) has the architecture, the
+Set up as in the [README](../README.md#quick-start). [AGENTS.md](../AGENTS.md) has the architecture, the
 workflows and the rules; it is written for coding agents and applies to people as well.
 
 - Keep one change per pull request, and commit in logical steps.
@@ -36,7 +36,7 @@ pnpm build && pnpm verify:app    # for contract, database, auth or UI changes; n
 ## The minimal branch
 
 `minimal` is `main` without the posts example, for adopters who start without it
-([docs/minimal-branch.md](docs/minimal-branch.md) lists exactly what it removes and adds). Pull requests go
+([docs/minimal-branch.md](../docs/minimal-branch.md) lists exactly what it removes and adds). Pull requests go
 to `main`; maintainers bring each change over by merging:
 
 ```sh
@@ -52,7 +52,7 @@ release. Tag releases on `main`; `minimal` follows the same versions.
 
 ## Changelog
 
-Add a line under `## [Unreleased]` in [CHANGELOG.md](CHANGELOG.md) for anything an adopter would notice. If
+Add a line under `## [Unreleased]` in [CHANGELOG.md](../CHANGELOG.md) for anything an adopter would notice. If
 adopters must do something when they take your change (run a command, edit a file, apply a migration by
 hand), write it under an `### Upgrade notes` heading in the same section.
 

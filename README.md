@@ -76,8 +76,8 @@ These checks reduce the chance of unnoticed mistakes; they cannot guarantee that
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md) for reporting vulnerabilities, and the
-[Code of Conduct](CODE_OF_CONDUCT.md).
+See [CONTRIBUTING.md](.github/CONTRIBUTING.md), [SECURITY.md](.github/SECURITY.md) for reporting vulnerabilities,
+and the [Code of Conduct](.github/CODE_OF_CONDUCT.md).
 
 ## License
 

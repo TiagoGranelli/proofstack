@@ -17,6 +17,7 @@ repository created from the template.
 - `pnpm ci:docker` runs `deploy/compose.production.yaml` itself, with `compose.smoke.yaml` on top, and scans the
   image with `grype --only-fixed --fail-on high`.
 - `pnpm ci:local` runs its container jobs in `compose.ci.yaml`.
+- `CONTRIBUTING.md`, `SECURITY.md` and `CODE_OF_CONDUCT.md` live in `.github/`, where GitHub finds them first.
 
 ### Fixed
 

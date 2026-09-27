@@ -28,9 +28,9 @@ owners.
 ## Supported versions
 
 Fixes land on `main` and in the next release. Repositories created from the template take them as
-described in [docs/adopting.md](docs/adopting.md#staying-current).
+described in [docs/adopting.md](../docs/adopting.md#staying-current).
 
 ## Security design
 
-[docs/operations.md](docs/operations.md) describes the security settings, and the tests in
+[docs/operations.md](../docs/operations.md) describes the security settings, and the tests in
 `tests/integration/` and `tests/e2e/csp.spec.ts` check them against the running app.
