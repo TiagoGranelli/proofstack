@@ -33,7 +33,9 @@
     "unused-exports": "warn",
     "unused-types": "warn",
     // Everything is bundled into .output by Vite/Nitro, so dev vs prod dependency placement has no runtime effect.
-    "dev-dependencies-in-production": "off"
+    // (react-dom, for one, is imported directly only by tests; the app reaches it through Start.)
+    "dev-dependencies-in-production": "off",
+    "test-only-dependencies": "off"
   },
   "overrides": [
     {
