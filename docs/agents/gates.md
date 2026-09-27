@@ -50,6 +50,27 @@ routes the gate files to review:
   acceptable license goes in `ALLOWED` in `scripts/licenses.ts`, one exact version in `EXCEPTIONS`, each with the
   reason. **audit:check** and the image scan: `security/*-allowlist.json` entries need a reason and an expiry.
 
+## Claude Code hooks and permissions
+
+`.claude/settings.json` (committed) enforces in configuration what `AGENTS.md` asks for. The hooks run
+`scripts/agent-hook.ts`, which reads the hook input as JSON on stdin, runs only local tools and never touches more
+than the one file named in the input:
+
+| Hook | Does |
+| --- | --- |
+| `PostToolUse` on `Edit\|Write\|MultiEdit` (`post-edit`) | Formats the edited file with oxfmt and lints that one file with oxlint (without `--type-aware`; `pnpm check` adds the type-aware rules). Problems go back to the agent as `{"decision": "block", "reason": ...}`, which Claude Code adds next to the tool result. Markdown, generated files and anything under `node_modules`, `repos/` or `.output` are skipped. About 0.1 to 0.9 s per edit |
+| `PreToolUse` on `Edit\|Write\|MultiEdit` (`pre-edit`) | Exit 2 refuses an edit to a migration that is in the journal at `HEAD` (the `applied-migrations` guard, earlier) |
+| `PreToolUse` on `Bash` (`pre-bash`) | Exit 2 refuses `git commit --no-verify` (or `-n`, or `-c core.hooksPath=...`), linters and formatters this repo does not use (eslint, prettier, biome, dprint, standard), and oxlint or oxfmt with `--no-ignore`, `-c`/`--config` or `--ignore-path` |
+
+Permissions: `deny` covers the generated files (`src/sdk/**`, `openapi.json`, `src/routeTree.gen.ts`,
+`drizzle/meta/**`); an `Edit(...)` rule also applies to Write, as the permissions docs say. `allow` covers the
+everyday gates (`pnpm check*`, `pnpm test*`, `pnpm typecheck`, `pnpm lint*`, `pnpm format*`, `pnpm codegen`,
+`pnpm db:generate *`) and `git status`, `git diff` and `git log`. Claude Code applies project `allow` rules only
+after you accept the workspace trust dialog. Personal additions go in `.claude/settings.local.json`.
+
+Test a hook by hand: `echo '{"tool_input":{"file_path":"'"$PWD"'/src/lib/utils.ts"}}' | node scripts/agent-hook.ts post-edit`.
+`tests/unit/agent-hook.test.ts` covers which files and commands each hook acts on.
+
 ## Lighthouse policy
 
 `POLICY` in `scripts/lighthouse.ts`: per page and form factor, accessibility, best practices and SEO must score

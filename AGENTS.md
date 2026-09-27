@@ -95,7 +95,8 @@ A misconfigured lint once reached 17 GB and crashed the maintainer's laptop.
 
 ## Generated and vendored files
 
-Regenerate these files; edit their sources instead.
+Regenerate these files; edit their sources instead. Claude Code refuses edits to them (`.claude/settings.json`):
+a refused edit means change the source and run the command.
 
 - `src/sdk/**` and `openapi.json`: `pnpm codegen`
 - `src/routeTree.gen.ts`: `pnpm dev` or `pnpm build`
