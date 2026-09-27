@@ -38,9 +38,7 @@ export default defineConfig({
   },
   plugins: [
     tailwindcss(),
-    // Inline the route CSS (~6 KB brotli) into the HTML: no render-blocking stylesheet request.
-    // Experimental in Start; needs the side-effect `import '#/styles/app.css'` in __root.tsx.
-    tanstackStart({ server: { build: { inlineCss: true } } }),
+    tanstackStart(),
     nitro({
       // startup: validates env and logs process-level errors. http: security headers, the fallback CSP and
       // request logs for every response, static files included.
