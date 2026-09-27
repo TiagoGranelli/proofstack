@@ -61,22 +61,27 @@
       },
       // Isomorphic helpers.
       { "name": "lib", "patterns": ["src/lib/**"] },
-      // UI components and feature modules.
-      { "name": "ui", "patterns": ["src/components/**", "src/features/**"] },
-      // Route modules, router and Start wiring.
+      // Shared UI with no feature knowledge: shadcn primitives (ui/), error states (errors/), page chrome (layouts/).
+      { "name": "components", "patterns": ["src/components/**"] },
+      // One zone per src/features/<name> (autoDiscover), so a feature cannot import another feature, not even
+      // `import type`. Shared code moves down to components/ or lib/; composition happens in routes.
+      { "name": "features", "autoDiscover": ["src/features"] },
+      // Route modules, router and Start wiring: the app layer that composes features.
       {
         "name": "app",
         "patterns": ["src/routes/**", "src/router.tsx", "src/routeTree.gen.ts", "src/start.ts", "src/styles/**"]
       }
     ],
+    // Imports point one way: components -> features -> app, and everything may use lib, contract and sdk.
     "rules": [
       { "from": "contract", "allow": [] },
       { "from": "sdk", "allow": [] },
       { "from": "server", "allow": ["contract", "sdk"] },
       { "from": "server-adapters", "allow": ["server", "contract", "sdk", "lib"] },
       { "from": "lib", "allow": ["contract", "sdk"] },
-      { "from": "ui", "allow": ["contract", "sdk", "lib", "server-adapters"] },
-      { "from": "app", "allow": ["ui", "lib", "server-adapters", "contract", "sdk"] }
+      { "from": "components", "allow": ["lib", "contract", "sdk"] },
+      { "from": "features", "allow": ["components", "lib", "server-adapters", "contract", "sdk"] },
+      { "from": "app", "allow": ["features", "components", "lib", "server-adapters", "contract", "sdk"] }
     ],
     "coverage": {
       // A new top-level src/ directory must be given a zone before it can be used.
