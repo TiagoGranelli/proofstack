@@ -1,0 +1,59 @@
+name: Copilot Setup Steps
+
+# The environment of GitHub Copilot's coding agent: it runs the steps of the `copilot-setup-steps` job before it
+# starts working, so `pnpm check`, `pnpm test:db` and `pnpm build && pnpm verify:app` work in its session like on a
+# laptop after `pnpm bootstrap`. GitHub reads only this file on the default branch, and only `steps`,
+# `permissions`, `runs-on`, `services`, `snapshot` and `timeout-minutes` of the job (no job `env`: the settings go
+# in .env, as locally). The triggers below let a change to the file be tested like any workflow.
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+  pull_request:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+
+permissions:
+  contents: read
+
+jobs:
+  copilot-setup-steps:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    # The ports and credentials of .env.example, so the copied .env works unchanged.
+    services:
+      postgres:
+        image: postgres:18.6@sha256:5a5a84b19854a9ffaa54082c166ff4ec27473a361e496e5ea167f298f2da9722
+        env:
+          POSTGRES_USER: proofstack
+          POSTGRES_PASSWORD: proofstack-local
+          POSTGRES_DB: proofstack
+        ports:
+          - 54329:5432
+        options: >-
+          --health-cmd "pg_isready -U proofstack -d proofstack"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+      mailpit:
+        image: axllent/mailpit:v1.31.3@sha256:ed9b00c609e77e99c79b93f1178255ebc271868920f2c69a8d166bd5634ed10d
+        ports:
+          - 54325:1025
+          - 54380:8025
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # pnpm, Node, the frozen install and Playwright's Chromium (pnpm check runs component tests in it).
+      - uses: ./.github/actions/setup
+        with:
+          browsers: chromium
+      # What `pnpm bootstrap` does, minus Docker: the services above stand in for compose.yaml.
+      - name: Create .env and apply migrations
+        run: |
+          cp .env.example .env
+          sed -i "s|^BETTER_AUTH_SECRET=.*|BETTER_AUTH_SECRET=$(openssl rand -base64 32)|" .env
+          pnpm db:migrate

@@ -15,7 +15,9 @@
     ".agents/**",
     ".claude/**",
     "lighthouse-report/**",
-    "coverage/**"
+    "coverage/**",
+    // Hidden eval checks import tests/<layer> helpers by the path they get when evals/grade.sh copies them there.
+    "evals/**"
   ],
   "plugins": ["typescript", "unicorn", "oxc", "import", "react", "jsx-a11y", "promise"],
   "jsPlugins": ["@shadcn/lint", "@tanstack/eslint-plugin-query", "@tanstack/eslint-plugin-router"],

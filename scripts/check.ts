@@ -8,8 +8,8 @@
 // diff), otherwise the git ref PROOFSTACK_BASE_REF: by default HEAD locally (uncommitted edits count as new) and
 // HEAD^ on GitHub Actions (the commit under test against its parent; the checkout fetches two commits).
 import { spawnSync } from 'node:child_process'
-import { existsSync, readdirSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { join, sep } from 'node:path'
 import { routeCoverage } from './route-coverage.ts'
 
 type Gate = { name: string; run: () => boolean; fix: string }
@@ -374,6 +374,31 @@ const badFolders = () =>
         'rename it with `git mv`',
     )
 
+// Agent instructions: every session loads the root AGENTS.md, and Codex concatenates the AGENTS.md files from the
+// root down to its working directory and silently drops what passes 32 KiB (docs/agents/skills.md).
+const AGENTS_ROOT_BYTES = 14 * 1024
+const AGENTS_CHAIN_BYTES = 28 * 1024
+const agentsFiles = () =>
+  ['src', 'tests', 'scripts', 'docs'].flatMap((dir) =>
+    readdirSync(dir, { recursive: true, encoding: 'utf8' })
+      .filter((path) => path.split(sep).at(-1) === 'AGENTS.md')
+      .map((path) => join(dir, path)),
+  )
+/** The bytes Codex reads in the file's directory: every AGENTS.md from the root down to it. */
+const chainBytes = (file: string) =>
+  file
+    .split(sep)
+    .map((_, index, parts) => join(...parts.slice(0, index), 'AGENTS.md'))
+    .filter((path) => existsSync(path))
+    .reduce((total, path) => total + statSync(path).size, 0)
+const agentsBudget = () =>
+  [['AGENTS.md', AGENTS_ROOT_BYTES] as const, ...agentsFiles().map((file) => [file, AGENTS_CHAIN_BYTES] as const)]
+    .filter(([file, budget]) => chainBytes(file) > budget)
+    .map(
+      ([file, budget]) =>
+        `${file}: [agent-docs] ${chainBytes(file)} bytes with the AGENTS.md files above it, over ${budget}. Move reference material behind a pointer (a nested AGENTS.md, a skill or a doc)`,
+    )
+
 const guards = () => {
   const problems = [
     ...LINE_GUARDS.flatMap((guard) => lineGuardProblems(guard)),
@@ -386,6 +411,7 @@ const guards = () => {
     ...appliedMigrations(),
     ...tailwindSource(),
     ...badFolders(),
+    ...agentsBudget(),
   ]
   for (const problem of problems) console.error(problem)
   return problems.length === 0
@@ -464,7 +490,7 @@ const GATES: Gate[] = [
       0,
     fix:
       'regenerate what the drift report names: contract -> `pnpm codegen`, migrations -> `pnpm db:generate`; ' +
-      'auth -> edit src/server/db/schema/auth.ts by hand (AGENTS.md, "Auth config change"). Commit the ' +
+      'auth -> edit src/server/db/schema/auth.ts by hand (skill auth-change, "Auth config change"). Commit the ' +
       'generated files with their source',
   },
   {
@@ -490,7 +516,7 @@ const GATES: Gate[] = [
     run: routeCoverage,
     fix:
       'add what is listed above for each page: an entry in STATES and a landmark snapshot in ' +
-      'tests/e2e/a11y.spec.ts, and a row in the tab-order table of tests/e2e/keyboard.spec.ts (AGENTS.md, "Tests")',
+      'tests/e2e/a11y.spec.ts, and a row in the tab-order table of tests/e2e/keyboard.spec.ts (tests/AGENTS.md, "Accessibility")',
   },
   {
     name: 'guards',

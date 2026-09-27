@@ -1,0 +1,19 @@
+schema_version = "1.3"
+
+[task]
+name = "proofstack/add-profile-page"
+
+[metadata]
+category = "page"
+
+[agent]
+timeout_sec = 2700
+
+[verifier]
+timeout_sec = 900
+
+[environment]
+build_timeout_sec = 900
+cpus = 4
+memory_mb = 6144
+workdir = "/app"

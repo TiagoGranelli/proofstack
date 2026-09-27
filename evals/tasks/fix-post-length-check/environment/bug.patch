@@ -1,0 +1,28 @@
+diff --git a/src/features/posts/components/character-count.tsx b/src/features/posts/components/character-count.tsx
+index d2e3fd4..0bbf9fe 100644
+--- a/src/features/posts/components/character-count.tsx
++++ b/src/features/posts/components/character-count.tsx
+@@ -1,8 +1,8 @@
+ import { POST_MAX_LENGTH } from '#/contract/limits.ts'
+ import { cn } from '#/lib/utils.ts'
+ 
+-/** The API rejects untrimmed bodies, so the forms send `body.trim()`; the limit applies to that. */
+-export const isTooLong = (value: string) => value.trim().length > POST_MAX_LENGTH
++/** Whether a draft is over the limit the API enforces. */
++export const isTooLong = (value: string) => value.length > POST_MAX_LENGTH
+ 
+ /**
+  * "123/280" counter, referenced by the textarea's aria-describedby. The count itself is not a live region
+diff --git a/tests/component/post-composer.test.tsx b/tests/component/post-composer.test.tsx
+index 75fb694..f8f18fa 100644
+--- a/tests/component/post-composer.test.tsx
++++ b/tests/component/post-composer.test.tsx
+@@ -30,7 +30,7 @@ describe('PostComposer', () => {
+     await renderInApp(<PostComposer />)
+     await expect.element(field()).toHaveAccessibleDescription(`0/${POST_MAX_LENGTH} characters.`)
+ 
+-    await field().fill(`  ${'x'.repeat(POST_MAX_LENGTH)}  `)
++    await field().fill('x'.repeat(POST_MAX_LENGTH))
+     await expect.element(count()).toHaveTextContent(`${POST_MAX_LENGTH}/${POST_MAX_LENGTH} characters.`)
+     await expect.element(field()).not.toHaveAttribute('aria-invalid')
+     await expect.element(count()).not.toHaveClass('text-destructive')

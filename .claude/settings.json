@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(pnpm check*)",
+      "Bash(pnpm test*)",
+      "Bash(pnpm typecheck)",
+      "Bash(pnpm lint*)",
+      "Bash(pnpm format*)",
+      "Bash(pnpm codegen)",
+      "Bash(pnpm db:generate *)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)"
+    ],
+    "deny": [
+      "Edit(/src/sdk/**)",
+      "Edit(/openapi.json)",
+      "Edit(/src/routeTree.gen.ts)",
+      "Edit(/drizzle/meta/**)",
+      "Bash(git commit --no-verify*)",
+      "Bash(git commit * --no-verify*)",
+      "Bash(git commit -n*)",
+      "Bash(git commit * -n*)",
+      "Bash(git -c core.hooksPath*)",
+      "Bash(pnpm hooks:uninstall*)",
+      "Bash(eslint *)",
+      "Bash(npx eslint*)",
+      "Bash(pnpm dlx eslint*)",
+      "Bash(prettier *)",
+      "Bash(npx prettier*)",
+      "Bash(pnpm dlx prettier*)",
+      "Bash(biome *)",
+      "Bash(npx @biomejs/biome*)",
+      "Bash(pnpm dlx @biomejs/biome*)",
+      "Bash(* --no-ignore*)",
+      "Bash(* --ignore-path*)",
+      "Bash(*oxlint* -c *)",
+      "Bash(*oxlint* --config*)",
+      "Bash(*oxfmt* -c *)",
+      "Bash(*oxfmt* --config*)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/format-edited-file.ts\"",
+            "timeout": 30,
+            "statusMessage": "Formatting and linting the edited file"
+          }
+        ]
+      }
+    ]
+  }
+}
