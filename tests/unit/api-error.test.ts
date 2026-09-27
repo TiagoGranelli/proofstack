@@ -70,8 +70,18 @@ describe('describeApiError', () => {
     })
   })
 
+  it('says how long to wait after too many writes', () => {
+    expect(describeApiError({ _tag: 'RateLimited', message: 'slow down', retryAfter: 42 }, ACTION)).toEqual({
+      message: 'Could not save the post: too many changes in a short time. Try again in 42 seconds.',
+      signIn: false,
+    })
+    expect(describeApiError({ _tag: 'RateLimited', message: 'slow down', retryAfter: 1 }, ACTION).message).toBe(
+      'Could not save the post: too many changes in a short time. Try again in 1 second.',
+    )
+  })
+
   it('treats a tag from a newer server as a generic failure', () => {
-    expect(describeApiError({ _tag: 'RateLimited', message: 'slow down' }, ACTION)).toEqual({
+    expect(describeApiError({ _tag: 'SlowDown', message: 'slow down' }, ACTION)).toEqual({
       message: 'Could not save the post. Try again.',
       signIn: false,
     })

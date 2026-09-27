@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '#/contract/limits.ts'
 import { useChangePassword } from '#/features/auth/api/change-password.ts'
 import { AuthField, AuthForm } from '#/features/auth/components/auth-form.tsx'
+import { AuthStatus } from '#/features/auth/components/auth-status.tsx'
 import { formText } from '#/features/auth/utils/form-text.ts'
 
 /** Changes the password. Every other session of the account is signed out; this one continues. */
@@ -44,8 +45,11 @@ export function ChangePasswordForm() {
           required
         />
       </AuthForm>
+      {/* The fresh form has no focus, so the message takes it. */}
       {change.isSuccess ? (
-        <output className="block text-sm">Password changed. Your other sessions were signed out.</output>
+        <AuthStatus title="Password changed" headingLevel={3}>
+          Your other sessions were signed out.
+        </AuthStatus>
       ) : null}
     </div>
   )

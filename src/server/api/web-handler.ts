@@ -9,6 +9,7 @@ import { log } from '../log.ts'
 import { PostsRepo } from '../posts/repo.ts'
 import { MyPostsHandlers, PublicPostsHandlers, SystemHandlers } from './handlers.ts'
 import { AuthenticationLive, RequestValidationLive } from './middleware.ts'
+import { RateLimitStore, WriteRateLimitLive } from './rate-limit.ts'
 
 const formatIssues = SchemaIssue.makeFormatterStandardSchemaV1()
 
@@ -57,7 +58,12 @@ const ServerMiddleware = HttpRouter.middleware(
 
 const ApiLive = HttpApiBuilder.layer(Api, { openapiPath: '/api/openapi.json' }).pipe(
   Layer.provide([SystemHandlers, PublicPostsHandlers, MyPostsHandlers]),
-  Layer.provide([PostsRepo.layer.pipe(Layer.provide(Database.layer)), AuthenticationLive, RequestValidationLive]),
+  Layer.provide([
+    PostsRepo.layer.pipe(Layer.provide(Database.layer)),
+    AuthenticationLive,
+    RequestValidationLive,
+    WriteRateLimitLive.pipe(Layer.provide(RateLimitStore.postgres)),
+  ]),
   Layer.merge(ServerMiddleware),
 )
 

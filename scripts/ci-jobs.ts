@@ -1,7 +1,8 @@
 // Every CI job's logic, one function per job. .github/workflows/ci.yml only installs tooling, starts
 // services and calls `pnpm ci:<job>`; `pnpm ci:local` runs the same commands in the Playwright Ubuntu image.
 // Usage: node scripts/ci-jobs.ts <job> [args for the job's script]
-//   workflows   actionlint + zizmor on .github, and image pins consistent with scripts/images.ts (Docker)
+//   workflows   actionlint + zizmor on .github, and image pins (compose.yaml, ci.yml, Dockerfile) consistent
+//               with scripts/images.ts (Docker)
 //   static      pnpm check without its drift gate (the drift job runs every drift check)
 //   drift       every drift check, including the database one (DATABASE_URL)
 //   build       the production build, with placeholder configuration
@@ -52,7 +53,7 @@ const workflows = () => {
 }
 
 /** Every reference to an image from scripts/images.ts in these files must be the same pinned reference. */
-const PINNED_COPIES = ['compose.yaml', '.github/workflows/ci.yml']
+const PINNED_COPIES = ['compose.yaml', '.github/workflows/ci.yml', 'Dockerfile']
 const imagePins = () => {
   const problems: string[] = []
   for (const file of PINNED_COPIES) {

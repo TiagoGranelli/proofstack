@@ -1,12 +1,13 @@
 // LoginForm and sign-out: pending states, every failure message, and where each success leads.
 import { QueryClientProvider } from '@tanstack/react-query'
-import { RouterContextProvider } from '@tanstack/react-router'
+import { RouterContextProvider, useNavigate } from '@tanstack/react-router'
 import { hydrateRoot } from 'react-dom/client'
 import { renderToString } from 'react-dom/server'
 import { describe, expect, it, onTestFinished } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
+import { useSignOut } from '#/features/auth/api/sign-out.ts'
 import { LoginForm } from '#/features/auth/components/login-form.tsx'
-import { SignOutAlert, SignOutButton, useSignOut } from '#/features/auth/components/sign-out-button.tsx'
+import { SignOutAlert, SignOutButton } from '#/features/auth/components/sign-out-button.tsx'
 import type { AuthFailure } from '#/lib/auth.functions.ts'
 import { auth, authCalls, authFunction, held, worker } from './api-mocks.ts'
 import { renderInApp } from './test-utils.tsx'
@@ -151,8 +152,10 @@ describe('LoginForm', () => {
   })
 })
 
+/** Wired like the dashboard (src/routes/_authed/dashboard.tsx): one mutation, home on success. */
 function SignOut() {
-  const signOut = useSignOut()
+  const navigate = useNavigate()
+  const signOut = useSignOut({ mutationConfig: { onSuccess: () => navigate({ to: '/' }) } })
   return (
     <>
       <SignOutButton signOut={signOut} />

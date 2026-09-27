@@ -27,9 +27,11 @@
     "unresolved-imports": "error",
     "circular-dependencies": "error",
     "boundary-violation": "error",
-    // Advisory: exports can be intentional public surface (contract schemas, types).
-    "unused-exports": "warn",
-    "unused-types": "warn",
+    // An export nobody imports is dead code too. An export that is intentional public surface gets an explicit,
+    // commented exception (`overrides` below), never a global downgrade. `pnpm deadcode` runs with
+    // --fail-on-issues, so a rule Fallow reports at "warn" by default fails as well.
+    "unused-exports": "error",
+    "unused-types": "error",
     // Everything is bundled into .output by Vite/Nitro, so dev vs prod dependency placement has no runtime effect.
     // (react-dom, for one, is imported directly only by tests; the app reaches it through Start.)
     "dev-dependencies-in-production": "off",
@@ -53,14 +55,16 @@
       // which drizzle-kit and the Better Auth CLI load outside Start.
       { "name": "server", "patterns": ["src/server/**"] },
       // The only non-server modules allowed to reference src/server: HTTP route handlers, server functions
-      // (createServerFn), isomorphic factories (createIsomorphicFn) and the global function middleware
-      // (createMiddleware().server). Start's compiler strips their server branches from the client bundle.
+      // (createServerFn), isomorphic factories (createIsomorphicFn), server-only functions (createServerOnlyFn) and
+      // the global function middleware (createMiddleware().server). Start's compiler strips their server branches
+      // from the client bundle.
       {
         "name": "server-adapters",
         "patterns": [
           "src/routes/api/**",
           "src/lib/*.functions.ts",
           "src/lib/api-client.ts",
+          "src/lib/app-origin.ts",
           "src/lib/server-function-errors.ts"
         ]
       },

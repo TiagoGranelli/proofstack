@@ -6,9 +6,9 @@ import { getSessionsQueryOptions } from '#/features/auth/api/get-sessions.ts'
 import { useRevokeOtherSessions } from '#/features/auth/api/revoke-other-sessions.ts'
 import { useRevokeSession } from '#/features/auth/api/revoke-session.ts'
 import { useSignOutEverywhere } from '#/features/auth/api/sign-out-everywhere.ts'
-import { useSignOutMutation } from '#/features/auth/api/sign-out.ts'
+import { useSignOut } from '#/features/auth/api/sign-out.ts'
 import { describeAuthFailure } from '#/features/auth/utils/describe-auth-failure.ts'
-import { describeDevice, formatTimestamp } from '#/features/auth/utils/describe-session.ts'
+import { describeAddress, describeDevice, formatTimestamp } from '#/features/auth/utils/describe-session.ts'
 import type { SessionView } from '#/lib/auth.functions.ts'
 
 const alert = 'text-sm text-destructive'
@@ -16,7 +16,7 @@ const alert = 'text-sm text-destructive'
 /** Better Auth lists sessions only for a recent sign-in: sign out, then back in, and return here. */
 function SignInAgain() {
   const navigate = useNavigate()
-  const signOut = useSignOutMutation({
+  const signOut = useSignOut({
     mutationConfig: { onSuccess: () => navigate({ to: '/login', search: { redirect: '/account' } }) },
   })
   return (
@@ -48,8 +48,8 @@ function SessionItem(props: { session: SessionView }) {
           {session.current ? <span className="ml-2 text-muted-foreground">(this browser)</span> : null}
         </p>
         <p className="text-muted-foreground">
-          {session.ipAddress ? `${session.ipAddress} · ` : ''}signed in {formatTimestamp(session.createdAt)}, last
-          active {formatTimestamp(session.lastActiveAt)}
+          {session.ipAddress ? `${describeAddress(session.ipAddress)} · ` : ''}signed in{' '}
+          {formatTimestamp(session.createdAt)}, last active {formatTimestamp(session.lastActiveAt)}
         </p>
         {revoke.isError ? (
           <p role="alert" className={alert}>

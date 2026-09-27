@@ -4,7 +4,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { myPostsCreate, myPostsList, myPostsRemove, publicPostsList } from '#/sdk/sdk.gen.ts'
 import type { Post, PostPage } from '#/sdk/types.gen.ts'
-import { clientIps, sdkClient, signIn, users } from './helpers.ts'
+import { clientIps, createUser, sdkClient, signIn } from './helpers.ts'
 
 const nextIp = clientIps('100.64.30')
 const anonymous = sdkClient()
@@ -13,9 +13,14 @@ let author: Client
 let other: Client
 const created: Array<{ client: Client; id: string }> = []
 
+// Accounts of this file alone: it publishes and deletes dozens of posts, which the shared users' write limit
+// (src/server/api/rate-limit.ts) would have to absorb together with every other file's writes.
+let authorName: string
 beforeAll(async () => {
-  author = sdkClient(await signIn(users.author, nextIp()))
-  other = sdkClient(await signIn(users.other, nextIp()))
+  const [mine, theirs] = await Promise.all([createUser('pagination'), createUser('pagination-other')])
+  authorName = mine.name
+  author = sdkClient(await signIn(mine, nextIp()))
+  other = sdkClient(await signIn(theirs, nextIp()))
 })
 
 afterAll(async () => {
@@ -161,7 +166,7 @@ describe('cursor', () => {
     const future = encode({ createdAt: '9999-12-31T23:59:59.999999Z', id: validId })
     const mine = await myPage(author, { cursor: future, limit: '50' })
     expect(ids(mine.items)).not.toContain(theirs[0]!.id)
-    expect(new Set(mine.items.map((p) => p.authorName))).toEqual(new Set([users.author.name]))
+    expect(new Set(mine.items.map((p) => p.authorName))).toEqual(new Set([authorName]))
   })
 })
 

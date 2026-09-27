@@ -13,9 +13,10 @@
 //   the `seed` project (seed.setup.ts) before any spec starts; after that a test publishes at most a post or
 //   two, so a post published moments ago is on the first page of `/`.
 import { execFile } from 'node:child_process'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
-import type { APIRequestContext, Page, Route } from '@playwright/test'
+import type { APIRequestContext, Page, Route, TestInfo } from '@playwright/test'
 import { POST_MAX_LENGTH, POSTS_PAGE_DEFAULT } from '#/contract/limits.ts'
 import type { Post, PostPage } from '#/sdk/types.gen.ts'
 // Every spec gets the Content-Security-Policy violation collector from ../fixtures.ts.
@@ -32,7 +33,7 @@ const CREATE_USER = fileURLToPath(new URL('../../../scripts/create-user.ts', imp
  * A new account, created through scripts/create-user.ts. The script writes to the app's database, so it
  * needs the environment the app runs with (DATABASE_URL and the rest); verify:app passes it to Playwright.
  */
-const createAuthor = async (name: string): Promise<Author> => {
+export const createAuthor = async (name: string): Promise<Author> => {
   if (!process.env.DATABASE_URL)
     throw new Error(
       'E2E tests create their authors with scripts/create-user.ts, which needs the DATABASE_URL of the app under ' +
@@ -169,6 +170,8 @@ export const overTheLimit = 'x'.repeat(POST_MAX_LENGTH + 1)
 export const PAGINATED_AUTHOR = {
   // Two full pages and part of a third, so Load more is used twice and then goes away.
   bodies: Array.from({ length: 2 * POSTS_PAGE_DEFAULT + 5 }, (_, i) => `paginated post ${i + 1}`),
-  // Inside Playwright's output directory, which it empties at the start of every run.
-  storageState: fileURLToPath(new URL('../../../test-results/playwright/.seed/paginated-author.json', import.meta.url)),
+  // Inside Playwright's output directory (`outputDir` in playwright.config.ts, shared by every project), which it
+  // empties at the start of every run. Derived from the running test, not written as a path: the file exists only
+  // during an E2E run.
+  storageState: (testInfo: TestInfo) => join(testInfo.project.outputDir, '.seed', 'paginated-author.json'),
 }

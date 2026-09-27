@@ -25,6 +25,11 @@ export function describeDevice(userAgent: string | null): string {
   return browser ?? system ?? 'Unknown device'
 }
 
+/** A session's client address: IPv4 as it is, an IPv6 network (CIDR, as the server lists it) labelled as one. */
+export function describeAddress(address: string): string {
+  return address.includes('/') ? `IPv6 network ${address}` : address
+}
+
 /**
  * An ISO timestamp as "2026-09-27 14:05 UTC". Fixed format and zone, so the server-rendered text and the
  * hydrated text are identical whatever the visitor's locale.
