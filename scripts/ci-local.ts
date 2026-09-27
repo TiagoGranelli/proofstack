@@ -16,7 +16,7 @@ import { spawn, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { dockerPrefix, IMAGES } from './images.ts'
+import { dockerPrefix, IMAGES, waitForPostgres } from './images.ts'
 
 const ORDER = ['workflows', 'static', 'drift', 'build', 'verify', 'lighthouse', 'docker'] as const
 type Job = (typeof ORDER)[number]
@@ -201,14 +201,7 @@ try {
       input: `${files.join('\0')}\0`,
       quiet: true,
     })
-    for (let i = 0; i < 60; i++) {
-      const ready = spawnSync('docker', ['exec', DB, 'pg_isready', '-h', '127.0.0.1', '-U', 'proofstack'], {
-        stdio: 'ignore',
-      })
-      if (ready.status === 0) break
-      if (i === 59) throw new Error('Postgres did not become ready in 30 s')
-      await new Promise((r) => setTimeout(r, 500))
-    }
+    await waitForPostgres(DB)
     console.log(`▶ copied ${files.length} files; pnpm install --frozen-lockfile`)
     const install = await measured(
       'docker',

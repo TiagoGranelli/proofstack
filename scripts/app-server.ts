@@ -2,11 +2,11 @@
 // Shared by scripts/verify-app.ts and scripts/lighthouse.ts. Server output goes to a log file.
 // With `edge`, the app sits behind the reference edge (deploy/Caddyfile, scripts/edge.ts) as in production:
 // the returned url and APP_URL are the edge's, and the Node server trusts X-Forwarded-For only from the edge.
-import { spawn } from 'node:child_process'
+import { type ChildProcess, spawn } from 'node:child_process'
 import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { dirname, join } from 'node:path'
-import { startEdge } from './edge.ts'
+import { type RunningEdge, startEdge } from './edge.ts'
 import { resetTestDatabase } from './test-db.ts'
 
 if (existsSync('.env')) process.loadEnvFile('.env')
@@ -28,8 +28,6 @@ export type RunningApp = {
   /** SIGTERM, then waits for the exit (SIGKILL after 10 s). Resolves with how long the shutdown took. */
   stop: () => Promise<{ ms: number; code: number | null; signal: NodeJS.Signals | null }>
 }
-
-const noop = async () => {}
 
 /** Where the edge (and the test runners, without one) connect from. */
 export const LOOPBACK = '127.0.0.1/32,::1/128'
@@ -91,13 +89,7 @@ const assertFreshBuild = () => {
     )
 }
 
-/**
- * Starts the built server on a free port against `databaseUrl`, which must name a *_test database: it is
- * dropped and recreated. Two accounts are created: `user` (the author the tests act as) and `otherUser`
- * (a second author for isolation checks). With `alongside`, the server shares that one's database, accounts
- * and secret instead, so a run can test two configurations (for example both sign-up policies) at once.
- */
-export const startApp = async (options: {
+type StartAppOptions = {
   databaseUrl: string
   logFile: string
   port?: string
@@ -121,19 +113,78 @@ export const startApp = async (options: {
     /** HTTPS with HTTP/2 and HTTP/3, as in production (Caddy's internal CA; see scripts/edge.ts). */
     tls?: boolean
   }
-}): Promise<RunningApp> => {
+}
+
+/** The two authors, new ones with random passwords unless the app shares another one's accounts. */
+const accounts = (alongside: RunningApp | undefined) => ({
+  user: alongside?.user ?? { email: 'author@example.test', name: 'Test Author', password: password() },
+  otherUser: alongside?.otherUser ?? { email: 'other@example.test', name: 'Other Author', password: password() },
+})
+
+/** Resets the test database (migrations included) and creates the accounts, verified. */
+const seedDatabase = async (databaseUrl: string, env: NodeJS.ProcessEnv, users: User[]) => {
+  await resetTestDatabase(databaseUrl)
+  await Promise.all(
+    users.map((u) =>
+      runQuiet('node', ['scripts/create-user.ts', u.email, u.name], { ...env, PROOFSTACK_USER_PASSWORD: u.password }),
+    ),
+  )
+}
+
+/** Starts the built server, logging to `logFile`. `stop` ends it (SIGKILL after 10 s) and says how it exited. */
+const spawnServer = (env: NodeJS.ProcessEnv, logFile: string) => {
+  mkdirSync(dirname(logFile), { recursive: true })
+  const log = openSync(logFile, 'w')
+  // srvx skips its graceful shutdown (drain, then Nitro's close hook) when CI or TEST is set, and GitHub
+  // Actions sets CI=true. The server runs as it would in production; the test runners keep both variables.
+  const { CI: _ci, TEST: _test, ...serverEnv } = env
+  const server = spawn('node', ['.output/server/index.mjs'], { stdio: ['ignore', log, log], env: serverEnv })
+  closeSync(log)
+  const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) =>
+    server.once('exit', (code, signal) => resolve({ code, signal })),
+  )
+  const stop = async () => {
+    const started = performance.now()
+    if (server.exitCode === null && server.signalCode === null) {
+      server.kill('SIGTERM')
+      const killer = setTimeout(() => server.kill('SIGKILL'), 10_000)
+      await exited
+      clearTimeout(killer)
+    }
+    return { ms: Math.round(performance.now() - started), ...(await exited) }
+  }
+  return { server, stop }
+}
+
+/** Polls /api/ready for up to 30 s; fails at once, with the log's tail, if the server exits. */
+const waitForServer = async (server: ChildProcess, directUrl: string, logFile: string) => {
+  for (let attempt = 0; attempt < 120; attempt++) {
+    if (server.exitCode !== null)
+      throw new Error(`server exited with ${server.exitCode}. Log (${logFile}):\n${tail(logFile)}`)
+    try {
+      if ((await fetch(`${directUrl}/api/ready`)).ok) return
+    } catch {
+      // Not listening yet: try again below.
+    }
+    await new Promise((r) => setTimeout(r, 250))
+  }
+  throw new Error(`server did not become ready in 30 s. Log (${logFile}):\n${tail(logFile)}`)
+}
+
+/**
+ * Starts the built server on a free port against `databaseUrl`, which must name a *_test database: it is
+ * dropped and recreated. Two accounts are created: `user` (the author the tests act as) and `otherUser`
+ * (a second author for isolation checks). With `alongside`, the server shares that one's database, accounts
+ * and secret instead, so a run can test two configurations (for example both sign-up policies) at once.
+ */
+export const startApp = async (options: StartAppOptions): Promise<RunningApp> => {
   assertFreshBuild()
   const appPort = options.port ?? (await freePort())
   const directUrl = `http://localhost:${appPort}`
   const edgePort = options.edge ? await freePort() : undefined
   const url = edgePort ? `${options.edge?.tls ? 'https' : 'http'}://localhost:${edgePort}` : directUrl
   const { databaseUrl } = options
-  const user = options.alongside?.user ?? { email: 'author@example.test', name: 'Test Author', password: password() }
-  const otherUser = options.alongside?.otherUser ?? {
-    email: 'other@example.test',
-    name: 'Other Author',
-    password: password(),
-  }
+  const { user, otherUser } = accounts(options.alongside)
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     DATABASE_URL: databaseUrl,
@@ -145,70 +196,30 @@ export const startApp = async (options: {
     TRUSTED_PROXIES: options.edge ? LOOPBACK : (options.trustedProxies ?? ''),
     ...options.settings,
   }
+  if (!options.alongside) await seedDatabase(databaseUrl, env, [user, otherUser])
 
-  if (!options.alongside) {
-    await resetTestDatabase(databaseUrl)
-    await Promise.all(
-      [user, otherUser].map((u) =>
-        runQuiet('node', ['scripts/create-user.ts', u.email, u.name], { ...env, PROOFSTACK_USER_PASSWORD: u.password }),
-      ),
-    )
-  }
-
-  mkdirSync(dirname(options.logFile), { recursive: true })
-  const log = openSync(options.logFile, 'w')
-  // srvx skips its graceful shutdown (drain, then Nitro's close hook) when CI or TEST is set, and GitHub
-  // Actions sets CI=true. The server runs as it would in production; the test runners keep both variables.
-  const { CI: _ci, TEST: _test, ...serverEnv } = env
-  const server = spawn('node', ['.output/server/index.mjs'], { stdio: ['ignore', log, log], env: serverEnv })
-  closeSync(log)
-  const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) =>
-    server.once('exit', (code, signal) => resolve({ code, signal })),
-  )
-  let stopEdge: () => Promise<void> = noop
-  let edgeCertificateSpki: string | undefined
+  const server = spawnServer(env, options.logFile)
+  let edge: RunningEdge | undefined
   const stop = async () => {
-    await stopEdge()
-    const started = performance.now()
-    if (server.exitCode === null && server.signalCode === null) {
-      server.kill('SIGTERM')
-      const killer = setTimeout(() => server.kill('SIGKILL'), 10_000)
-      await exited
-      clearTimeout(killer)
-    }
-    return { ms: Math.round(performance.now() - started), ...(await exited) }
-  }
-
-  const ready = async () => {
-    for (let attempt = 0; attempt < 120; attempt++) {
-      if (server.exitCode !== null)
-        throw new Error(`server exited with ${server.exitCode}. Log (${options.logFile}):\n${tail(options.logFile)}`)
-      try {
-        if ((await fetch(`${directUrl}/api/ready`)).ok) return
-      } catch {
-        // Not listening yet: try again below.
-      }
-      await new Promise((r) => setTimeout(r, 250))
-    }
-    throw new Error(`server did not become ready in 30 s. Log (${options.logFile}):\n${tail(options.logFile)}`)
+    await edge?.stop()
+    return server.stop()
   }
   try {
-    await ready()
+    await waitForServer(server.server, directUrl, options.logFile)
     if (options.edge && edgePort) {
-      const edge = await startEdge({
+      edge = await startEdge({
         port: edgePort,
         upstreamPort: appPort,
         trustedProxies: options.edge.trustedProxies,
         ...(options.edge.tls ? { tls: { httpPort: await freePort() } } : {}),
         logFile: options.edge.logFile,
       })
-      stopEdge = edge.stop
-      edgeCertificateSpki = edge.certificateSpki
     }
   } catch (error) {
     await stop()
     throw error
   }
+  const edgeCertificateSpki = edge?.certificateSpki
   return { url, directUrl, edgeCertificateSpki, env, databaseUrl, user, otherUser, logFile: options.logFile, stop }
 }
 

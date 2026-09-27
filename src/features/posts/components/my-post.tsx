@@ -16,87 +16,31 @@ import type { Post } from '#/sdk/types.gen.ts'
 export function MyPost(props: { post: Post; onUpdated?: () => void; onDeleted?: () => void }) {
   const { post } = props
   const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState(post.body)
   const editButton = useRef<HTMLButtonElement>(null)
-  const textarea = useRef<HTMLTextAreaElement>(null)
   const returnFocus = useRef(false)
-
-  const update = useUpdatePost({
-    mutationConfig: {
-      onSuccess: () => {
-        returnFocus.current = true
-        setEditing(false)
-        props.onUpdated?.()
-      },
-    },
-  })
   const remove = useDeletePost({ mutationConfig: { onSuccess: () => props.onDeleted?.() } })
 
   useEffect(() => {
-    if (editing) {
-      const field = textarea.current
-      field?.focus()
-      field?.setSelectionRange(field.value.length, field.value.length)
-    } else if (returnFocus.current) {
+    if (!editing && returnFocus.current) {
       returnFocus.current = false
       editButton.current?.focus()
     }
   }, [editing])
 
-  const cancel = () => {
-    returnFocus.current = true
-    setEditing(false)
-    update.reset()
-  }
-  const label = <span className="sr-only"> post: {post.body.slice(0, 40)}</span>
-
   if (editing) {
-    const fieldId = `edit-post-${post.id}`
     return (
-      <PostCard post={post}>
-        <form
-          className="grid gap-2"
-          aria-busy={update.isPending}
-          onSubmit={(event) => {
-            event.preventDefault()
-            update.mutate({ path: { id: post.id }, body: { body: draft.trim() } })
-          }}
-        >
-          <Label htmlFor={fieldId}>Edit post</Label>
-          <Textarea
-            id={fieldId}
-            ref={textarea}
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Escape') {
-                event.preventDefault()
-                cancel()
-              }
-            }}
-            aria-describedby={update.isError ? `${fieldId}-count ${fieldId}-error` : `${fieldId}-count`}
-            aria-invalid={isTooLong(draft) || update.isError || undefined}
-            required
-          />
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <CharacterCount id={`${fieldId}-count`} value={draft} />
-            <div className="flex gap-2">
-              <Button type="button" variant="outline" onClick={cancel}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={update.isPending || draft.trim().length === 0}>
-                Save
-              </Button>
-            </div>
-          </div>
-          {update.isError ? (
-            <ApiErrorAlert id={`${fieldId}-error`} error={update.error} action="save the post" />
-          ) : null}
-        </form>
-      </PostCard>
+      <EditPostForm
+        post={post}
+        onClose={() => {
+          returnFocus.current = true
+          setEditing(false)
+        }}
+        onUpdated={props.onUpdated}
+      />
     )
   }
 
+  const label = <span className="sr-only"> post: {post.body.slice(0, 40)}</span>
   return (
     <PostCard
       post={post}
@@ -109,11 +53,7 @@ export function MyPost(props: { post: Post; onUpdated?: () => void; onDeleted?: 
             variant="ghost"
             size="sm"
             disabled={remove.isPending}
-            onClick={() => {
-              setDraft(post.body)
-              update.reset()
-              setEditing(true)
-            }}
+            onClick={() => setEditing(true)}
           >
             Edit{label}
           </Button>
@@ -134,5 +74,73 @@ export function MyPost(props: { post: Post; onUpdated?: () => void; onDeleted?: 
         ) : null
       }
     />
+  )
+}
+
+/**
+ * The form that replaces a post's body while it is edited. It starts from the saved body with the caret at
+ * its end; Save, Cancel and Escape close it through `onClose`. Each opening mounts it afresh, so a cancelled
+ * draft or a failed save never shows up again.
+ */
+function EditPostForm(props: { post: Post; onClose: () => void; onUpdated: (() => void) | undefined }) {
+  const { post } = props
+  const [draft, setDraft] = useState(post.body)
+  const textarea = useRef<HTMLTextAreaElement>(null)
+  const update = useUpdatePost({
+    mutationConfig: {
+      onSuccess: () => {
+        props.onClose()
+        props.onUpdated?.()
+      },
+    },
+  })
+
+  useEffect(() => {
+    const field = textarea.current
+    field?.focus()
+    field?.setSelectionRange(field.value.length, field.value.length)
+  }, [])
+
+  const fieldId = `edit-post-${post.id}`
+  return (
+    <PostCard post={post}>
+      <form
+        className="grid gap-2"
+        aria-busy={update.isPending}
+        onSubmit={(event) => {
+          event.preventDefault()
+          update.mutate({ path: { id: post.id }, body: { body: draft.trim() } })
+        }}
+      >
+        <Label htmlFor={fieldId}>Edit post</Label>
+        <Textarea
+          id={fieldId}
+          ref={textarea}
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') {
+              event.preventDefault()
+              props.onClose()
+            }
+          }}
+          aria-describedby={update.isError ? `${fieldId}-count ${fieldId}-error` : `${fieldId}-count`}
+          aria-invalid={isTooLong(draft) || update.isError || undefined}
+          required
+        />
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <CharacterCount id={`${fieldId}-count`} value={draft} />
+          <div className="flex gap-2">
+            <Button type="button" variant="outline" onClick={props.onClose}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={update.isPending || draft.trim().length === 0}>
+              Save
+            </Button>
+          </div>
+        </div>
+        {update.isError ? <ApiErrorAlert id={`${fieldId}-error`} error={update.error} action="save the post" /> : null}
+      </form>
+    </PostCard>
   )
 }
