@@ -14,9 +14,11 @@
 import { execFile } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
-import { test as base, expect, type APIRequestContext, type Page } from '@playwright/test'
+import type { APIRequestContext, Page } from '@playwright/test'
 import { POST_MAX_LENGTH, POSTS_PAGE_DEFAULT } from '#/contract/limits.ts'
 import type { Post, PostPage } from '#/sdk/types.gen.ts'
+// Every spec gets the Content-Security-Policy violation collector from ../fixtures.ts.
+import { test as base, expect } from '../fixtures.ts'
 
 /** Same default as playwright.config.ts. */
 const appUrl = process.env.APP_URL ?? 'http://localhost:3000'

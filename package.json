@@ -98,6 +98,7 @@
     "oxfmt": "0.70.0",
     "oxlint": "1.85.0",
     "oxlint-tsgolint": "7.0.2003",
+    "parse5": "8.0.1",
     "playwright": "1.63.0",
     "shadcn": "4.21.0",
     "tailwindcss": "4.3.3",

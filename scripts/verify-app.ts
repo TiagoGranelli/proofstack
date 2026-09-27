@@ -14,7 +14,7 @@ import { assertChromium, startApp, tail } from './app-server.ts'
 import { dropTestDatabase, openConnections, testDatabaseUrl } from './test-db.ts'
 
 const LOG_FILE = 'test-results/app-server.log'
-/** srvx drains requests, then src/server/nitro/shutdown.ts ends the pool; both are quick with no traffic. */
+/** srvx drains requests, then the close hook from src/server/lifecycle.ts ends the pool; both are quick with no traffic. */
 const MAX_SHUTDOWN_MS = 3_000
 
 const args = process.argv.slice(2)

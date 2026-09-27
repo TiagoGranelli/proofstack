@@ -1,23 +1,20 @@
 import { QueryClient } from '@tanstack/react-query'
 import { createRouter } from '@tanstack/react-router'
 import { setupRouterSsrQueryIntegration } from '@tanstack/react-router-ssr-query'
-import { createIsomorphicFn, getGlobalStartContext } from '@tanstack/react-start'
+import { createIsomorphicFn } from '@tanstack/react-start'
 import { RouteError } from '#/components/errors/route-error.tsx'
 import { RouteNotFound } from '#/components/errors/route-not-found.tsx'
 import { RoutePending } from '#/components/layouts/route-pending.tsx'
 import { routeTree } from './routeTree.gen.ts'
 
-// The CSP nonce created by the request middleware in src/start.ts. On the client the router reads it
-// back from the <meta property="csp-nonce"> tag that HeadContent renders.
-const getSsrOptions = createIsomorphicFn()
-  .server(() => {
-    try {
-      return { nonce: getGlobalStartContext()?.cspNonce }
-    } catch {
-      return undefined
-    }
-  })
-  .client(() => undefined)
+// A fresh CSP nonce per request (Start's documented pattern, TanStack/router e2e/react-start/csp). The router
+// stamps it on every script, style and preload it renders, and the root route's `headers` puts it into the
+// Content-Security-Policy. In the browser the router reads it back from the <meta property="csp-nonce"> tag
+// that HeadContent renders, and Vite's preload helper copies it onto the chunks it preloads.
+const getSsrOptions = createIsomorphicFn().server(() => {
+  const bytes = crypto.getRandomValues(new Uint8Array(16))
+  return { nonce: Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('') }
+})
 
 // Called once per request on the server, so every request gets its own QueryClient and no cached
 // query (such as another user's posts) can leak between requests.

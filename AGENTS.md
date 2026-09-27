@@ -21,8 +21,9 @@ changes to the contract, database, auth, or UI flows.
   are `nitro/` plugins and `db/schema/`, which drizzle-kit and Better Auth's CLI load outside Start.
 - UI and page routes reach data only through the SDK (`#/sdk/...`) or a server function in
   `#/lib/*.functions.ts`. They never import `src/server`, `drizzle-orm`, `pg`, or `better-auth` directly.
-  Only the server adapters import `src/server`: `src/routes/api/**`, `src/lib/*.functions.ts`, and
-  `src/lib/api-client.ts` (Fallow zone `server-adapters`).
+  Only the server adapters import `src/server`: `src/routes/api/**`, `src/lib/*.functions.ts`,
+  `src/lib/api-client.ts` and `src/lib/server-function-errors.ts`, the global function middleware
+  (Fallow zone `server-adapters`).
 - SSR loaders call the same SDK. On the server it dispatches in-process to the Effect handler
   (`src/server/api/in-process-client.ts`), so every business operation goes through the contract.
 - Authorization happens in the Effect `Authentication` middleware. The `_authed` route guard is only a UX
@@ -233,8 +234,13 @@ Regenerate these files; never edit them by hand:
   TS 7 ([ADR 0002](docs/decisions/0002-typescript-7-with-typescript-6-alias.md)).
   `scripts/*.ts` run through Node's type stripping, so use erasable syntax only (no enums, namespaces,
   or constructor parameter properties).
-- **Prerender.** Start's own prerender output is not served, so static routes go in
-  `nitro({ prerender: { routes } })` in `vite.config.ts` ([ADR 0004](docs/decisions/0004-prerender-via-nitro.md)).
+- **Prerender.** Static routes go in `nitro({ prerender: { routes } })` in `vite.config.ts`: Nitro, the
+  deployment layer, prerenders and serves them, and its `prerender:generate` hook writes each page's
+  hash-based CSP ([ADR 0004](docs/decisions/0004-prerender-via-nitro.md)).
+- **CSP.** No policy allows `'unsafe-inline'` ([ADR 0010](docs/decisions/0010-content-security-policy.md)).
+  Never render `style` attributes or inline event handlers (`style={…}`, `onclick="…"` in raw HTML): the
+  prerender build fails on them and browsers block them on SSR pages. Put head scripts and styles through
+  the route's `head()` so the router adds the nonce.
 - **Tailwind.** Keep `@import "tailwindcss" source("../")` in `src/styles/app.css`. Without it, Tailwind
   scans `.output`, SSR and client CSS hashes diverge, and the CSS returns 404 in production.
   `tests/integration/assets.test.ts` guards this.
@@ -244,6 +250,8 @@ Regenerate these files; never edit them by hand:
   changes TanStack Query keys and causes a refetch after hydration. `src/start.ts` rejects
   state-changing requests from any other origin.
 - **E2E.** Wait for `body[data-hydrated="true"]` before interacting. Input before hydration is lost.
+  Import `test` and `expect` from `tests/e2e/fixtures.ts`, not `@playwright/test`: it fails the test on
+  any Content-Security-Policy violation.
 
 ## Library docs and skills
 

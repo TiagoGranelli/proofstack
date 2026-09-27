@@ -53,11 +53,16 @@
       // which drizzle-kit and the Better Auth CLI load outside Start.
       { "name": "server", "patterns": ["src/server/**"] },
       // The only non-server modules allowed to reference src/server: HTTP route handlers, server functions
-      // (createServerFn) and isomorphic factories (createIsomorphicFn). Start's compiler strips their server
-      // branches from the client bundle.
+      // (createServerFn), isomorphic factories (createIsomorphicFn) and the global function middleware
+      // (createMiddleware().server). Start's compiler strips their server branches from the client bundle.
       {
         "name": "server-adapters",
-        "patterns": ["src/routes/api/**", "src/lib/*.functions.ts", "src/lib/api-client.ts"]
+        "patterns": [
+          "src/routes/api/**",
+          "src/lib/*.functions.ts",
+          "src/lib/api-client.ts",
+          "src/lib/server-function-errors.ts"
+        ]
       },
       // Isomorphic helpers.
       { "name": "lib", "patterns": ["src/lib/**"] },

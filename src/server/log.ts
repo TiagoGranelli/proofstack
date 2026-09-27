@@ -42,27 +42,3 @@ export const log = (level: Level, msg: string, fields: Fields = {}) => {
   if (level === 'error') process.stderr.write(line)
   else process.stdout.write(line)
 }
-
-/**
- * Routes `console.error` and `console.warn` through `log`. Framework code (h3 inside TanStack Start,
- * the server-function and SSR pipelines, srvx) reports failures there as raw multi-line stacks with
- * `cause` chains, bypassing the sanitizing above; Start renders those errors into responses itself,
- * so they never reach Nitro's `error` hook. Only strings (first line) and the first Error argument are
- * kept; other arguments can be request data and are dropped.
- */
-const NITRO_PROCESS_TRAP = /^\[(unhandledRejection|uncaughtException)\]$/
-
-export const captureConsole = () => {
-  for (const level of ['error', 'warn'] as const) {
-    console[level] = (...args: unknown[]) => {
-      // Nitro's own process handlers print these; src/server/nitro/startup.ts already logs them.
-      if (typeof args[0] === 'string' && NITRO_PROCESS_TRAP.test(args[0])) return
-      const error = args.find((arg) => arg instanceof Error)
-      const text = args.filter((arg): arg is string => typeof arg === 'string').join(' ')
-      log(level, level === 'error' ? 'framework error' : 'framework warning', {
-        ...(text ? { detail: firstLine(text).slice(0, 500) } : {}),
-        ...(error ? { error } : {}),
-      })
-    }
-  }
-}

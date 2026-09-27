@@ -202,10 +202,12 @@ the address like the server does: `NITRO_PORT`, else `PORT`, else 3000; `NITRO_H
 
 On SIGTERM or SIGINT, srvx (Nitro's HTTP server) stops accepting connections, waits for in-flight
 requests up to `SERVER_SHUTDOWN_TIMEOUT` seconds (default 5) and then force-closes them. Nitro then runs
-its `close` hook (`src/server/nitro/shutdown.ts`), which ends the Postgres pool and disposes the Effect
-runtime. The SSR bundle registers those cleanups through a registry on `globalThis`
-(`src/server/lifecycle.ts`), because the Nitro plugin and the SSR code are separate module instances.
-The log line `shutdown complete` lists the cleanups that ran.
+its `close` hook, which ends the Postgres pool and disposes the Effect runtime. Server code registers
+those cleanups with `onShutdown` (`src/server/lifecycle.ts`), which hooks `close` through Nitro's
+documented `useNitroHooks()` from `nitro/app`; the SSR bundle imports it from Nitro's own runtime chunk,
+so it is the same app instance that srvx closes. The log line `shutdown complete` lists the cleanups
+that ran, and `verify:app` fails when it is missing, when `postgres-pool` is not among them, or when a
+connection to the test database outlives the process.
 
 Measured with the Docker image: `docker stop` returns in about 1.2 s with exit code 0, including an idle
 keep-alive connection. Keep the orchestrator's grace period above `SERVER_SHUTDOWN_TIMEOUT` (Docker's
@@ -235,10 +237,12 @@ entry can appear on the same line in a log collector. `node .output/migrate.mjs`
   values). The client gets an empty 500.
 - `auth request failed`: an unexpected Better Auth failure (for example, the database is down). The
   client gets an empty 500. Wrong passwords are `warn` entries from `source: "better-auth"`.
-- `framework error` and `framework warning`: anything TanStack Start, h3, srvx or another library
-  prints with `console.error` or `console.warn`, for example an exception thrown during SSR or inside a
-  server function. `detail` holds the first line of the text, `error` the error chain. Start answers
-  these requests with 500 on its own.
+- `server function failed`: a server function (`fn`, its name) threw something other than a redirect or
+  not-found, whether the browser or SSR called it. The global function middleware
+  (`src/lib/server-function-errors.ts`) logs the error and hands the caller `Error('Internal error')`
+  instead, so no raw message reaches the browser; an SSR caller renders the route error page.
+- `request error`: an error that reached Nitro's `error` hook from the request pipeline (`tags`,
+  `method`, `path`). Nitro answers it with a bare JSON 500.
 - `starting` and `shutdown complete` bracket the process lifetime. `starting` records `appUrl`,
   `trustedIpHeader` and `databasePoolMax`; `shutdown complete` lists the cleanups that ran.
 - `shutdown cleanup failed`: a cleanup (`cleanup` field) rejected during shutdown.
@@ -250,10 +254,25 @@ entry can appear on the same line in a log collector. `node .output/migrate.mjs`
 
 Logs never include headers, cookies, bodies or query strings. Error messages keep only their first
 line, and stacks keep only their frames, because Drizzle and pg append SQL parameters (emails, session
-tokens) on later lines.
+tokens) on later lines. `tests/integration/db-failure.test.ts` breaks the database under a running server
+and checks that neither the responses nor the log contain an email, password, session token or SQL
+parameter.
+
+Nothing patches `console`, so a few framework paths still print raw, multi-line text to stderr. None of
+them carries request data beyond the URL path:
+
+- h3 inside Start prints the error for a request Start cannot route, such as an unknown
+  `/_serverFn/<id>` (the id is part of the path), until TanStack/router#8246 ships
+  ([ADR 0009](decisions/0009-unknown-server-function-id.md)).
+- Start prints `Server Fn Error!` for a server-function request that fails before the function runs,
+  for example an unparsable payload.
+- Nitro prints `[uncaughtException]` or `[unhandledRejection]` with the error before it calls the `error`
+  hook, which then logs the JSON line. Such an error is a bug by definition; if it carried a Drizzle error,
+  its parameters would be in that raw line.
 
 After an uncaught exception the process logs it and exits with code 1 so the supervisor starts a clean
-one. Unhandled promise rejections are logged and the process continues.
+one (Nitro's `error` hook, tag `uncaughtException`, in `src/server/nitro/startup.ts`). Unhandled promise
+rejections are logged and the process continues.
 
 ## Security settings
 
@@ -266,17 +285,35 @@ one. Unhandled promise rejections are logged and the process continues.
   `GET /api/auth/get-session` are reachable (`src/server/http/auth-handler.ts`), the ones the UI uses.
   Every other Better Auth endpoint returns 404. Signing in again does not revoke a session the browser
   already held; that session stays valid until it expires or its user signs out from it.
-- **Server functions:** a request to `/_serverFn/<id>` with an unknown id answers 404 (`src/start.ts`).
+- **Server functions:** an error inside a server function reaches the browser only as
+  `Error('Internal error')` (see [Logs](#logs)). A request to `/_serverFn/<id>` with an unknown id gets
+  Nitro's bare JSON 500 (`{"status":500,"unhandled":true,"message":"HTTPError"}`), without the id or a
+  stack, until TanStack/router#8246 makes it a 404
+  ([ADR 0009](decisions/0009-unknown-server-function-id.md)).
 - **Cookies:** `HttpOnly`, `SameSite=Lax`, `Path=/`, 7-day expiry, and `__Secure-` plus `Secure` over
   https.
 - **Headers:** every response gets `X-Content-Type-Options`, `X-Frame-Options: DENY`,
   `Referrer-Policy`, `Cross-Origin-Opener-Policy`, `Cross-Origin-Resource-Policy`, `Permissions-Policy`,
   a Content-Security-Policy, and HSTS over https (`src/server/nitro/http.ts`).
-- **CSP:** SSR pages allow only scripts that carry the per-request nonce. Prerendered pages (`/about`)
-  and other static responses use `script-src 'self' 'unsafe-inline'`, because static HTML cannot carry a
-  per-request nonce. Styles allow `'unsafe-inline'` because Start inlines route CSS and React renders
-  `style` attributes.
-- **Caching:** each response sets its own `Cache-Control`; `src/start.ts` and the Nitro plugin never set
+- **CSP:** no policy allows `'unsafe-inline'` or `'unsafe-eval'`
+  ([ADR 0010](decisions/0010-content-security-policy.md)). The directives live in
+  `src/lib/content-security-policy.ts`.
+  - SSR pages, including not-found and error pages: `getRouter` (`src/router.tsx`) creates a nonce per
+    request, the router stamps it on every script, style and preload it renders, and the root route's
+    `headers` sends `script-src 'self' 'nonce-…' 'strict-dynamic'` and `style-src 'self' 'nonce-…'`.
+    `'strict-dynamic'` lets the nonced entry module load its imports and route chunks. Production only:
+    in `pnpm dev`, Vite injects CSS as `<style>` tags without the nonce.
+  - Prerendered pages (`/about`): Nitro's `prerender:generate` hook (`vite.config.ts`) hashes each inline
+    script and style with sha256 (parsed with parse5) and writes `script-src 'self' 'sha256-…'` as a route
+    rule header, which Nitro sends with the static file. An inline `style` or `on*` attribute fails the
+    build, because no hash can allow it.
+  - Everything else (JSON, public files, Nitro's error responses) gets
+    `default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`
+    (`src/server/nitro/http.ts`), which also appends `upgrade-insecure-requests` to document policies
+    over https.
+  - Every E2E test fails on a `securitypolicyviolation` event (`tests/e2e/fixtures.ts`), and
+    `tests/integration/csp.test.ts` checks the headers of each kind of response.
+- **Caching:** each response sets its own `Cache-Control`; the root route and the Nitro plugin never set
   or override it.
   - `/api/*` and `/api/auth/*` default to `no-store`.
   - SSR pages carry a per-request CSP nonce, so a shared cache must never reuse one: `/` sends

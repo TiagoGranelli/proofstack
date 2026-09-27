@@ -4,6 +4,8 @@ import { tanstackStart } from '@tanstack/react-start/plugin/vite'
 import react, { reactCompilerPreset } from '@vitejs/plugin-react'
 import { nitro } from 'nitro/vite'
 import { defineConfig } from 'vite'
+import { documentHeaders } from './src/lib/content-security-policy.ts'
+import { inlineSourceHashes } from './src/server/nitro/prerender-csp.ts'
 
 export default defineConfig({
   server: {
@@ -36,18 +38,28 @@ export default defineConfig({
   },
   plugins: [
     tailwindcss(),
-    // Inline the route CSS (~6 KB brotli) into the HTML: no render-blocking stylesheet request.
-    // Experimental in Start; needs the side-effect `import '#/styles/app.css'` in __root.tsx.
-    tanstackStart({ server: { build: { inlineCss: true } } }),
+    tanstackStart(),
     nitro({
-      // startup: validates env before listening. http: security headers, CSP and request logs for
-      // every response, static files included. shutdown: closes the pool and the Effect runtime.
-      plugins: ['./src/server/nitro/startup.ts', './src/server/nitro/http.ts', './src/server/nitro/shutdown.ts'],
-      // Start's own prerender output is not served by Nitro yet (TanStack/router#7473),
-      // so finite static pages are prerendered by Nitro instead.
+      // startup: validates env and logs process-level errors. http: security headers, the fallback CSP and
+      // request logs for every response, static files included.
+      plugins: ['./src/server/nitro/startup.ts', './src/server/nitro/http.ts'],
+      // Finite static pages are prerendered by Nitro, the deployment layer (ADR 0004).
       // failOnError: a page that cannot be prerendered (e.g. missing env) fails the build instead of
       // silently shipping without its static copy.
       prerender: { routes: ['/about'], crawlLinks: false, failOnError: true },
+      hooks: {
+        // A static page cannot carry a per-request nonce, so its CSP allows exactly its own inline scripts
+        // and styles by sha256 hash. Written as a route rule header, which Nitro applies to the static file;
+        // the server bundle is built after prerendering, so the rule is part of it.
+        'prerender:generate'(route, nitroBuild) {
+          if (route.error || !route.contents || !route.contentType?.includes('text/html')) return
+          const rule = nitroBuild.options.routeRules[route.route]
+          nitroBuild.options.routeRules[route.route] = {
+            ...rule,
+            headers: { ...rule?.headers, ...documentHeaders(inlineSourceHashes(route.contents)) },
+          }
+        },
+      },
       // Build-time .br/.gz copies of static assets, served by Nitro when the client accepts them.
       compressPublicAssets: { brotli: true, gzip: true },
     }),

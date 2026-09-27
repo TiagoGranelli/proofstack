@@ -156,14 +156,19 @@ describe('requests', () => {
     }
   })
 
-  it('answers an unknown server function with 404', async () => {
+  // Start answers an unknown id with a bare 500 until TanStack/router#8246 ships; then this expects 404
+  // (ADR 0009).
+  it('answers an unknown server function with an error that leaks nothing', async () => {
     const get = await fetch(`${appUrl}/_serverFn/does-not-exist`)
     const post = await fetch(`${appUrl}/_serverFn/does-not-exist`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', origin: appUrl },
       body: '{}',
     })
-    expect([get.status, post.status]).toEqual([404, 404])
+    for (const res of [get, post]) {
+      expect(res.status).toBeGreaterThanOrEqual(400)
+      expect(await res.text()).not.toMatch(/does-not-exist|Server function|\bat .+:\d+:\d+|node_modules|\.mjs/)
+    }
   })
 
   it('does not redirect to other hosts', async () => {
