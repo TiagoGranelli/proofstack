@@ -13,5 +13,7 @@ export default defineConfig({
     '@hey-api/typescript',
     '@hey-api/sdk',
     { name: '@tanstack/react-query', infiniteQueryOptions: true, infiniteQueryKeys: true },
+    // Typed MSW handlers for component tests, regenerated with the contract so mocks cannot drift.
+    'msw',
   ],
 })

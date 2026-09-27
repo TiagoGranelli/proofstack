@@ -45,6 +45,9 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup
+        with:
+          # The component tests in `pnpm check` run in Chromium (Vitest browser mode).
+          browsers: chromium
       - run: pnpm ci:static
 
   drift:

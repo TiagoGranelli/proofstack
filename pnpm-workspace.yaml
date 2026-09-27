@@ -3,6 +3,9 @@
 allowBuilds:
   # esbuild (via drizzle-kit/tsx) works without its postinstall binary check.
   esbuild: false
+  # msw's postinstall only copies mockServiceWorker.js into `msw.workerDirectory`, which is not set: the
+  # component tests serve the worker straight from node_modules (vitest.config.ts).
+  msw: false
 engineStrict: true
 # pnpm's default minimumReleaseAge quarantines fresh releases; exceptions must name exact versions.
 minimumReleaseAgeExclude:

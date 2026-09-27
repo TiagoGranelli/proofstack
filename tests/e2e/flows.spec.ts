@@ -1,29 +1,22 @@
-import { expect, test, type Page } from '@playwright/test'
+import type { Page } from '@playwright/test'
+import { expect, signIn, test, visit, type Author } from './support/app.ts'
 
-// verify:app trusts X-Forwarded-For from loopback, so every test (and every retry, which runs in a new
-// worker) signs in from its own client IP and never waits for another test's sign-in rate limit.
-let clientCount = 0
-test.beforeEach(async ({ context }, testInfo) => {
-  await context.setExtraHTTPHeaders({ 'x-forwarded-for': `198.18.${testInfo.workerIndex % 256}.${++clientCount}` })
-})
-
-const author = { email: process.env.TEST_USER_EMAIL!, password: process.env.TEST_USER_PASSWORD! }
-
-const visit = async (page: Page, path: string) => {
-  await page.goto(path)
-  await expect(page.locator('body[data-hydrated="true"]')).toBeAttached()
-}
-
-const signInWithForm = async (page: Page) => {
+const signInWithForm = async (page: Page, author: Author) => {
   await page.getByLabel('Email').fill(author.email)
   await page.getByLabel('Password').fill(author.password)
   await page.getByRole('button', { name: 'Sign in' }).click()
 }
 
-/** Signs the browser context in through the API, sharing its cookies, without touching the UI. */
-const signInWithApi = async (page: Page, baseURL: string) => {
-  const res = await page.request.post('/api/auth/sign-in/email', { data: author, headers: { origin: baseURL } })
-  expect(res.status()).toBe(200)
+/**
+ * On the dashboard, hydrated and rendered. Leaving a page before that (a `goto`, cleared cookies) races with
+ * it: the URL changes before the route's session check and loader finish, and after a server redirect the
+ * SSR HTML is there while its route chunks still load. A new navigation aborts those chunks, TanStack Router
+ * reloads the page on a failed chunk, and that reload aborts the `goto` (Firefox: NS_BINDING_ABORTED).
+ */
+const expectDashboard = async (page: Page) => {
+  await expect(page).toHaveURL(/\/dashboard$/)
+  await expect(page.locator('body[data-hydrated="true"]')).toBeAttached()
+  await expect(page.getByLabel('New post')).toBeVisible()
 }
 
 const exactly = (text: string) => new RegExp(`^${text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`)
@@ -77,8 +70,8 @@ test('public page hydrates from SSR without refetching or console errors', async
   expect(errors).toEqual([])
 })
 
-test('dashboard hydrates from SSR without refetching my posts', async ({ page, baseURL }) => {
-  await signInWithApi(page, baseURL!)
+test('dashboard hydrates from SSR without refetching my posts', async ({ page, author }) => {
+  await signIn(page, author)
   const refetches: string[] = []
   const errors: string[] = []
   page.on('request', (r) => new URL(r.url()).pathname.startsWith('/api/me/posts') && refetches.push(r.url()))
@@ -97,37 +90,41 @@ test('login form never submits credentials before hydration', async ({ page }) =
   await expect(page.getByRole('button', { name: 'Sign in' })).toBeDisabled()
 })
 
-test('private routes redirect anonymous visitors to login and back after sign-in', async ({ page }) => {
+test('private routes redirect anonymous visitors to login and back after sign-in', async ({ page, author }) => {
   await page.goto('/dashboard')
   await expect(page).toHaveURL(/\/login\?redirect=%2Fdashboard$/)
   await expect(page.locator('body[data-hydrated="true"]')).toBeAttached()
-  await signInWithForm(page)
-  await expect(page).toHaveURL(/\/dashboard$/)
+  await signInWithForm(page, author)
+  await expectDashboard(page)
 })
 
-test('sign-in follows a same-origin redirect and ignores a foreign one', async ({ page }) => {
+test('sign-in follows a same-origin redirect and ignores a foreign one', async ({ page, author }) => {
   await visit(page, '/login?redirect=%2Fabout')
-  await signInWithForm(page)
+  await signInWithForm(page, author)
   await expect(page).toHaveURL(/\/about$/)
+  await expect(page.getByRole('heading', { name: 'About' })).toBeVisible()
 
   // Signed in: /login goes straight to the dashboard.
   await page.goto('/login')
-  await expect(page).toHaveURL(/\/dashboard$/)
+  await expectDashboard(page)
 
   await page.context().clearCookies()
   for (const target of ['https://evil.example/', '//evil.example/']) {
     await visit(page, `/login?redirect=${encodeURIComponent(target)}`)
-    await signInWithForm(page)
-    await expect(page).toHaveURL(/\/dashboard$/)
+    await signInWithForm(page, author)
+    await expectDashboard(page)
     await page.context().clearCookies()
   }
 })
 
-test('author signs in, publishes, edits, sees the post publicly, deletes it and signs out', async ({ page }) => {
+test('author signs in, publishes, edits, sees the post publicly, deletes it and signs out', async ({
+  page,
+  author,
+}) => {
   await visit(page, '/login')
   // The session check that guards /dashboard is a GET server function: it must never be cached.
   const sessionCheck = page.waitForResponse((r) => r.url().includes('/_serverFn/') && r.request().method() === 'GET')
-  await signInWithForm(page)
+  await signInWithForm(page, author)
   await expect(page).toHaveURL(/\/dashboard$/)
   expect(page.url()).not.toContain('password')
   expect((await sessionCheck).headers()['cache-control']).toContain('no-store')
@@ -176,8 +173,8 @@ test('author signs in, publishes, edits, sees the post publicly, deletes it and 
   await expect(page).toHaveURL(/\/login\?redirect=%2Fdashboard$/)
 })
 
-test('a rejected save shows the error in the post and keeps the draft', async ({ page, baseURL }) => {
-  await signInWithApi(page, baseURL!)
+test('a rejected save shows the error in the post and keeps the draft', async ({ page, author }) => {
+  await signIn(page, author)
   await visit(page, '/dashboard')
   const body = `e2e rejected edit ${Date.now()}`
   await publish(page, body)
@@ -199,9 +196,9 @@ test('a rejected save shows the error in the post and keeps the draft', async ({
 
 test('client-side navigation shows a post published or edited moments ago, never the old list', async ({
   page,
-  baseURL,
+  author,
 }) => {
-  await signInWithApi(page, baseURL!)
+  await signIn(page, author)
   // The public list is cached in this tab, and hovering the link preloads it again before each write.
   await visit(page, '/')
   await navLink(page, 'Dashboard').click()
@@ -234,8 +231,8 @@ test('client-side navigation shows a post published or edited moments ago, never
   await expect(myPost(page, edited)).toHaveCount(0)
 })
 
-test('a failed sign-out says so and can be retried', async ({ page, baseURL }) => {
-  await signInWithApi(page, baseURL!)
+test('a failed sign-out says so and can be retried', async ({ page, author }) => {
+  await signIn(page, author)
   await visit(page, '/dashboard')
   await page.route('**/api/auth/sign-out', (route) => route.abort())
   await page.getByRole('button', { name: 'Sign out' }).click()

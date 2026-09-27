@@ -25,6 +25,8 @@ describe('headers', () => {
     expect(csp).not.toMatch(/script-src[^;]*'unsafe-(inline|eval)'/)
     expect(csp).toContain("frame-ancestors 'none'")
     expect(csp).toContain("object-src 'none'")
+    // E2E Firefox runs with COOP enforcement off (playwright.config.ts), so the header is only checked here.
+    expect(res.headers.get('cross-origin-opener-policy')).toBe('same-origin')
     const scripts = [...(await res.text()).matchAll(/<script\b[^>]*>/g)].map((m) => m[0])
     expect(scripts.length).toBeGreaterThan(0)
     for (const tag of scripts) expect(tag).toContain(`nonce="${nonce}"`)
@@ -38,6 +40,7 @@ describe('headers', () => {
       expect(res.status, path).toBe(200)
       expect(res.headers.get('x-content-type-options'), path).toBe('nosniff')
       expect(res.headers.get('x-frame-options'), path).toBe('DENY')
+      expect(res.headers.get('cross-origin-opener-policy'), path).toBe('same-origin')
       expect(res.headers.get('content-security-policy'), path).toContain("frame-ancestors 'none'")
     }
   })

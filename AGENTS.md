@@ -77,7 +77,9 @@ The UI follows [Bulletproof React](https://github.com/alan2207/bulletproof-react
 5. Map every new error tag to a message in `src/lib/api-error.ts`. Its error union is derived from the
    generated SDK, so `pnpm typecheck` fails until the switch in `describeApiError` handles the new tag.
 6. UI in `src/features/<name>/` (see [Frontend structure](#frontend-structure)) and routes in `src/routes/`.
-7. Integration tests in `tests/integration/` and E2E tests in `tests/e2e/` (see [Tests](#tests)).
+7. Tests, cheapest layer first (see [Tests](#tests)): handler branches in `tests/api/`, UI states in
+   `tests/component/`, then `tests/integration/` and `tests/e2e/` (each new page or UI state gets an entry
+   in `STATES` in `tests/e2e/a11y.spec.ts`).
 
 **Auth config change** (plugins, user fields). Run `pnpm auth:generate` to rewrite
 `src/server/db/schema/auth.ts`, then follow the database workflow.
@@ -93,8 +95,8 @@ Postgres, and applies migrations.
 
 | Command | Covers |
 | --- | --- |
-| `pnpm check` | `format:check`, `lint` (warnings are counted in the summary but do not fail), `typecheck`, `deadcode`, `unit` (Vitest project `unit`, `tests/unit`), the database-free drift checks (contract, migrations, auth) and repo guards (including kebab-case folder names). No database, no build, about 4 s. Run it before every hand-off. |
-| `pnpm test:unit [filter ...]` | Unit tests only: pure functions, no app |
+| `pnpm check` | `format:check`, `lint` (warnings are counted in the summary but do not fail), `typecheck`, `deadcode`, `tests` (`pnpm test:fast`: Vitest projects `unit`, `api` and `component` with the coverage gate, see [Tests](#tests)), the database-free drift checks (contract, migrations, auth) and repo guards (including kebab-case folder names). No database, no build, about 9 s. Needs Playwright's Chromium. Run it before every hand-off. |
+| `pnpm test:unit\|test:api\|test:component [filter ...]` | One fast layer (see [Tests](#tests)); `pnpm test:fast` runs all three with coverage |
 | `pnpm format`, `pnpm lint:fix` | Autofixes |
 | `pnpm check:drift [contract\|migrations\|auth\|database]` | Checks that generated files match their sources; `database` needs Postgres |
 | `pnpm build && pnpm verify:app [--no-e2e] [--no-integration] [--edge] [filter ...]` | Starts the built server against a fresh per-run `proofstack_<purpose>_<pid>_test` database (dropped afterwards) and runs Vitest (`tests/integration`) and Playwright (`tests/e2e`, projects from `PW_PROJECTS`); app logs go to `test-results/app-server.log`. `--edge` puts the Caddy edge in front. Refuses a stale `.output` |
@@ -102,7 +104,8 @@ Postgres, and applies migrations.
 | `pnpm ci:local [job ...]` | The CI jobs (`workflows static drift build verify lighthouse docker`, default all) as `pnpm ci:<job>` scripts in the Playwright Ubuntu container next to Postgres, all five browser projects included. Needs Docker. See [docs/operations.md](docs/operations.md#ci-and-local-ci) |
 
 `pnpm test` (Vitest project `integration`) and `pnpm test:e2e` expect an app that is already running at
-`APP_URL` with `TEST_USER_*` set; `verify:app` provides both.
+`APP_URL`; the integration tests also need `TEST_USER_*` and E2E the app's own environment (`DATABASE_URL`
+and the rest, to create its authors). `verify:app` provides all of it.
 
 **Lighthouse policy** (`POLICY` in `scripts/lighthouse.ts`): per page and form factor, accessibility, best
 practices and SEO must score 100 on every run; performance needs a median of at least 99, at most one run
@@ -113,11 +116,53 @@ inconclusive, not failed: a run's `benchmarkIndex` was below 1000 or Lighthouse 
 
 ## Tests
 
-- Install the test browsers once: `pnpm exec playwright install chromium firefox`. `verify:app` and
-  `lighthouse` use `CHROME_PATH` instead of Playwright's Chromium when it is set. E2E runs every flow on the
-  Playwright projects `chromium`, `firefox`, `webkit`, `Pixel 7` and `iPhone 15`; outside CI the default is
-  `chromium,firefox`, because WebKit needs Ubuntu's libraries. `PW_PROJECTS=all` (or a list) chooses;
-  `pnpm ci:local verify` runs all five.
+Test each behavior in the cheapest layer that can observe it:
+
+| Layer | Where | Run by | For |
+| --- | --- | --- | --- |
+| unit | `tests/unit` | `check` | Pure functions. Modules in `COVERAGE_GATE` (`vitest.config.ts`) need 100% lines and branches |
+| api | `tests/api` | `check` | Effect handler branching through `HttpApiTest`: in-memory `PostsRepo`, fake session store, no database |
+| component | `tests/component` | `check` | React components in Chromium (Vitest browser mode), network mocked by MSW: pending and disabled states, every error branch, limits, focus |
+| integration | `tests/integration` | `verify:app` | The built app over HTTP: SQL, Better Auth, CSRF, headers, rate limits |
+| e2e | `tests/e2e` | `verify:app` | Browser flows, axe on every page state, keyboard and focus, ARIA landmark snapshots |
+
+- Install the test browsers once: `pnpm exec playwright install chromium firefox`. `verify:app`,
+  `lighthouse` and the `component` project use `CHROME_PATH` instead of Playwright's Chromium when it is set.
+  E2E runs every flow on the Playwright projects `chromium`, `firefox`, `webkit`, `Pixel 7` and `iPhone 15`;
+  outside CI the default is `chromium,firefox`, because WebKit needs Ubuntu's libraries. `PW_PROJECTS=all`
+  (or a list) chooses; `pnpm ci:local verify` runs all five.
+- **Coverage.** `pnpm test:fast` writes `coverage/index.html` for all of `src` (report only) and fails unless
+  every module in `COVERAGE_GATE` is fully covered. Add security-critical pure modules there with their tests.
+- **api.** `tests/api/harness.ts`: `apiLayer({ databaseDown?, clockStepMicros? })` provides the real handlers and
+  `RequestValidation` over a fresh in-memory repository; `clientAs('alice' | 'bob' | 'forged' | 'none')`
+  is a typed client with that session (one client per identity: the client captures its middleware).
+  The typed client refuses to encode invalid payloads, so send those through `webHandler()` as raw
+  `Request`s. The project sets dummy env values (`vitest.config.ts`) because `src/server/env.ts` validates
+  at import; nothing connects to them.
+- **component.** Render with `renderInApp(ui, { url })` from `tests/component/test-utils.tsx` (memory
+  router with the app's paths, fresh `QueryClient`; returns `router` and `queryClient`). Mock the network
+  per test with `worker.use(...)` from `tests/component/api-mocks.ts`: `api.<operation>({ body })` (handlers
+  generated from `openapi.json` by Hey API's `msw` plugin into `src/sdk/msw.gen.ts`), `apiError(operation,
+  status, body)` (only statuses and bodies the operation declares), `apiFailure` (network error or non-JSON
+  body), `held()` (a response that waits, for pending states) and `auth.signIn`/`auth.signOut` (Better
+  Auth, outside the contract). A request to `/api` without a handler fails the test. `#/lib/api-client.ts`
+  is aliased to its browser branch (`tests/component/stubs/api-client.ts`).
+- **Accessibility.** `expectAccessible(page, '<state>')` (`tests/e2e/support/a11y.ts`) fails on any axe
+  violation of WCAG 2.0/2.1/2.2 A and AA or best practices. A new page or UI state is one entry in `STATES`
+  in `tests/e2e/a11y.spec.ts`, a landmark snapshot in its `landmarks` block, and, if it has controls, a row
+  in the tab-order table of `tests/e2e/keyboard.spec.ts` (`tabOrder` records every Tab stop, its accessible
+  name and visible focus, and fails on a focus trap: `tabThrough` walks until a temporary sentinel after the
+  last control, because what a browser does past the last control differs by engine).
+  `navigateWithApiResponse(page, '/api/posts' | '/api/me/posts', response)` (`tests/e2e/support/app.ts`)
+  reaches empty and failure states by answering the browser's API call on a client-side navigation; build
+  list bodies with `lastPage(...)` so they match the contract's `PostPage`.
+- **E2E isolation.** Specs run in parallel on one database and never depend on each other's data. Import
+  `test` from `tests/e2e/support/app.ts`: every worker gets its own `author` (created through
+  `scripts/create-user.ts`) and every browser and API context its own client IP (sign-in rate limit).
+  Find your posts by a unique body. Data several specs need is written once by the `seed` project
+  (`tests/e2e/seed.setup.ts`), which runs before the browser projects; today that is more than a page of
+  posts by an author only `posts-pagination.spec.ts` reads (`PAGINATED_AUTHOR`). Never publish many posts
+  from a spec: a post published moments ago must stay on the first page of `/`.
 - `verify:app` starts one server on one database per run. The integration tests and then the E2E tests
   run against it, so both suites see each other's data.
 - Integration files run in parallel against the same two test users. Each file creates its own client IP

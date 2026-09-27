@@ -4,13 +4,27 @@ const baseURL = process.env.APP_URL ?? 'http://localhost:3000'
 
 // Every flow runs on every project. WebKit (and with it iPhone 15) needs Ubuntu's libraries and does not run
 // on every Linux host, so outside CI the default is the two desktop engines that run anywhere; `pnpm ci:local`
-// and CI run all five. Choose with PW_PROJECTS: a comma-separated list of names, or `all`.
+// and CI run all five. Choose with PW_PROJECTS: a comma-separated list of names, or `all`. Each starts after
+// the `seed` project, which writes the data the specs share (tests/e2e/seed.setup.ts).
+const dependencies = ['seed']
 const PROJECTS = [
-  { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
-  { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
-  { name: 'webkit', use: { ...devices['Desktop Safari'] } },
-  { name: 'Pixel 7', use: { ...devices['Pixel 7'] } },
-  { name: 'iPhone 15', use: { ...devices['iPhone 15'] } },
+  { name: 'chromium', dependencies, use: { ...devices['Desktop Chrome'] } },
+  {
+    name: 'firefox',
+    dependencies,
+    use: {
+      ...devices['Desktop Firefox'],
+      // Playwright 1.63's Firefox driver sometimes never resolves the first `goto` of a page to a document with
+      // `Cross-Origin-Opener-Policy: same-origin`, which every page of the app sends: the browsing-context swap
+      // stays in the same process and Juggler answers the new document's commit from a stale cache
+      // (microsoft/playwright#42731, fixed after 1.63). With this, Firefox skips COOP's browsing-context swap;
+      // tests/integration/security.test.ts checks the header. Remove on upgrading Playwright past 1.63.
+      launchOptions: { firefoxUserPrefs: { 'browser.tabs.remote.useCrossOriginOpenerPolicy': false } },
+    },
+  },
+  { name: 'webkit', dependencies, use: { ...devices['Desktop Safari'] } },
+  { name: 'Pixel 7', dependencies, use: { ...devices['Pixel 7'] } },
+  { name: 'iPhone 15', dependencies, use: { ...devices['iPhone 15'] } },
 ]
 const LOCAL_DEFAULT = ['chromium', 'firefox']
 
@@ -35,5 +49,5 @@ export default defineConfig({
     baseURL,
     trace: 'retain-on-failure',
   },
-  projects: PROJECTS.filter((p) => names.includes(p.name)),
+  projects: [{ name: 'seed', testMatch: /seed\.setup\.ts$/ }, ...PROJECTS.filter((p) => names.includes(p.name))],
 })
