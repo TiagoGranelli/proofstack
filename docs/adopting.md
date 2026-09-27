@@ -37,7 +37,7 @@ It fits less well when:
 
    On GitHub, choose **Use this template** and tick **Include all branches** to get both, then make the one
    you want your default branch. Without GitHub, copy one branch with
-   `npx giget gh:<org>/<repo>#minimal <dir>` (or `#main`).
+   `npx giget gh:TiagoGranelli/proofstack#minimal <dir>` (or `#main`).
 2. Install and start what the app needs (Node 26, pnpm 12 and Docker, see the README):
 
    ```sh
@@ -165,7 +165,7 @@ upgrade notes: what to run and what to check when you take the change. A reposit
 template has no shared history with it, so take updates as patches:
 
 ```sh
-git remote add template https://github.com/<owner>/proofstack.git
+git remote add template https://github.com/TiagoGranelli/proofstack.git
 git fetch template --tags
 git log --oneline v0.1.0..v0.2.0            # what changed between two releases (tags from the template)
 git cherry-pick <commit>                    # one change

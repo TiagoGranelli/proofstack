@@ -1,38 +1,38 @@
 # The quality gates decide what "done" means for every change, agent-written ones included. A pull request that
 # loosens them (a rule turned off, a threshold raised, a module dropped from COVERAGE_GATE, a selector dropped from
-# .oxlintrc.json, an entry in PUBLIC_OPERATIONS) needs a review from the owners below. Replace
-# @your-org/maintainers with the real team or user, and require code-owner review in the branch protection of
-# main; until then this file only suggests reviewers. The last matching pattern wins, so later lines narrow
-# earlier ones.
+# .oxlintrc.json, an entry in PUBLIC_OPERATIONS) needs a review from the owners below. A repository
+# created from the template replaces @TiagoGranelli with its own team or user (docs/adopting.md), and requires
+# code-owner review in the branch protection of main; until then this file only suggests reviewers. The last
+# matching pattern wins, so later lines narrow earlier ones.
 
 # Lint, types, dead code, complexity, duplication, formatting.
-/.oxlintrc.json      @your-org/maintainers
-/.oxfmtrc.json       @your-org/maintainers
-/.fallowrc.json      @your-org/maintainers
-/tsconfig.json       @your-org/maintainers
+/.oxlintrc.json      @TiagoGranelli
+/.oxfmtrc.json       @TiagoGranelli
+/.fallowrc.json      @TiagoGranelli
+/tsconfig.json       @TiagoGranelli
 
 # Test gates: COVERAGE_GATE and the projects live in vitest.config.ts.
-/vitest.config.ts    @your-org/maintainers
-/playwright.config.ts @your-org/maintainers
+/vitest.config.ts    @TiagoGranelli
+/playwright.config.ts @TiagoGranelli
 
 # The gate list and pre-commit hook, the repository rules, the public operations, the drift checks.
-/lefthook.yml                        @your-org/maintainers
-/tests/unit/repo-policy.test.ts      @your-org/maintainers
-/tests/api/public-operations.test.ts @your-org/maintainers
-/scripts/check-drift.ts              @your-org/maintainers
-/scripts/ci-jobs.ts                  @your-org/maintainers
+/lefthook.yml                        @TiagoGranelli
+/tests/unit/repo-policy.test.ts      @TiagoGranelli
+/tests/api/public-operations.test.ts @TiagoGranelli
+/scripts/check-drift.ts              @TiagoGranelli
+/scripts/ci-jobs.ts                  @TiagoGranelli
 
 # Supply chain: exact versions, build-script, release-age and trust exceptions, overrides, vulnerability and
 # license exceptions, secret-scan and migration-lint exceptions.
-/package.json                 @your-org/maintainers
-/pnpm-workspace.yaml          @your-org/maintainers
-/.grype.yaml                  @your-org/maintainers
-/scripts/licenses.ts          @your-org/maintainers
-/scripts/images.ts            @your-org/maintainers
-/.gitleaks.toml               @your-org/maintainers
-/.gitleaksignore              @your-org/maintainers
-/.squawk.toml                 @your-org/maintainers
+/package.json                 @TiagoGranelli
+/pnpm-workspace.yaml          @TiagoGranelli
+/.grype.yaml                  @TiagoGranelli
+/scripts/licenses.ts          @TiagoGranelli
+/scripts/images.ts            @TiagoGranelli
+/.gitleaks.toml               @TiagoGranelli
+/.gitleaksignore              @TiagoGranelli
+/.squawk.toml                 @TiagoGranelli
 
 # CI workflows, actions, Renovate and this file.
-/.github/            @your-org/maintainers
-/renovate.json       @your-org/maintainers
+/.github/            @TiagoGranelli
+/renovate.json       @TiagoGranelli
