@@ -6,7 +6,7 @@ type CreatePostConfig = Omit<ReturnType<typeof myPostsCreateMutation>, 'mutation
 
 /**
  * Publishes a post. The caller's `onSuccess` runs first (reset the form, announce), then both post lists are
- * invalidated; the mutation stays pending until the author's list has been refetched.
+ * refreshed; the mutation stays pending until both have been refetched (see invalidatePosts).
  */
 export function useCreatePost({ mutationConfig }: { mutationConfig?: CreatePostConfig } = {}) {
   const queryClient = useQueryClient()

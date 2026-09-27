@@ -13,6 +13,11 @@ export type ServiceUnavailableEncoded = {
     message: string;
 };
 
+/**
+ * Opaque cursor from `nextCursor` of the previous page. Omit it for the first page.
+ */
+export type PageCursor = string;
+
 export type Post = {
     id: string;
     body: string;
@@ -21,13 +26,12 @@ export type Post = {
     updatedAt: string;
 };
 
-export type UnauthorizedEncoded = {
-    _tag: 'Unauthorized';
-    message: string;
-};
-
-export type PostInput = {
-    body: string;
+/**
+ * One page of posts, newest first. `nextCursor` is null on the last page.
+ */
+export type PostPage = {
+    items: Array<Post>;
+    nextCursor: PageCursor | null;
 };
 
 export type ValidationIssue = {
@@ -39,6 +43,15 @@ export type ValidationErrorEncoded = {
     _tag: 'ValidationError';
     message: string;
     issues: Array<ValidationIssue>;
+};
+
+export type UnauthorizedEncoded = {
+    _tag: 'Unauthorized';
+    message: string;
+};
+
+export type PostInput = {
+    body: string;
 };
 
 export type PostNotFoundEncoded = {
@@ -90,15 +103,30 @@ export type SystemReadyResponse = SystemReadyResponses[keyof SystemReadyResponse
 export type PublicPostsListData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        cursor?: PageCursor;
+        /**
+         * Posts per page, 1 to 50. Default 20.
+         */
+        limit?: string;
+    };
     url: '/api/posts';
 };
 
+export type PublicPostsListErrors = {
+    /**
+     * ValidationError
+     */
+    400: ValidationErrorEncoded;
+};
+
+export type PublicPostsListError = PublicPostsListErrors[keyof PublicPostsListErrors];
+
 export type PublicPostsListResponses = {
     /**
-     * Success
+     * One page of posts, newest first. `nextCursor` is null on the last page.
      */
-    200: Array<Post>;
+    200: PostPage;
 };
 
 export type PublicPostsListResponse = PublicPostsListResponses[keyof PublicPostsListResponses];
@@ -106,11 +134,21 @@ export type PublicPostsListResponse = PublicPostsListResponses[keyof PublicPosts
 export type MyPostsListData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        cursor?: PageCursor;
+        /**
+         * Posts per page, 1 to 50. Default 20.
+         */
+        limit?: string;
+    };
     url: '/api/me/posts';
 };
 
 export type MyPostsListErrors = {
+    /**
+     * ValidationError
+     */
+    400: ValidationErrorEncoded;
     /**
      * Unauthorized
      */
@@ -121,9 +159,9 @@ export type MyPostsListError = MyPostsListErrors[keyof MyPostsListErrors];
 
 export type MyPostsListResponses = {
     /**
-     * Success
+     * One page of posts, newest first. `nextCursor` is null on the last page.
      */
-    200: Array<Post>;
+    200: PostPage;
 };
 
 export type MyPostsListResponse = MyPostsListResponses[keyof MyPostsListResponses];

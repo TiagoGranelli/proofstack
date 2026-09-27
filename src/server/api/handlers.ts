@@ -3,11 +3,15 @@ import { Effect } from 'effect'
 import { HttpApiBuilder } from 'effect/unstable/httpapi'
 import { Api } from '#/contract/api.ts'
 import { ServiceUnavailable } from '#/contract/errors.ts'
+import { POSTS_PAGE_DEFAULT } from '#/contract/limits.ts'
 import { CurrentUser } from '#/contract/middleware.ts'
 import { PostNotFound } from '#/contract/posts.ts'
-import { PostsRepo } from '../posts/repo.ts'
+import { PostsRepo, type PageRequest } from '../posts/repo.ts'
 
-const PUBLIC_PAGE_SIZE = 50
+const pageRequest = (query: { readonly cursor?: PageRequest['cursor']; readonly limit?: number }): PageRequest => ({
+  cursor: query.cursor,
+  limit: query.limit ?? POSTS_PAGE_DEFAULT,
+})
 
 export const SystemHandlers = HttpApiBuilder.group(
   Api,
@@ -30,7 +34,7 @@ export const PublicPostsHandlers = HttpApiBuilder.group(
   'publicPosts',
   Effect.fn(function* (handlers) {
     const repo = yield* PostsRepo
-    return handlers.handle('list', () => repo.listPublic(PUBLIC_PAGE_SIZE).pipe(Effect.orDie))
+    return handlers.handle('list', ({ query }) => repo.listPublic(pageRequest(query)).pipe(Effect.orDie))
   }),
 )
 
@@ -40,7 +44,9 @@ export const MyPostsHandlers = HttpApiBuilder.group(
   Effect.fn(function* (handlers) {
     const repo = yield* PostsRepo
     return handlers
-      .handle('list', () => CurrentUser.use((author) => repo.listByAuthor(author)).pipe(Effect.orDie))
+      .handle('list', ({ query }) =>
+        CurrentUser.use((author) => repo.listByAuthor(author, pageRequest(query))).pipe(Effect.orDie),
+      )
       .handle('create', ({ payload }) =>
         CurrentUser.use((author) => repo.create(author, payload.body)).pipe(Effect.orDie),
       )

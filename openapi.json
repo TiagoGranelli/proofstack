@@ -65,18 +65,44 @@
           "Public posts"
         ],
         "operationId": "publicPosts.list",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/PageCursor"
+            },
+            "required": false
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{1,3}$",
+              "description": "Posts per page, 1 to 50. Default 20."
+            },
+            "required": false
+          }
+        ],
         "security": [],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "One page of posts, newest first. `nextCursor` is null on the last page.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/Post"
-                  }
+                  "$ref": "#/components/schemas/PostPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ValidationError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorEncoded"
                 }
               }
             }
@@ -90,7 +116,26 @@
           "My posts"
         ],
         "operationId": "myPosts.list",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/PageCursor"
+            },
+            "required": false
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{1,3}$",
+              "description": "Posts per page, 1 to 50. Default 20."
+            },
+            "required": false
+          }
+        ],
         "security": [
           {
             "sessionCookie": []
@@ -101,14 +146,21 @@
         ],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "One page of posts, newest first. `nextCursor` is null on the last page.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/Post"
-                  }
+                  "$ref": "#/components/schemas/PostPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ValidationError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorEncoded"
                 }
               }
             }
@@ -357,6 +409,10 @@
         ],
         "additionalProperties": false
       },
+      "PageCursor": {
+        "type": "string",
+        "description": "Opaque cursor from `nextCursor` of the previous page. Omit it for the first page."
+      },
       "Post": {
         "type": "object",
         "properties": {
@@ -385,39 +441,32 @@
         ],
         "additionalProperties": false
       },
-      "UnauthorizedEncoded": {
+      "PostPage": {
         "type": "object",
         "properties": {
-          "_tag": {
-            "type": "string",
-            "enum": [
-              "Unauthorized"
-            ]
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Post"
+            }
           },
-          "message": {
-            "type": "string"
+          "nextCursor": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PageCursor"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
-          "_tag",
-          "message"
+          "items",
+          "nextCursor"
         ],
-        "additionalProperties": false
-      },
-      "PostInput": {
-        "type": "object",
-        "properties": {
-          "body": {
-            "type": "string",
-            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
-            "minLength": 1,
-            "maxLength": 280
-          }
-        },
-        "required": [
-          "body"
-        ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "description": "One page of posts, newest first. `nextCursor` is null on the last page."
       },
       "ValidationIssue": {
         "type": "object",
@@ -461,6 +510,40 @@
           "_tag",
           "message",
           "issues"
+        ],
+        "additionalProperties": false
+      },
+      "UnauthorizedEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "Unauthorized"
+            ]
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "_tag",
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "PostInput": {
+        "type": "object",
+        "properties": {
+          "body": {
+            "type": "string",
+            "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+            "minLength": 1,
+            "maxLength": 280
+          }
+        },
+        "required": [
+          "body"
         ],
         "additionalProperties": false
       },

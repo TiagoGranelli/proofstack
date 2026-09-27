@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { MyPostsCreateData, MyPostsCreateErrors, MyPostsCreateResponses, MyPostsListData, MyPostsListErrors, MyPostsListResponses, MyPostsRemoveData, MyPostsRemoveErrors, MyPostsRemoveResponses, MyPostsUpdateData, MyPostsUpdateErrors, MyPostsUpdateResponses, PublicPostsListData, PublicPostsListResponses, SystemHealthData, SystemHealthResponses, SystemReadyData, SystemReadyErrors, SystemReadyResponses } from './types.gen';
+import type { MyPostsCreateData, MyPostsCreateErrors, MyPostsCreateResponses, MyPostsListData, MyPostsListErrors, MyPostsListResponses, MyPostsRemoveData, MyPostsRemoveErrors, MyPostsRemoveResponses, MyPostsUpdateData, MyPostsUpdateErrors, MyPostsUpdateResponses, PublicPostsListData, PublicPostsListErrors, PublicPostsListResponses, SystemHealthData, SystemHealthResponses, SystemReadyData, SystemReadyErrors, SystemReadyResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -22,7 +22,7 @@ export const systemHealth = <ThrowOnError extends boolean = false>(options?: Opt
 
 export const systemReady = <ThrowOnError extends boolean = false>(options?: Options<SystemReadyData, ThrowOnError>): RequestResult<SystemReadyResponses, SystemReadyErrors, ThrowOnError> => (options?.client ?? client).get<SystemReadyResponses, SystemReadyErrors, ThrowOnError>({ url: '/api/ready', ...options });
 
-export const publicPostsList = <ThrowOnError extends boolean = false>(options?: Options<PublicPostsListData, ThrowOnError>): RequestResult<PublicPostsListResponses, unknown, ThrowOnError> => (options?.client ?? client).get<PublicPostsListResponses, unknown, ThrowOnError>({ url: '/api/posts', ...options });
+export const publicPostsList = <ThrowOnError extends boolean = false>(options?: Options<PublicPostsListData, ThrowOnError>): RequestResult<PublicPostsListResponses, PublicPostsListErrors, ThrowOnError> => (options?.client ?? client).get<PublicPostsListResponses, PublicPostsListErrors, ThrowOnError>({ url: '/api/posts', ...options });
 
 export const myPostsList = <ThrowOnError extends boolean = false>(options?: Options<MyPostsListData, ThrowOnError>): RequestResult<MyPostsListResponses, MyPostsListErrors, ThrowOnError> => (options?.client ?? client).get<MyPostsListResponses, MyPostsListErrors, ThrowOnError>({
     security: [{
