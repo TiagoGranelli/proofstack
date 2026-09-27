@@ -1,17 +1,13 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import { ApiErrorAlert } from '#/components/errors/api-error-alert.tsx'
 import { Button } from '#/components/ui/button.tsx'
 import { Label } from '#/components/ui/label.tsx'
 import { Textarea } from '#/components/ui/textarea.tsx'
-import { dropMyPost, invalidatePosts, replaceMyPost } from '#/features/posts/api/posts-cache.ts'
+import { isPostNotFound, useDeletePost } from '#/features/posts/api/delete-post.ts'
+import { useUpdatePost } from '#/features/posts/api/update-post.ts'
 import { CharacterCount, isTooLong } from '#/features/posts/components/character-count.tsx'
-import { PostCard } from '#/features/posts/components/post-list.tsx'
-import { apiErrorTag } from '#/lib/api-error.ts'
-import { myPostsRemoveMutation, myPostsUpdateMutation } from '#/sdk/@tanstack/react-query.gen.ts'
+import { PostCard } from '#/features/posts/components/post-card.tsx'
 import type { Post } from '#/sdk/types.gen.ts'
-
-const isPostNotFound = (error: unknown) => apiErrorTag(error) === 'PostNotFound'
 
 /**
  * One of the author's posts, with Edit and Delete. Edit swaps the body for a form; focus moves into the
@@ -19,35 +15,22 @@ const isPostNotFound = (error: unknown) => apiErrorTag(error) === 'PostNotFound'
  */
 export function MyPost(props: { post: Post; onUpdated?: () => void; onDeleted?: () => void }) {
   const { post } = props
-  const queryClient = useQueryClient()
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(post.body)
   const editButton = useRef<HTMLButtonElement>(null)
   const textarea = useRef<HTMLTextAreaElement>(null)
   const returnFocus = useRef(false)
 
-  const update = useMutation({
-    ...myPostsUpdateMutation(),
-    onSuccess: async (saved) => {
-      replaceMyPost(queryClient, saved)
-      returnFocus.current = true
-      setEditing(false)
-      props.onUpdated?.()
-      await invalidatePosts(queryClient)
+  const update = useUpdatePost({
+    mutationConfig: {
+      onSuccess: () => {
+        returnFocus.current = true
+        setEditing(false)
+        props.onUpdated?.()
+      },
     },
   })
-  const remove = useMutation({
-    ...myPostsRemoveMutation(),
-    onSuccess: async () => {
-      dropMyPost(queryClient, post.id)
-      props.onDeleted?.()
-      await invalidatePosts(queryClient)
-    },
-    // Already gone (deleted in another tab): the refetch removes it from the list.
-    onError: async (error) => {
-      if (isPostNotFound(error)) await invalidatePosts(queryClient)
-    },
-  })
+  const remove = useDeletePost({ mutationConfig: { onSuccess: () => props.onDeleted?.() } })
 
   useEffect(() => {
     if (editing) {

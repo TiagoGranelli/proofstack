@@ -2,7 +2,7 @@ import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useRef, useState } from 'react'
 import { Button } from '#/components/ui/button.tsx'
-import { myPostsQuery } from '#/features/posts/api/posts-cache.ts'
+import { getMyPostsQueryOptions } from '#/features/posts/api/get-my-posts.ts'
 import { MyPost } from '#/features/posts/components/my-post.tsx'
 import { PostComposer } from '#/features/posts/components/post-composer.tsx'
 import { PostList } from '#/features/posts/components/post-list.tsx'
@@ -10,7 +10,7 @@ import { authClient } from '#/lib/auth-client.ts'
 
 export const Route = createFileRoute('/_authed/dashboard')({
   head: () => ({ meta: [{ title: 'Dashboard · ProofStack' }, { name: 'robots', content: 'noindex' }] }),
-  loader: ({ context }) => context.queryClient.fetchQuery(myPostsQuery()),
+  loader: ({ context }) => context.queryClient.fetchQuery(getMyPostsQueryOptions()),
   component: Dashboard,
 })
 
@@ -18,7 +18,7 @@ function Dashboard() {
   const { user } = Route.useRouteContext()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const { data: posts } = useSuspenseQuery(myPostsQuery())
+  const { data: posts } = useSuspenseQuery(getMyPostsQueryOptions())
   // Screen-reader confirmation for writes whose result is otherwise only visual. `id` changes on every
   // write, so the same sentence twice in a row ("Post saved.") is a new node and is announced again.
   const [status, setStatus] = useState({ text: '', id: 0 })
