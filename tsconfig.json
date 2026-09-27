@@ -25,8 +25,67 @@
     "noEmit": true,
     "erasableSyntaxOnly": true,
     // Effect's diagnostics (floating effects, leaking requirements, missing yield*, …): in the editor through
-    // @effect/tsgo's language service, and in `pnpm check` as the `effect` gate (`effect-tsgo diagnostics`).
-    "plugins": [{ "name": "@effect/language-service" }]
+    // @effect/tsgo's language service, and in `pnpm check` as the `effect` job (`effect-tsgo diagnostics --strict`).
+    // --strict fails on errors and warnings but not on suggestions, so every rule whose default is "suggestion"
+    // is promoted to "warning": each one names a simpler or safer Effect API, and the gate has always failed on
+    // them. A rule added in an @effect/tsgo upgrade starts as a suggestion: add it here.
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "diagnosticSeverity": {
+          "abortControllerInEffect": "warning",
+          "acquireReleaseDisposable": "warning",
+          "allOfMapToForEach": "warning",
+          "catchAllTagDispatchToCatchTag": "warning",
+          "catchAllToMapError": "warning",
+          "catchChainToFirstSuccessOf": "warning",
+          "catchConditionalRefailToCatchIf": "warning",
+          "catchDieToOrDie": "warning",
+          "catchIfTagToCatchTag": "warning",
+          "catchRefailToTapError": "warning",
+          "catchTagToCatchReason": "warning",
+          "catchToIgnore": "warning",
+          "catchToOrElseSucceed": "warning",
+          "catchUnfailableEffect": "warning",
+          "effectFnOpportunity": "warning",
+          "effectMapFlatten": "warning",
+          "effectMapVoid": "warning",
+          "effectSucceedWithVoid": "warning",
+          "flatMapConditionalToFilterOrFail": "warning",
+          "flatMapIgnoredParamToAndThen": "warning",
+          "flatMapToMap": "warning",
+          "lazyEffect": "warning",
+          "leakingRequirements": "warning",
+          "mapSomeToAsSome": "warning",
+          "matchEffectToMapBoth": "warning",
+          "matchEffectToMatch": "warning",
+          "multipleCatchTag": "warning",
+          "optionMatchToFromOption": "warning",
+          "preferSucceedSomeOrNone": "warning",
+          "preferTypedSchemaDecoder": "warning",
+          "preferUnsafeConstructor": "warning",
+          "provideLayerSucceedToProvideService": "warning",
+          "raceFirstWithSleepToTimeout": "warning",
+          "redundantMapError": "warning",
+          "redundantOrDie": "warning",
+          "redundantSchemaTagIdentifier": "warning",
+          "returnEffectInGen": "warning",
+          "runEffectInsideEffect": "warning",
+          "runOfExitToRunExit": "warning",
+          "schemaNumber": "warning",
+          "schemaStructWithTag": "warning",
+          "schemaSyncInEffect": "warning",
+          "syncToSucceed": "warning",
+          "timeoutCatchTagToTimeoutOrElse": "warning",
+          "tryCatchInEffectGen": "warning",
+          "unnecessaryEffectGen": "warning",
+          "unnecessaryFailYieldableError": "warning",
+          "unnecessaryPipe": "warning",
+          "unnecessaryPipeChain": "warning",
+          "unnecessaryTypeofType": "warning"
+        }
+      }
+    ]
   },
   "include": ["src", "scripts", "tests", "*.config.ts"],
   "exclude": ["node_modules", ".output", "repos"]
