@@ -18,16 +18,21 @@ const readOrigin = (name: string): string => {
   } catch {
     throw new Error(`${name} must be an origin such as https://example.com (got "${raw}")`)
   }
-  if (url.protocol !== 'https:' && url.protocol !== 'http:') throw new Error(`${name} must use http or https`)
+  if (url.protocol !== 'https:' && url.protocol !== 'http:')
+    throw new Error(`${name} must use http or https (got "${url.protocol}")`)
   if (url.pathname !== '/' || url.search || url.hash)
-    throw new Error(`${name} must be an origin such as https://example.com`)
+    throw new Error(
+      `${name} must be an origin such as https://example.com, without a path, query or hash (got "${raw}")`,
+    )
   return url.origin
 }
 
 const readSecret = (name: string): string => {
   const value = read(name)
   if (value.length < 32)
-    throw new Error(`${name} must have at least 32 characters (generate with: openssl rand -base64 32)`)
+    throw new Error(
+      `${name} must have at least 32 characters (got ${value.length}; generate one with: openssl rand -base64 32)`,
+    )
   return value
 }
 
@@ -49,18 +54,24 @@ const readCidrList = (name: string): string[] => {
   return entries
 }
 
-const readInt = (name: string, fallback: number, min: number, max: number): number => {
+/** An optional integer setting: `fallback` when unset, an error outside `min`..`max`. */
+const readInt = (name: string, bounds: { fallback: number; min: number; max: number }): number => {
+  const { fallback, min, max } = bounds
   const raw = process.env[name]?.trim()
   if (!raw) return fallback
   const value = Number(raw)
   if (!Number.isInteger(value) || value < min || value > max)
-    throw new Error(`${name} must be an integer between ${min} and ${max}`)
+    throw new Error(`${name} must be an integer between ${min} and ${max} (got "${raw}")`)
   return value
 }
 
+/** The scheme of a URL-like value, the only part of a connection string safe to print (the rest may hold a password). */
+const schemeOf = (value: string): string => /^([a-z][a-z\d+.-]*):/i.exec(value)?.[1] ?? 'none'
+
 const readDatabaseUrl = (name: string): string => {
   const value = read(name)
-  if (!/^postgres(ql)?:\/\//.test(value)) throw new Error(`${name} must be a postgres:// connection string`)
+  if (!/^postgres(ql)?:\/\//.test(value))
+    throw new Error(`${name} must be a postgres:// connection string (got scheme "${schemeOf(value)}")`)
   return value
 }
 
@@ -82,9 +93,12 @@ const readSmtp = (): { url: string; from: string } | undefined => {
     throw new Error('SMTP_URL must be a URL such as smtps://user:password@smtp.example.com:465')
   }
   if (!['smtp:', 'smtps:'].includes(parsed.protocol) || !parsed.hostname)
-    throw new Error('SMTP_URL must use smtp:// (STARTTLS) or smtps:// (TLS) and name a host')
+    throw new Error(
+      `SMTP_URL must use smtp:// (STARTTLS) or smtps:// (TLS) and name a host (got scheme "${schemeOf(url)}")`,
+    )
   const from = read('MAIL_FROM')
-  if (!/@[^@\s>]+>?$/.test(from)) throw new Error('MAIL_FROM must be an address such as "Acme <no-reply@example.com>"')
+  if (!/@[^@\s>]+>?$/.test(from))
+    throw new Error(`MAIL_FROM must be an address such as "Acme <no-reply@example.com>" (got "${from}")`)
   return { url, from }
 }
 
@@ -97,7 +111,7 @@ if (process.env.TRUSTED_IP_HEADER?.trim())
 export const env = {
   databaseUrl: readDatabaseUrl('DATABASE_URL'),
   /** Maximum connections per process. Keep instances × this below Postgres `max_connections`. */
-  databasePoolMax: readInt('DATABASE_POOL_MAX', 10, 1, 100),
+  databasePoolMax: readInt('DATABASE_POOL_MAX', { fallback: 10, min: 1, max: 100 }),
   /**
    * DATABASE_URL points at a connection pooler (PgBouncer, Neon's `-pooler` host, Supabase's pooler). Poolers
    * refuse startup parameters they do not track, so the pool then sends no `statement_timeout` and

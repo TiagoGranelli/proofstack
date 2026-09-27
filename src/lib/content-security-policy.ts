@@ -9,7 +9,7 @@ type Sources = { script: readonly string[]; style: readonly string[] }
  * Neither allows 'unsafe-inline'. src/server/nitro/http.ts adds `upgrade-insecure-requests` over https
  * and a locked-down policy for responses that set none (JSON, static files, Nitro error responses).
  */
-export const documentHeaders = (sources: Sources) => ({
+export const documentHeaders = (sources: Sources): { 'content-security-policy': string } => ({
   'content-security-policy': [
     "default-src 'self'",
     `script-src ${["'self'", ...sources.script].join(' ')}`,

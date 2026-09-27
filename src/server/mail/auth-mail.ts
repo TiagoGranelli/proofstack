@@ -23,11 +23,15 @@ const schedule = (message: MailMessage): Promise<void> => {
   return Promise.resolve()
 }
 
+interface MailTo {
+  readonly user: { readonly name: string; readonly email: string }
+}
+
 /** Better Auth's email callbacks (../auth.ts). */
 export const authMail = {
-  verifyEmail: (data: { user: { name: string; email: string }; token: string }) =>
-    schedule(messages.verifyEmail(data.user, data.token)),
-  resetPassword: (data: { user: { name: string; email: string }; token: string }) =>
-    schedule(messages.resetPassword(data.user, data.token)),
-  existingAccount: (data: { user: { name: string; email: string } }) => schedule(messages.existingAccount(data.user)),
+  verifyEmail: ({ user, token }: MailTo & { readonly token: string }): Promise<void> =>
+    schedule(messages.verifyEmail(user, token)),
+  resetPassword: ({ user, token }: MailTo & { readonly token: string }): Promise<void> =>
+    schedule(messages.resetPassword(user, token)),
+  existingAccount: ({ user }: MailTo): Promise<void> => schedule(messages.existingAccount(user)),
 }

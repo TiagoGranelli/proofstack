@@ -39,7 +39,7 @@ const rejectInlineAttributes = (element: Element) => {
  * CSP hash sources for the inline scripts and styles of a static HTML page. parse5 is a WHATWG-conformant
  * parser, so each hash covers exactly the text a browser hashes (raw text, newlines normalized).
  */
-export const inlineSourceHashes = (html: string) => {
+export const inlineSourceHashes = (html: string): { script: string[]; style: string[] } => {
   const script = new Set<string>()
   const style = new Set<string>()
   for (const element of elementsOf(parse(html))) {

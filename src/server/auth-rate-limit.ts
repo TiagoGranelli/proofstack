@@ -11,6 +11,13 @@ type RateLimitStorage = NonNullable<NonNullable<BetterAuthOptions['rateLimit']>[
 const IDLE_ROW_MS = 10 * 60 * 1000
 let lastPrune = 0
 
+/** Deletes idle rows in the background, at most once per IDLE_ROW_MS per process. */
+const pruneIdleRows = (now: number): void => {
+  if (now - lastPrune <= IDLE_ROW_MS) return
+  lastPrune = now
+  runInBackground(db.delete(rateLimit).where(lt(rateLimit.lastRequest, now - IDLE_ROW_MS)))
+}
+
 /**
  * Better Auth's rate-limit `consume` on the rate_limit table (also the business API's write limit, keys
  * `api-write|<user id>`, ./api/rate-limit.ts) as one INSERT ... ON CONFLICT DO UPDATE, which
@@ -22,7 +29,8 @@ let lastPrune = 0
  * `incrementOne` updates `WHERE id IN (SELECT id ... WHERE count < max)`, and Postgres does not re-evaluate that
  * subquery after waiting for the row lock, so 20 concurrent sign-ins passed a limit of 3 about 10 times in a
  * reproduction. Replacing this with `storage: 'database'` once the adapter conditions the UPDATE itself also means
- * giving the table back Better Auth's `id` column.
+ * giving the table back Better Auth's `id` column. No upstream issue tracks it yet (better-auth/better-auth searched
+ * on 2026-09-27): the report belongs against `incrementOne` in `@better-auth/drizzle-adapter`.
  */
 export const postgresRateLimitStorage: RateLimitStorage = {
   async consume(key, rule) {
@@ -40,10 +48,7 @@ export const postgresRateLimitStorage: RateLimitStorage = {
         },
       })
       .returning({ count: rateLimit.count, lastRequest: rateLimit.lastRequest })
-    if (now - lastPrune > IDLE_ROW_MS) {
-      lastPrune = now
-      runInBackground(db.delete(rateLimit).where(lt(rateLimit.lastRequest, now - IDLE_ROW_MS)))
-    }
+    pruneIdleRows(now)
     // `count` is the number of requests since the window started, refused ones included.
     if (row && row.count <= rule.max) return { allowed: true, retryAfter: null }
     const lastRequest = row?.lastRequest ?? now

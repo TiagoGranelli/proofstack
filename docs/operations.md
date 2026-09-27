@@ -624,10 +624,9 @@ before it must be logged as 499 before `shutdown complete`, with no failed query
 the process.
 
 Measured with the Docker image: `docker stop` returns in about 1.2 s with exit code 0, including an idle
-keep-alive connection. After the server has rendered a form page (`/login`), it takes about 5 s instead: the
-drain and the close hook still finish at once, but TanStack Form's devtools event client leaves a connect
-loop (`setInterval`) running on the server, and srvx exits only when its 5 s timeout ends. Keep the orchestrator's grace period above `SERVER_SHUTDOWN_TIMEOUT` (Docker's
-default of 10 s is enough).
+keep-alive connection. The Node server alone exits about 1 s after SIGTERM, also once it has rendered a form page
+(`tests/integration/shutdown.test.ts` renders `/login` first). Keep the orchestrator's grace period above
+`SERVER_SHUTDOWN_TIMEOUT` (Docker's default of 10 s is enough).
 
 srvx skips its signal handling when `CI` or `TEST` is set in the environment (and `TEST` also hides its
 startup line). Do not set either in production, or SIGTERM ends the process immediately without draining

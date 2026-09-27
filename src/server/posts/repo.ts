@@ -63,6 +63,76 @@ interface Author {
   readonly name: string
 }
 
+// Each statement goes through the current transaction, if the caller runs in one (Database.transaction), and
+// through `own`, the client the repository was built with, otherwise.
+const query = <A>(own: Db, run: (db: Db) => Promise<A>): Effect.Effect<A, DbError> =>
+  Effect.flatMap(Database.client(own), (db) =>
+    Effect.tryPromise({ try: () => run(db), catch: (cause) => new DbError({ cause }) }),
+  )
+
+const listPublic = Effect.fn('PostsRepo.listPublic')(function* (own: Db, page: PageRequest) {
+  const rows = yield* query(own, (db) =>
+    db
+      .select({ ...pageColumns, authorName: user.name })
+      .from(post)
+      .innerJoin(user, eq(user.id, post.authorId))
+      .where(afterCursor(page.cursor))
+      .orderBy(...newestFirst)
+      .limit(page.limit + 1),
+  )
+  return toPage(rows, page.limit, (row) => row.authorName)
+})
+
+const listByAuthor = Effect.fn('PostsRepo.listByAuthor')(function* (own: Db, author: Author, page: PageRequest) {
+  const rows = yield* query(own, (db) =>
+    db
+      .select(pageColumns)
+      .from(post)
+      .where(and(eq(post.authorId, author.id), afterCursor(page.cursor)))
+      .orderBy(...newestFirst)
+      .limit(page.limit + 1),
+  )
+  return toPage(rows, page.limit, () => author.name)
+})
+
+const create = Effect.fn('PostsRepo.create')(function* (own: Db, author: Author, body: string) {
+  const [row] = yield* query(own, (db) => db.insert(post).values({ authorId: author.id, body }).returning())
+  // INSERT … RETURNING yields the inserted row; none at all is a driver defect, not an outcome to handle.
+  if (!row) return yield* Effect.die(new Error(`INSERT … RETURNING returned no row for a post by author ${author.id}`))
+  return toPost(row, author.name)
+})
+
+/** A new body for the post `id`. */
+interface Edit {
+  readonly id: string
+  readonly body: string
+}
+
+// Ownership is part of the WHERE clause, so another author's id behaves exactly like a missing id.
+const update = Effect.fn('PostsRepo.update')(function* (own: Db, author: Author, edit: Edit) {
+  if (!UUID.test(edit.id)) return undefined
+  const [row] = yield* query(own, (db) =>
+    db
+      .update(post)
+      .set({ body: edit.body })
+      .where(and(eq(post.id, edit.id), eq(post.authorId, author.id)))
+      .returning(),
+  )
+  return row ? toPost(row, author.name) : undefined
+})
+
+const remove = Effect.fn('PostsRepo.remove')(function* (own: Db, author: Author, id: string) {
+  if (!UUID.test(id)) return false
+  const rows = yield* query(own, (db) =>
+    db
+      .delete(post)
+      .where(and(eq(post.id, id), eq(post.authorId, author.id)))
+      .returning({ id: post.id }),
+  )
+  return rows.length > 0
+})
+
+/** The posts table: public and per-author pages, and an author's writes, ownership checked in each query. */
 export class PostsRepo extends Context.Service<
   PostsRepo,
   {
@@ -77,63 +147,12 @@ export class PostsRepo extends Context.Service<
     PostsRepo,
     Effect.gen(function* () {
       const own = yield* Database
-      // Each statement goes through the current transaction, if the caller runs in one (Database.transaction).
-      const query = <A>(run: (db: Db) => Promise<A>) =>
-        Effect.flatMap(Database.client(own), (db) =>
-          Effect.tryPromise({ try: () => run(db), catch: (cause) => new DbError({ cause }) }),
-        )
       return {
-        listPublic: Effect.fn('PostsRepo.listPublic')(function* (page) {
-          const rows = yield* query((db) =>
-            db
-              .select({ ...pageColumns, authorName: user.name })
-              .from(post)
-              .innerJoin(user, eq(user.id, post.authorId))
-              .where(afterCursor(page.cursor))
-              .orderBy(...newestFirst)
-              .limit(page.limit + 1),
-          )
-          return toPage(rows, page.limit, (row) => row.authorName)
-        }),
-        listByAuthor: Effect.fn('PostsRepo.listByAuthor')(function* (author, page) {
-          const rows = yield* query((db) =>
-            db
-              .select(pageColumns)
-              .from(post)
-              .where(and(eq(post.authorId, author.id), afterCursor(page.cursor)))
-              .orderBy(...newestFirst)
-              .limit(page.limit + 1),
-          )
-          return toPage(rows, page.limit, () => author.name)
-        }),
-        create: Effect.fn('PostsRepo.create')(function* (author, body) {
-          const [row] = yield* query((db) => db.insert(post).values({ authorId: author.id, body }).returning())
-          // INSERT … RETURNING yields the inserted row; none at all is a driver defect, not an outcome to handle.
-          if (!row) return yield* Effect.die(new Error('INSERT … RETURNING returned no row'))
-          return toPost(row, author.name)
-        }),
-        // Ownership is part of the WHERE clause, so another author's id behaves exactly like a missing id.
-        update: Effect.fn('PostsRepo.update')(function* (author, id, body) {
-          if (!UUID.test(id)) return undefined
-          const [row] = yield* query((db) =>
-            db
-              .update(post)
-              .set({ body })
-              .where(and(eq(post.id, id), eq(post.authorId, author.id)))
-              .returning(),
-          )
-          return row ? toPost(row, author.name) : undefined
-        }),
-        remove: Effect.fn('PostsRepo.remove')(function* (author, id) {
-          if (!UUID.test(id)) return false
-          const rows = yield* query((db) =>
-            db
-              .delete(post)
-              .where(and(eq(post.id, id), eq(post.authorId, author.id)))
-              .returning({ id: post.id }),
-          )
-          return rows.length > 0
-        }),
+        listPublic: (page) => listPublic(own, page),
+        listByAuthor: (author, page) => listByAuthor(own, author, page),
+        create: (author, body) => create(own, author, body),
+        update: (author, id, body) => update(own, author, { id, body }),
+        remove: (author, id) => remove(own, author, id),
       }
     }),
   )

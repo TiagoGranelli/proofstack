@@ -108,6 +108,32 @@ const parseJson = (text: string): unknown => {
   }
 }
 
+type EndpointInput = { readonly body?: Record<string, unknown>; readonly query?: Record<string, string> }
+
+/** The request to Better Auth's router, sent as the client of the incoming request (its cookie and address). */
+const endpointRequest = (method: 'GET' | 'POST', path: `/${string}`, input: EndpointInput): Request => {
+  const url = new URL(`${AUTH_BASE_PATH}${path}`, env.appUrl)
+  for (const [name, value] of Object.entries(input.query ?? {})) url.searchParams.set(name, value)
+  const headers = withPeerAddress(new Headers(getRequestHeaders()))
+  // The incoming request's body headers describe the server function call, not this one.
+  for (const name of ['content-length', 'content-type', 'transfer-encoding']) headers.delete(name)
+  if (input.body) headers.set('content-type', 'application/json')
+  return new Request(url, { method, headers, ...(input.body ? { body: JSON.stringify(input.body) } : {}) })
+}
+
+/** Better Auth's answer, read into success or its status, error code and retry delay. */
+const readOutcome = async (response: Response, path: string): Promise<AuthEndpointResult> => {
+  const body = parseJson(await response.text())
+  if (response.ok) return { ok: true, body }
+  const retryAfter = Number(response.headers.get('x-retry-after'))
+  return {
+    ok: false,
+    status: response.status,
+    code: codeOf(body, path),
+    retryAfter: Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : undefined,
+  }
+}
+
 /**
  * Calls a Better Auth endpoint from a server function, as the client of the current request. It goes through
  * Better Auth's router, like /api/auth/*: the endpoint allowlist, rate limiting, the origin check and the client
@@ -118,31 +144,12 @@ const parseJson = (text: string): unknown => {
 export const callAuthEndpoint = async (
   method: 'GET' | 'POST',
   path: `/${string}`,
-  input: { readonly body?: Record<string, unknown>; readonly query?: Record<string, string> } = {},
+  input: EndpointInput = {},
 ): Promise<AuthEndpointResult> => {
-  const url = new URL(`${AUTH_BASE_PATH}${path}`, env.appUrl)
-  for (const [name, value] of Object.entries(input.query ?? {})) url.searchParams.set(name, value)
-  const headers = withPeerAddress(new Headers(getRequestHeaders()))
-  // The incoming request's body headers describe the server function call, not this one.
-  for (const name of ['content-length', 'content-type', 'transfer-encoding']) headers.delete(name)
-  if (input.body) headers.set('content-type', 'application/json')
-  const response = await dispatch(
-    new Request(url, { method, headers, ...(input.body ? { body: JSON.stringify(input.body) } : {}) }),
-  )
-
+  const response = await dispatch(endpointRequest(method, path, input))
   const outgoing = getResponseHeaders()
   for (const cookie of response.headers.getSetCookie()) outgoing.append('set-cookie', cookie)
-
-  const body = parseJson(await response.text())
-  if (response.ok) return { ok: true, body }
-  const code = codeOf(body, path)
-  const retryAfter = Number(response.headers.get('x-retry-after'))
-  return {
-    ok: false,
-    status: response.status,
-    code,
-    retryAfter: Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : undefined,
-  }
+  return readOutcome(response, path)
 }
 
 /**

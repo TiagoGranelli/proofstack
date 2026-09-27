@@ -53,13 +53,17 @@ const invalidate = (queryClient: QueryClient, invalidations: ReadonlyArray<Inval
  * cache's `onSuccess` before the mutation's own and its `onSettled` after, which gives the order the UI needs:
  * clear, then the caller's `onSuccess` (reset a form, navigate), then the refetch.
  */
-export function createQueryClient(config: QueryClientConfig = {}) {
+export function createQueryClient(config: QueryClientConfig = {}): QueryClient {
   const queryClient: QueryClient = new QueryClient({
     ...config,
     mutationCache: new MutationCache({
+      // TanStack Query passes the mutation last, after data, variables and context: its signature, not ours.
+      // oxlint-disable-next-line eslint/max-params
       onSuccess: (_data, _variables, _context, mutation) => {
         if (mutation.meta?.clearsCache) queryClient.clear()
       },
+      // Same: TanStack Query's positional signature, with the error second and the mutation last.
+      // oxlint-disable-next-line eslint/max-params
       onSettled: (_data, error, _variables, _context, mutation) => {
         const meta = mutation.meta
         const stale = error === null || (meta?.invalidatesOnError?.(error) ?? false)

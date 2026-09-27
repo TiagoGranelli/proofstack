@@ -39,9 +39,9 @@ export function PostList(props: {
     // aria-disabled rather than disabled while loading: a disabled button would drop keyboard focus.
     if (pages.isFetchingNextPage) return
     focusOnLoad.current = posts.length
-    const result = await pages.fetchNextPage()
+    const fetched = await pages.fetchNextPage()
     // Nothing new rendered (an error, or the next page emptied meanwhile): focus stays on the button.
-    if (result.isError || (result.data?.pages.at(-1)?.items.length ?? 0) === 0) focusOnLoad.current = null
+    if (fetched.isError || (fetched.data?.pages.at(-1)?.items.length ?? 0) === 0) focusOnLoad.current = null
   }
 
   if (posts.length === 0) {
