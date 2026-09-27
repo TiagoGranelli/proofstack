@@ -23,6 +23,38 @@ export type LazyFormSchema<Fields, Output> = {
   readonly load: () => Promise<void>
 }
 
+/** `loadOnce` started at most once: callers share the pending load, and a failed one is retried on the next call. */
+const sharedRetryingLoad = (loadOnce: () => Promise<void>): (() => Promise<void>) => {
+  let loading: Promise<void> | undefined
+  return () =>
+    (loading ??= loadOnce().catch((error: unknown) => {
+      loading = undefined
+      throw error
+    }))
+}
+
+/** The schema and the Standard Schema adapter (./form-schema.ts), loaded together as the form's validator. */
+const loadFormSchema = async <S extends Schema.ConstraintDecoder<unknown>>(
+  loadSchema: () => Promise<S>,
+): Promise<FormSchema<S['Encoded'], S['Type']>> => {
+  const [schema, toFormSchema] = await Promise.all([
+    loadSchema(),
+    import('./form-schema.ts').then((module) => module.toFormSchema),
+  ])
+  return toFormSchema(schema)
+}
+
+/** A Standard Schema validator that hands each value to the loaded schema's validator. */
+const deferredValidator = <Fields, Output>(
+  ready: () => FormSchema<Fields, Output>,
+): StandardSchemaV1<Fields, Output> => ({
+  '~standard': {
+    version: 1,
+    vendor: 'effect',
+    validate: (value) => ready().validator['~standard'].validate(value),
+  },
+})
+
 /**
  * Wraps `loadSchema`, a dynamic import that resolves to the form's schema (the same one the server validates
  * with), for example `() => import('#/lib/account-input.ts').then((m) => m.SignInInput)`.
@@ -31,34 +63,14 @@ export const lazyFormSchema = <S extends Schema.ConstraintDecoder<unknown>>(
   loadSchema: () => Promise<S>,
 ): LazyFormSchema<S['Encoded'], S['Type']> => {
   let loaded: FormSchema<S['Encoded'], S['Type']> | undefined
-  let loading: Promise<void> | undefined
   const ready = () => {
     if (loaded) return loaded
     throw new Error('a form schema was used before it loaded: submit through submitForm, which awaits it')
   }
-  const loadOnce = async () => {
-    const [schema, toFormSchema] = await Promise.all([
-      loadSchema(),
-      import('./form-schema.ts').then((module) => module.toFormSchema),
-    ])
-    loaded = toFormSchema(schema)
-  }
-  const load = () =>
-    (loading ??= loadOnce().catch((error: unknown) => {
-      loading = undefined
-      throw error
-    }))
-  return {
-    validator: {
-      '~standard': {
-        version: 1,
-        vendor: 'effect',
-        validate: (value) => ready().validator['~standard'].validate(value),
-      },
-    },
-    decode: (fields) => ready().decode(fields),
-    load,
-  }
+  const load = sharedRetryingLoad(async () => {
+    loaded = await loadFormSchema(loadSchema)
+  })
+  return { validator: deferredValidator(ready), decode: (fields) => ready().decode(fields), load }
 }
 
 type LoadableSchema = { load: () => Promise<void> }
