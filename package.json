@@ -5,10 +5,10 @@
   "description": "Full-stack web application template with a verifiable API contract.",
   "license": "MIT",
   "type": "module",
-  "packageManager": "pnpm@12.3.4",
+  "packageManager": "pnpm@12.6.0",
   "engines": {
     "node": ">=26.0.0 <27",
-    "pnpm": ">=12.3.4 <13"
+    "pnpm": ">=12.6.0 <13"
   },
   "imports": {
     "#/*": "./src/*"

@@ -10,7 +10,7 @@ export const IMAGES = {
    * Same version as .node-version; its Node replaces the Playwright image's in the ci:local runner. Also the base
    * of the Dockerfile.
    */
-  node: 'node:26.8.1-slim@sha256:c0753125a3789977aefe869cbebccf70e3cfd7ea84ca48547458f02e4f1d7146',
+  node: 'node:26.10.0-slim@sha256:ec7758ee051e457b468b32bde57b0879010b325bb9862718e9615225ce4aaae1',
   postgres: 'postgres:18.6@sha256:5a5a84b19854a9ffaa54082c166ff4ec27473a361e496e5ea167f298f2da9722',
   caddy: 'caddy:2.11.4-alpine@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b',
   /** The mail catcher verify:app sends account emails to (compose.yaml `mailpit`). */
