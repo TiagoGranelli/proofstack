@@ -1,0 +1,16 @@
+node_modules/
+.output/
+.nitro/
+.tanstack/
+.fallow/
+dist/
+coverage/
+test-results/
+playwright-report/
+.lighthouseci/
+lighthouse-report/
+*.log
+.env
+.env.*
+!.env.example
+.DS_Store

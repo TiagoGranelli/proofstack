@@ -1,0 +1,21 @@
+# pnpm 12 reads project settings from this file even without workspace packages.
+# Dependency lifecycle scripts are blocked by default; every exception must be listed here.
+allowBuilds:
+  # esbuild (via drizzle-kit/tsx) works without its postinstall binary check.
+  esbuild: false
+engineStrict: true
+# pnpm's default minimumReleaseAge quarantines fresh releases; exceptions must name exact versions.
+minimumReleaseAgeExclude:
+  - '@tanstack/query-core@5.104.0'
+  - '@tanstack/react-query@5.104.0'
+  - '@types/node@26.6.3'
+  - '@fallow-cli/darwin-arm64@3.29.0'
+  - '@fallow-cli/darwin-x64@3.29.0'
+  - '@fallow-cli/linux-arm64-gnu@3.29.0'
+  - '@fallow-cli/linux-arm64-musl@3.29.0'
+  - '@fallow-cli/linux-x64-gnu@3.29.0'
+  - '@fallow-cli/linux-x64-musl@3.29.0'
+  - '@fallow-cli/win32-arm64-msvc@3.29.0'
+  - '@fallow-cli/win32-x64-msvc@3.29.0'
+  - fallow-type-aware@3.29.0
+  - fallow@3.29.0

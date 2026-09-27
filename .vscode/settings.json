@@ -1,0 +1,52 @@
+{
+  // Oxfmt formats on save and Oxlint fixes on save; both read the repo's .oxfmtrc.json and .oxlintrc.json.
+  "editor.defaultFormatter": "oxc.oxc-vscode",
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": { "source.fixAll.oxc": "explicit" },
+  // Type-aware rules build the whole TypeScript program; `pnpm lint` runs them. Opt in per machine if you have the memory.
+  "oxc.typeAware": false,
+  // Markdown is not formatted by oxfmt in this repo (see .oxfmtrc.json).
+  "[markdown]": { "editor.formatOnSave": false },
+
+  // TypeScript 7 (Go) language service from the TypeScriptTeam.native-preview extension.
+  "js/ts.experimental.useTsgo": true,
+
+  "tailwindCSS.classFunctions": ["cn", "cva"],
+
+  // Generated files: edit their sources instead (src/contract, src/routes, src/server/auth.ts, the Drizzle schema).
+  "files.readonlyInclude": {
+    "src/sdk/**": true,
+    "src/routeTree.gen.ts": true,
+    "src/server/db/schema/auth.ts": true,
+    "openapi.json": true,
+    "drizzle/**": true,
+    "pnpm-lock.yaml": true
+  },
+  "files.watcherExclude": {
+    "**/node_modules/**": true,
+    "**/.output/**": true,
+    "**/.nitro/**": true,
+    "**/.tanstack/**": true,
+    "**/.fallow/**": true,
+    "**/test-results/**": true,
+    "**/playwright-report/**": true,
+    "**/repos/**": true
+  },
+  "search.exclude": {
+    "**/.output": true,
+    "**/.nitro": true,
+    "**/.tanstack": true,
+    "**/.fallow": true,
+    "**/test-results": true,
+    "**/playwright-report": true,
+    "**/repos": true,
+    "src/sdk/**": true,
+    "src/routeTree.gen.ts": true,
+    "pnpm-lock.yaml": true
+  },
+  "files.exclude": {
+    "**/.nitro": true,
+    "**/.tanstack": true,
+    "**/.fallow": true
+  }
+}

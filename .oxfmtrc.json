@@ -1,0 +1,38 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "printWidth": 120,
+  "tabWidth": 2,
+  "useTabs": false,
+  "semi": false,
+  "singleQuote": true,
+  "jsxSingleQuote": false,
+  "trailingComma": "all",
+  "arrowParens": "always",
+  "endOfLine": "lf",
+  "sortImports": {
+    "newlinesBetween": false
+  },
+  "sortTailwindcss": {
+    "stylesheet": "./src/styles/app.css",
+    "functions": ["cn", "cva"]
+  },
+  "sortPackageJson": false,
+  "ignorePatterns": [
+    "node_modules/**",
+    ".output/**",
+    ".nitro/**",
+    ".tanstack/**",
+    ".fallow/**",
+    "drizzle/**",
+    "repos/**",
+    "src/sdk/**",
+    "src/routeTree.gen.ts",
+    "src/server/db/schema/auth.ts",
+    "openapi.json",
+    "pnpm-lock.yaml",
+    "skills-lock.json",
+    ".agents/**",
+    ".claude/**",
+    "**/*.md"
+  ]
+}

@@ -1,0 +1,73 @@
+import '@tanstack/react-start/server-only'
+import { Cause, Effect, Layer, SchemaIssue } from 'effect'
+import { HttpRouter, HttpServer, HttpServerRequest, HttpServerResponse } from 'effect/unstable/http'
+import { HttpApiBuilder, HttpApiError } from 'effect/unstable/httpapi'
+import { Api } from '#/contract/api.ts'
+import { Database } from '../db/client.ts'
+import { onShutdown } from '../lifecycle.ts'
+import { log } from '../log.ts'
+import { PostsRepo } from '../posts/repo.ts'
+import { MyPostsHandlers, PublicPostsHandlers, SystemHandlers } from './handlers.ts'
+import { AuthenticationLive, RequestValidationLive } from './middleware.ts'
+
+const formatIssues = SchemaIssue.makeFormatterStandardSchemaV1()
+
+/** A response that fails its own schema is logged by kind and field paths, never by value. */
+const describeDefect = (defect: unknown) => {
+  if (!HttpApiError.HttpApiSchemaError.is(defect)) return defect
+  const paths = formatIssues(defect.cause.issue).issues.map(
+    (issue) =>
+      issue.path?.map((segment) => String(typeof segment === 'object' ? segment.key : segment)).join('.') ?? '',
+  )
+  return Object.assign(
+    new Error(`Response ${defect.kind.toLowerCase()} does not match its schema at: ${paths.join(', ')}`),
+    {
+      name: 'ResponseSchemaError',
+    },
+  )
+}
+
+// Defects (bugs, unreachable database, a response that does not match its schema) become an empty
+// 500 for the client; the cause goes to the log. Without this, Effect renders some defects by
+// themselves: a response that fails to encode would reach the client as an empty 400.
+// Responses default to no-store: /api/me/* is per-user and must never be kept by shared caches.
+const ServerMiddleware = HttpRouter.middleware(
+  (httpEffect) =>
+    Effect.gen(function* () {
+      const request = yield* HttpServerRequest.HttpServerRequest
+      return yield* httpEffect.pipe(
+        Effect.catchCause((cause) => {
+          if (!Cause.hasDies(cause)) return Effect.failCause(cause)
+          log('error', 'api defect', {
+            method: request.method,
+            path: request.url.split('?')[0],
+            error: describeDefect(Cause.squash(cause)),
+          })
+          return Effect.succeed(HttpServerResponse.empty({ status: 500 }))
+        }),
+        Effect.map((response) =>
+          response.headers['cache-control']
+            ? response
+            : HttpServerResponse.setHeader(response, 'cache-control', 'no-store'),
+        ),
+      )
+    }),
+  { global: true },
+)
+
+const ApiLive = HttpApiBuilder.layer(Api, { openapiPath: '/api/openapi.json' }).pipe(
+  Layer.provide([SystemHandlers, PublicPostsHandlers, MyPostsHandlers]),
+  Layer.provide([PostsRepo.layer.pipe(Layer.provide(Database.layer)), AuthenticationLive, RequestValidationLive]),
+  Layer.merge(ServerMiddleware),
+)
+
+// Logging goes through ../log.ts only (sanitized JSON lines). Effect's logger stays at its default and
+// is not used: the router's request logger is disabled because the Nitro plugin
+// src/server/nitro/http.ts logs every request once, and defects are logged by ServerMiddleware above.
+const { handler, dispose } = HttpRouter.toWebHandler(ApiLive.pipe(Layer.provide(HttpServer.layerServices)), {
+  disableLogger: true,
+})
+onShutdown('effect-api', dispose)
+
+/** Web-standard `(Request) => Promise<Response>` for every `/api/*` route except `/api/auth/*`. */
+export const apiHandler = handler

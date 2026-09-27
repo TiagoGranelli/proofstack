@@ -1,0 +1,41 @@
+version: 2
+updates:
+  # Workflow and composite-action pins (full commit SHAs with a version comment, which Dependabot keeps).
+  - package-ecosystem: github-actions
+    directories: ['/', '/.github/actions/*']
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns: ['*']
+    commit-message:
+      prefix: ci
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    # package.json pins exact versions; `increase` rewrites the pin to the new exact version.
+    versioning-strategy: increase
+    # pnpm quarantines fresh releases (minimumReleaseAge); proposing only week-old versions keeps
+    # `pnpm install --frozen-lockfile` from rejecting the update.
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: deps
+    groups:
+      # Minor and patch updates in one weekly PR. Majors and the pre-release packages below get their
+      # own PRs (AGENTS.md "Version policy": each needs check, check:drift and verify:app on its own).
+      npm-minor-and-patch:
+        update-types: [minor, patch]
+        patterns: ['*']
+        exclude-patterns: [effect, '@tanstack/react-start', nitro, oxfmt]
+    ignore:
+      # `typescript` is an alias for TS 6 and `@typescript/native` provides TS 7 (ADR 0002); both are
+      # upgraded by hand together with Hey API.
+      - dependency-name: typescript
+      - dependency-name: '@typescript/native'
+      # Tracks the Node major in .node-version.
+      - dependency-name: '@types/node'
+        update-types: [version-update:semver-major]

@@ -1,0 +1,59 @@
+// Shared by the integration tests. `pnpm verify:app` provides every variable read here (see global-setup.ts).
+import { createClient } from '#/sdk/client/index.ts'
+
+export const appUrl = process.env.APP_URL!
+
+export const users = {
+  author: {
+    email: process.env.TEST_USER_EMAIL!,
+    password: process.env.TEST_USER_PASSWORD!,
+    name: process.env.TEST_USER_NAME!,
+  },
+  other: {
+    email: process.env.TEST_OTHER_USER_EMAIL!,
+    password: process.env.TEST_OTHER_USER_PASSWORD!,
+    name: process.env.TEST_OTHER_USER_NAME!,
+  },
+}
+
+/**
+ * Client IPs for one test file. verify:app starts the server with TRUSTED_IP_HEADER=x-forwarded-for, so
+ * each value is its own sign-in rate-limit bucket (3 per 10 s): give every file its own prefix and every
+ * group of sign-ins its own address, and no test ever waits for another's bucket to drain.
+ */
+export const clientIps = (prefix: string) => {
+  let last = 0
+  return () => `${prefix}.${++last}`
+}
+
+const SESSION_COOKIE = /^(__Secure-)?better-auth\.session_token=/
+
+/** The session cookie a response set last (a response can clear a stale cookie before setting a new one). */
+export const sessionCookie = (res: Response) =>
+  res.headers
+    .getSetCookie()
+    .map((c) => c.split(';')[0]!)
+    .findLast((c) => SESSION_COOKIE.test(c) && !c.endsWith('='))
+
+export const postSignIn = (
+  credentials: { email: string; password: string },
+  headers: Record<string, string> & { 'x-forwarded-for': string },
+) =>
+  fetch(`${appUrl}/api/auth/sign-in/email`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', origin: appUrl, ...headers },
+    body: JSON.stringify({ email: credentials.email, password: credentials.password }),
+  })
+
+/** Signs in and returns the session cookie; fails the test on anything but 200. */
+export const signIn = async (credentials: { email: string; password: string }, ip: string) => {
+  const res = await postSignIn(credentials, { 'x-forwarded-for': ip })
+  if (res.status !== 200) throw new Error(`sign-in as ${credentials.email} failed: ${res.status} ${await res.text()}`)
+  const cookie = sessionCookie(res)
+  if (!cookie) throw new Error(`sign-in as ${credentials.email} set no session cookie`)
+  return cookie
+}
+
+/** An SDK client that sends the session cookie and our Origin, like the browser app. */
+export const sdkClient = (cookie?: string) =>
+  createClient({ baseUrl: appUrl, headers: cookie ? { cookie, origin: appUrl } : {} })

@@ -1,0 +1,183 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "ignorePatterns": [
+    "node_modules/**",
+    ".output/**",
+    ".nitro/**",
+    ".tanstack/**",
+    ".fallow/**",
+    "drizzle/**",
+    "repos/**",
+    "src/sdk/**",
+    "src/routeTree.gen.ts",
+    "src/server/db/schema/auth.ts",
+    "test-results/**",
+    "playwright-report/**",
+    ".agents/**",
+    ".claude/**",
+    "lighthouse-report/**",
+    "coverage/**"
+  ],
+  "plugins": ["typescript", "unicorn", "oxc", "import", "react", "jsx-a11y", "promise"],
+  "jsPlugins": ["@shadcn/lint"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error",
+    "perf": "error"
+  },
+  "settings": {
+    "shadcn": {
+      "note": "Theme tokens live in src/styles/app.css; shadcn primitives live in src/components/ui (add new ones with `pnpm exec shadcn add`)."
+    }
+  },
+  "options": {
+    "reportUnusedDisableDirectives": "error"
+  },
+  "rules": {
+    "react/react-in-jsx-scope": "off",
+    "react/rules-of-hooks": "error",
+    "react/no-unstable-nested-components": [
+      "error",
+      {
+        "allowAsProps": true
+      }
+    ],
+    "import/no-unassigned-import": [
+      "error",
+      {
+        "allow": ["@tanstack/react-start/server-only", "**/*.css"]
+      }
+    ],
+    "eslint/no-underscore-dangle": [
+      "error",
+      {
+        "allow": ["_tag", "__proofstackShutdown"]
+      }
+    ],
+    "typescript/no-floating-promises": "error",
+    "typescript/no-misused-promises": [
+      "error",
+      {
+        "checksVoidReturn": {
+          "attributes": false
+        }
+      }
+    ],
+    "typescript/await-thenable": "error",
+    "typescript/switch-exhaustiveness-check": "error",
+    "typescript/no-unsafe-type-assertion": "off",
+    "typescript/consistent-return": "off",
+    "shadcn/no-unknown-classes": "error",
+    "shadcn/no-raw-colors": "error",
+    "shadcn/no-arbitrary-values": "error",
+    "shadcn/no-inline-styles": "error",
+    "shadcn/require-static-classes": "error",
+    "shadcn/no-restyle": [
+      "warn",
+      {
+        "allow": ["layout"],
+        "contracts": [
+          {
+            "pattern": "^CardContent$",
+            "allow": ["layout", "spacing"]
+          }
+        ]
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": ["src/components/ui/**"],
+      "rules": {
+        "shadcn/no-restyle": "off",
+        "shadcn/no-arbitrary-values": "off"
+      }
+    },
+    {
+      "files": ["src/components/**", "src/features/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "drizzle-orm",
+                "message": "UI code must not touch the database. Call the API through the generated SDK (#/sdk)."
+              },
+              {
+                "name": "pg",
+                "message": "UI code must not touch the database. Call the API through the generated SDK (#/sdk)."
+              },
+              {
+                "name": "better-auth",
+                "message": "Server entry of Better Auth. UI code uses #/lib/auth-client.ts (better-auth/react)."
+              },
+              {
+                "name": "@tanstack/react-start/server",
+                "message": "Server-only helpers. Use a server function in #/lib/*.functions.ts."
+              }
+            ],
+            "patterns": [
+              {
+                "regex": "^#/server(/|$)",
+                "message": "UI code must not import src/server/**. Go through the SDK (#/sdk) or a server function (#/lib/*.functions.ts)."
+              },
+              {
+                "regex": "^(\\.\\./)+server(/|$)",
+                "message": "UI code must not import src/server/**. Go through the SDK (#/sdk) or a server function (#/lib/*.functions.ts)."
+              },
+              {
+                "regex": "^drizzle-orm/",
+                "message": "UI code must not touch the database."
+              },
+              {
+                "regex": "^@better-auth/",
+                "message": "Server-side Better Auth package. UI code uses #/lib/auth-client.ts."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/contract/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["*", "!effect", "!effect/**", "!./*", "!\\#/contract/*"],
+                "message": "src/contract is the pure API contract: it may import only `effect` and other src/contract modules."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["tests/integration/**"],
+      "plugins": ["vitest"],
+      "rules": {
+        "vitest/valid-expect": [
+          "error",
+          {
+            "maxArgs": 2
+          }
+        ],
+        "vitest/no-standalone-expect": [
+          "error",
+          {
+            "additionalTestBlockFunctions": ["beforeAll", "beforeEach"]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["scripts/**", "tests/**"],
+      "rules": {
+        "no-await-in-loop": "off"
+      }
+    }
+  ]
+}

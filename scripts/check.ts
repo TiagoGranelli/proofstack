@@ -1,0 +1,125 @@
+// Fast local quality gate for humans, agents and the pre-commit hook: every deterministic check that needs
+// no database and no build. Runs all gates even after a failure so one run shows every problem, then prints
+// the fix for each failing gate. Gates run one at a time to keep memory bounded.
+// Usage: pnpm check [--only=gate,...] [--skip=gate,...]   (CI runs the gates as separate steps)
+import { spawnSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
+
+/** `warnings` is reported in the summary; warnings never fail a gate. */
+type Outcome = boolean | { ok: boolean; warnings: number }
+type Gate = { name: string; run: () => Outcome; fix: string }
+
+const script = (name: string) => () => spawnSync('pnpm', ['run', '--silent', name], { stdio: 'inherit' }).status === 0
+
+/**
+ * Lint with its output passed through and its warnings counted. oxlint prints "Found N warnings" in its
+ * default format and one `file:line:col: warning ...` line per warning in the compact format it picks for
+ * coding agents.
+ */
+const lint = () => {
+  const result = spawnSync('pnpm', ['run', '--silent', 'lint'], {
+    encoding: 'utf8',
+    env: process.stdout.isTTY ? { ...process.env, FORCE_COLOR: '1' } : process.env,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    maxBuffer: 64 * 1024 * 1024,
+  })
+  process.stdout.write(result.stdout ?? '')
+  process.stderr.write(result.stderr ?? '')
+  // oxlint-disable-next-line no-control-regex
+  const output = `${result.stdout ?? ''}${result.stderr ?? ''}`.replace(/\u001B\[[\d;]*m/g, '')
+  const total = output.match(/Found (\d+) warnings?/)?.[1]
+  const warnings = total === undefined ? (output.match(/^\S+:\d+:\d+: warning /gm)?.length ?? 0) : Number(total)
+  return { ok: result.status === 0, warnings }
+}
+
+/** Invariants that no tool checks and that fail silently at runtime (see AGENTS.md "Sharp edges"). */
+const GUARDS: Array<{ file: string; pattern: RegExp; problem: string }> = [
+  {
+    file: 'src/styles/app.css',
+    pattern: /@import\s+['"]tailwindcss['"]\s+source\(\s*['"]\.\.\/['"]\s*\)/,
+    problem:
+      'must keep `@import "tailwindcss" source("../")`: without it Tailwind scans build output and the SSR and client CSS diverge',
+  },
+  {
+    file: 'src/server/auth.ts',
+    pattern: /disabledPaths:\s*\[[^\]]*['"]\/sign-up\/email['"]/,
+    problem:
+      "must keep `disabledPaths: ['/sign-up/email']`: public sign-up stays closed even if the HTTP allowlist changes (ADR 0003)",
+  },
+]
+
+const guards = () => {
+  const failures = GUARDS.filter(({ file, pattern }) => !pattern.test(readFileSync(file, 'utf8')))
+  for (const { file, problem } of failures) console.error(`${file} ${problem}`)
+  return failures.length === 0
+}
+
+const GATES: Gate[] = [
+  { name: 'format:check', run: script('format:check'), fix: 'run `pnpm format`' },
+  {
+    name: 'lint',
+    run: lint,
+    fix: 'run `pnpm lint:fix`, then fix what remains by hand (lint one file: `pnpm lint src/x.ts`)',
+  },
+  {
+    name: 'typecheck',
+    run: script('typecheck'),
+    fix: 'fix the type errors; if they are in src/sdk run `pnpm codegen`, if in src/routeTree.gen.ts run `pnpm build`',
+  },
+  {
+    name: 'deadcode',
+    run: script('deadcode'),
+    fix:
+      'remove the unused file, export or dependency. A boundary violation or a file outside every zone is ' +
+      'configured in .fallowrc.json: `boundaries.rules` says which zone may import which, `boundaries.zones` ' +
+      'maps files to zones (a new top-level src/ directory needs a zone there)',
+  },
+  {
+    name: 'unit',
+    run: () => spawnSync('pnpm', ['exec', 'vitest', 'run', '--project', 'unit'], { stdio: 'inherit' }).status === 0,
+    fix: 'fix the failing unit test or the code it covers (tests/unit; run one file: `pnpm test:unit redirect`)',
+  },
+  {
+    name: 'drift',
+    run: () =>
+      spawnSync('node', ['scripts/check-drift.ts', 'contract', 'migrations', 'auth'], { stdio: 'inherit' }).status ===
+      0,
+    fix:
+      'regenerate what the drift report names: contract -> `pnpm codegen`, migrations -> `pnpm db:generate`, ' +
+      'auth -> `pnpm auth:generate`. Commit the generated files with their source',
+  },
+  { name: 'guards', run: guards, fix: 'restore the line named above (AGENTS.md, "Sharp edges")' },
+]
+
+const list = (name: string) =>
+  process.argv
+    .find((a) => a.startsWith(`--${name}=`))
+    ?.slice(name.length + 3)
+    .split(',')
+const [only, skip] = [list('only'), list('skip')]
+const unknown = [...(only ?? []), ...(skip ?? [])].filter((name) => !GATES.some((gate) => gate.name === name))
+if (unknown.length) {
+  console.error(`unknown gate(s): ${unknown.join(', ')}; expected ${GATES.map((gate) => gate.name).join(', ')}`)
+  process.exit(2)
+}
+const selected = GATES.filter((gate) => (!only || only.includes(gate.name)) && !skip?.includes(gate.name))
+
+const results = selected.map((gate) => {
+  const started = performance.now()
+  const outcome = gate.run()
+  const { ok, warnings } = typeof outcome === 'boolean' ? { ok: outcome, warnings: 0 } : outcome
+  return { name: gate.name, fix: gate.fix, ok, warnings, seconds: (performance.now() - started) / 1000 }
+})
+
+console.log('')
+for (const { name, ok, warnings, seconds } of results) {
+  const note = warnings ? `  (${warnings} warning${warnings === 1 ? '' : 's'}, not blocking)` : ''
+  console.log(`${ok ? 'ok  ' : 'FAIL'}  ${name.padEnd(12)} ${seconds.toFixed(1)}s${note}`)
+}
+const failed = results.filter((result) => !result.ok)
+if (failed.length > 0) {
+  console.error(`\n${failed.length} gate(s) failed:`)
+  for (const { name, fix } of failed) console.error(`  ${name}: ${fix}`)
+  console.error('Then re-run `pnpm check`.')
+  process.exitCode = 1
+}

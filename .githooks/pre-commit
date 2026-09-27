@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# Opt-in: `pnpm hooks:install` (sets git core.hooksPath to .githooks); undo with `pnpm hooks:uninstall`.
+# Runs `pnpm check` (the same static gates as CI) on exactly what is being committed. The tree about to be
+# committed is copied into a temporary directory and checked there, so the working tree, the index, the
+# stash and any merge or cherry-pick state are never touched: unstaged edits, untracked files and edits
+# made while the check runs stay where they are. Bypass once with `git commit --no-verify`.
+set -euo pipefail
+
+# Nothing staged (e.g. `git commit --allow-empty`): nothing to check.
+if git diff --cached --quiet; then
+  exit 0
+fi
+
+root=$(git rev-parse --show-toplevel)
+if [ ! -d "$root/node_modules" ]; then
+  echo "pre-commit: node_modules is missing; run \`pnpm install\` (or commit with --no-verify)" >&2
+  exit 1
+fi
+
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/proofstack-pre-commit.XXXXXX")
+trap 'rm -rf "$tmp"' EXIT
+trap 'exit 130' INT TERM
+
+# The tree git will commit: write-tree honors GIT_INDEX_FILE (set by `git commit -a` and `git commit <paths>`)
+# and leaves out intent-to-add entries (`git add -N`), which are not part of the commit. It is checked out
+# through a throwaway index so the real one is only read.
+tree=$(git write-tree)
+mkdir "$tmp/tree"
+GIT_INDEX_FILE="$tmp/.index" git read-tree "$tree"
+GIT_INDEX_FILE="$tmp/.index" git checkout-index --all --prefix="$tmp/tree/"
+rm -f "$tmp/.index"
+
+# The gates resolve binaries and packages through this link. They do not depend on git, and none of them
+# writes into the repository (check-drift works in its own temporary directory).
+ln -s "$root/node_modules" "$tmp/tree/node_modules"
+cd "$tmp/tree"
+# Git exports these to hooks; nothing in the copy may reach back into the real repository through them.
+unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_PREFIX
+# pnpm would otherwise notice a project at a new path and "install" it, writing into the linked node_modules.
+export pnpm_config_verify_deps_before_run=false
+# jiti keys its transpile cache by absolute path, so every temporary copy would add a file to node_modules/.cache.
+export JITI_FS_CACHE=false
+pnpm run --silent check
