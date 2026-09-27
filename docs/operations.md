@@ -7,8 +7,9 @@ How to configure, deploy and run ProofStack in production. The app is a single N
 
 The server validates the variables read by `src/server/env.ts` while it starts (loaded by the Nitro
 plugin `src/server/nitro/startup.ts`): `DATABASE_URL`, `APP_URL`, `BETTER_AUTH_SECRET`,
-`TRUSTED_IP_HEADER` and `DATABASE_POOL_MAX`. An invalid value stops the process with exit code 1 and a
-message naming the variable, before the port opens. The other variables are read by Nitro and srvx
+`TRUSTED_PROXIES`, `DATABASE_POOL_MAX`, `AUTH_SIGN_UP`, `SMTP_URL` and `MAIL_FROM`. An invalid value stops
+the process with exit code 1 and a message naming the variable, before the port opens. So does the removed
+`TRUSTED_IP_HEADER`, with a pointer to `TRUSTED_PROXIES`. The other variables are read by Nitro and srvx
 without validation: a non-numeric port silently falls back to 3000, and a non-numeric
 `SERVER_SHUTDOWN_TIMEOUT` to 5.
 
@@ -17,8 +18,11 @@ without validation: a non-numeric port silently falls back to 3000, and a non-nu
 | `DATABASE_URL` | yes | `postgres://` connection string. |
 | `APP_URL` | yes | Public origin as browsers see it: scheme, host and port, no path (`https://app.example.com`). |
 | `BETTER_AUTH_SECRET` | yes | At least 32 characters; signs session cookies. Generate with `openssl rand -base64 32`. |
-| `TRUSTED_IP_HEADER` | behind a proxy | Header your reverse proxy sets to the client IP. See [Client IP](#client-ip-and-rate-limiting). |
+| `TRUSTED_PROXIES` | behind a proxy | Addresses or CIDR ranges of your reverse proxies, comma-separated (`127.0.0.1/32`, `10.0.0.0/8`). See [Client IP](#client-ip-and-rate-limiting). |
 | `DATABASE_POOL_MAX` | no | Postgres connections per process, 1 to 100. Default 10. |
+| `AUTH_SIGN_UP` | no | `closed` (default): accounts come from `pnpm user:create`. `open`: anyone can sign up at `/sign-up`; needs `SMTP_URL`. See [Accounts and mail](#accounts-and-mail). |
+| `SMTP_URL` | for mail | `smtps://user:password@smtp.example.com:465` (TLS) or `smtp://...:587` (STARTTLS when offered); credentials percent-encoded. Unset: mail is only logged. |
+| `MAIL_FROM` | with `SMTP_URL` | Sender, such as `ProofStack <no-reply@example.com>`. |
 | `PORT`, `HOST` | no | Listen address. Default port 3000 on all interfaces. `NITRO_PORT` and `NITRO_HOST` take precedence when set. |
 | `NITRO_SSL_CERT`, `NITRO_SSL_KEY` | no | Serve HTTPS from Node: PEM text or file paths. Both must be set; with only one, the server silently serves plain HTTP. |
 | `SERVER_SHUTDOWN_TIMEOUT` | no | Seconds to drain requests on SIGTERM. Default 5. |
@@ -87,8 +91,8 @@ table, create the index by hand with `CREATE INDEX CONCURRENTLY` before the depl
 Create the first account with `pnpm user:create <email> <name>` from a checkout of the repository with
 its dependencies installed. The script loads the server's auth configuration, so `src/server/env.ts`
 requires `DATABASE_URL`, `APP_URL` and `BETTER_AUTH_SECRET`; use the production values. It cannot run
-from the Docker image, which contains only `.output/` and `drizzle/`. Sign-up is closed over HTTP
-([ADR 0003](decisions/0003-closed-sign-up-cli-user-creation.md)).
+from the Docker image, which contains only `.output/` and `drizzle/`. Accounts it creates have a verified
+address and can sign in at once ([ADR 0003](decisions/0003-sign-up-policy.md)).
 
 ## Reverse proxy
 
@@ -96,8 +100,9 @@ Terminate TLS in the proxy and forward to the app over HTTP. The proxy must:
 
 - preserve the `Host`, `Origin`, `Referer` and `Sec-Fetch-*` headers;
 - not buffer or rewrite `Set-Cookie`;
-- set the client IP header named in `TRUSTED_IP_HEADER`, and overwrite (not append to) any value the
-  client sent, or append it as the last entry.
+- set or append the address it received the request from as the last `X-Forwarded-For` value (nginx
+  `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for`; Caddy and Traefik do this by default), and
+  reach the app from an address listed in `TRUSTED_PROXIES`.
 
 For every method except GET, HEAD and OPTIONS, the app accepts request bodies up to 64 KiB (413 above
 that, judged by `Content-Length`), answers 400 to a non-numeric `Content-Length`, and answers 411 to
@@ -121,13 +126,16 @@ things:
 - **No caching:** Caddy has no response cache. Nothing is stored, and `Cache-Control`, `ETag` and
   `Set-Cookie` reach the client as the app sent them, so `private` and `no-store` pages are never shared.
   `Host`, `Origin`, `Referer` and `Sec-Fetch-*` are forwarded as received.
-- **Client IP:** Caddy resolves the client IP with its `trusted_proxies` rules and overwrites
-  `X-Real-IP` with it (`header_up X-Real-IP {client_ip}`). Run the app with `TRUSTED_IP_HEADER=x-real-ip`.
-  By default no proxy is trusted: the TCP peer is the client, and an `X-Forwarded-For` or `X-Real-IP`
-  sent by the client is replaced. If a load balancer or CDN sits in front of Caddy, list its ranges in
-  `EDGE_TRUSTED_PROXIES` (space-separated CIDRs, or `private_ranges`). With `trusted_proxies_strict`,
-  Caddy walks `X-Forwarded-For` from the right and takes the first address that is not trusted, so a
-  client cannot pick its IP by prepending entries.
+- **Client IP:** Caddy resolves the client IP with its `trusted_proxies` rules and replaces the whole
+  `X-Forwarded-For` with it (`header_up X-Forwarded-For {client_ip}`). Run the app with `TRUSTED_PROXIES`
+  set to the edge's address (see [Client IP and rate limiting](#client-ip-and-rate-limiting)); the app
+  then sees one client address followed by the edge. By default Caddy trusts no proxy: the TCP peer is
+  the client, and an `X-Forwarded-For` sent by the client is replaced. If a load balancer or CDN sits in
+  front of Caddy, list its ranges in `EDGE_TRUSTED_PROXIES` (space-separated CIDRs, or `private_ranges`);
+  the app still trusts only Caddy. With `trusted_proxies_strict`, Caddy walks `X-Forwarded-For` from the
+  right and takes the first address that is not trusted, so a client cannot pick its IP by prepending
+  entries. The compose `edge` profile trusts the private ranges in the app, because Docker picks the
+  network's subnet; local clients then arrive as the bridge gateway and share one rate-limit bucket.
 
 Caddy streams request bodies without buffering them, so a chunked upload reaches the app without a
 length and gets 411; browsers and the SDK always send `Content-Length`.
@@ -151,36 +159,63 @@ is what `pnpm ci:local` uses inside its container. The edge log goes next to the
 
 ### Client IP and rate limiting
 
-The client IP keys the sign-in rate limit and is stored on each session.
+The client IP keys the auth rate limits and is stored on each session (shown on the account page).
+Better Auth resolves it from `X-Forwarded-For` with `advanced.ipAddress.trustedProxies`
+(`src/server/auth.ts`). The only app code involved (`src/server/http/forwarded-for.ts`) appends the TCP
+peer as the last hop of that header before Better Auth sees it, for `/api/auth/*` and for the server
+functions alike.
 
-- **`TRUSTED_IP_HEADER` unset:** the TCP peer address is the client IP. `X-Forwarded-For` and similar
-  headers are ignored, so clients cannot choose their bucket. Use this only when clients connect to
+- **`TRUSTED_PROXIES` unset:** the TCP peer address is the client IP. Whatever `X-Forwarded-For` the
+  client sent is dropped, so clients cannot choose their bucket. Use this only when clients connect to
   the Node process directly.
-- **`TRUSTED_IP_HEADER` set:** when the TCP peer is a loopback or private address (`127.0.0.0/8`,
-  `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `::1`, `fc00::/7`, `fe80::/10`), the last
-  comma-separated value of that header is the client IP. If the peer is any other address, or the
-  header is missing or invalid, the peer address is used, and a warning is logged once when the header
-  arrives from a public address. A client that reaches the Node process directly therefore cannot
-  choose its bucket or fill the rate-limit store with invented addresses. Your proxy must reach the app
-  over loopback or a private network; a proxy that connects from a public address (for example
-  Cloudflare straight to the origin) needs a local proxy in between. Examples: `x-real-ip` (the Caddy edge
-  above, or nginx `proxy_set_header X-Real-IP $remote_addr`), `x-forwarded-for` with a single proxy that appends, `cf-connecting-ip`
-  (Cloudflare), `fly-client-ip` (Fly.io). With several proxy layers, pick a header that only the outermost
-  trusted layer sets, because the last hop of `X-Forwarded-For` would be your own proxy.
+- **`TRUSTED_PROXIES` set:** Better Auth walks `X-Forwarded-For` from the right, skips every hop inside
+  the listed ranges, and takes the first address outside them. Because the peer is the last hop, a client
+  that reaches the Node process directly is itself that first address, whatever it sent. List your proxies
+  exactly (their addresses, or the subnet they connect from), not a broad private range that also holds
+  clients. With several proxy layers (a CDN in front of a load balancer), list all of them; each must
+  append to the header. When every hop is trusted (for example the proxy's own health checks), there is
+  no client IP and those requests share one bucket; Better Auth logs a warning once.
 
-Behind a proxy without `TRUSTED_IP_HEADER`, every client appears with the proxy's address and shares one
-bucket, so one attacker can block all sign-ins. The server logs a warning once when it sees
-`X-Forwarded-For` from a private address while the variable is unset. Docker's port publishing on
-`127.0.0.1` behaves the same way: local clients appear as the bridge gateway.
+Behind a proxy without `TRUSTED_PROXIES`, every client appears with the proxy's address and shares one
+bucket, so one attacker can block all sign-ins. Docker's port publishing on `127.0.0.1` behaves the same
+way: local clients appear as the bridge gateway.
 
-Limits (Better Auth, production build only): `/api/auth/sign-in/*` allows 3 requests per 10 seconds per
-IP, including successful ones. Other auth endpoints allow 100 per minute. A limited request gets 429 with
-`X-Retry-After`.
+Limits (Better Auth, production build only): `/sign-in/*`, `/sign-up/*` and `/change-password` allow 3
+requests per 10 seconds per IP; `/request-password-reset` and `/send-verification-email` 3 per minute;
+other auth endpoints 100 per minute. `/get-session` is not limited. A limited request gets 429 with
+`X-Retry-After` (the UI says how many seconds to wait). Server functions go through the same limits.
 
-The counters live in process memory. Each instance counts separately and restarts reset them. With N
-instances an attacker gets up to N times the budget. For several instances, give Better Auth shared
-storage: `rateLimit.storage: 'database'` (needs a `rateLimit` table, `pnpm auth:generate`) or
-`secondary-storage` backed by Redis.
+The counters live in the `rate_limit` table, so every instance shares them and restarts keep them. Each
+request is one atomic `INSERT ... ON CONFLICT DO UPDATE` (`src/server/auth-rate-limit.ts`): Better Auth's
+own database storage lets concurrent requests past the limit on Postgres (Drizzle adapter 1.7.6), so it is
+replaced through `rateLimit.customStorage`. Rows idle for 10 minutes are deleted in the background.
+Requests for endpoints outside the allowlist are not counted and write nothing.
+
+## Accounts and mail
+
+The sign-up policy is `AUTH_SIGN_UP` ([ADR 0003](decisions/0003-sign-up-policy.md)). In both modes an
+account needs a verified address before its first session, and users can reset a forgotten password,
+change it, list and end their sessions, and delete the account at `/account`.
+
+| Mail | Sent when | Link |
+| --- | --- | --- |
+| Confirm your email address | Sign-up; a sign-in with the right password but an unverified address; `/verify-email` "send a new link" | `/verify-email?token=...`, valid 1 hour |
+| Reset your password | `/forgot-password` | `/reset-password?token=...`, valid 1 hour, once. Setting the password ends every session |
+| Someone tried to sign up with your email address | Sign-up with an address that already has an account | Links to `/login` and `/forgot-password` |
+
+Answers never reveal whether an address has an account: sign-up, reset and "send a new link" answer the
+same either way. Mail is sent after the response (`advanced.backgroundTasks`), so response times do not
+either. On shutdown the server waits for pending mail before closing the SMTP transport.
+
+Delivery goes through the `Mailer` interface in `src/server/mail/`: SMTP (Nodemailer, any provider) when
+`SMTP_URL` is set, otherwise a log-only mailer. The log-only mailer writes a `mail not delivered` warning
+per message; outside production it includes the recipient and the text with its link, in production only
+the subject, because links carry tokens. `AUTH_SIGN_UP=open` refuses to start without `SMTP_URL`. With
+`closed` and no SMTP, password reset mails reach nobody.
+
+Locally, `pnpm mail:up` (also run by `pnpm bootstrap`) starts Mailpit from `compose.yaml`, pinned by
+digest: SMTP on `MAILPIT_SMTP_PORT` (54325), the inbox and its API on `MAILPIT_HTTP_PORT` (54380). Nothing
+leaves the machine. `pnpm verify:app` needs it: the E2E tests read links from its API.
 
 ## Health checks
 
@@ -202,12 +237,14 @@ the address like the server does: `NITRO_PORT`, else `PORT`, else 3000; `NITRO_H
 
 On SIGTERM or SIGINT, srvx (Nitro's HTTP server) stops accepting connections, waits for in-flight
 requests up to `SERVER_SHUTDOWN_TIMEOUT` seconds (default 5) and then force-closes them. Nitro then runs
-its `close` hook, which ends the Postgres pool and disposes the Effect runtime. Server code registers
-those cleanups with `onShutdown` (`src/server/lifecycle.ts`), which hooks `close` through Nitro's
-documented `useNitroHooks()` from `nitro/app`; the SSR bundle imports it from Nitro's own runtime chunk,
-so it is the same app instance that srvx closes. The log line `shutdown complete` lists the cleanups
-that ran, and `verify:app` fails when it is missing, when `postgres-pool` is not among them, or when a
-connection to the test database outlives the process.
+its `close` hook, which ends the Postgres pool, disposes the Effect runtime, and waits for pending
+background tasks (mail sends, bounded by the SMTP timeouts of 5 s to connect and 15 s per socket
+operation) before closing the mail transport. Server code registers those cleanups with `onShutdown`
+(`src/server/lifecycle.ts`), which hooks `close` through Nitro's documented `useNitroHooks()` from
+`nitro/app`; the SSR bundle imports it from Nitro's own runtime chunk, so it is the same app instance that
+srvx closes. The log line `shutdown complete` lists the cleanups that ran, and `verify:app` fails when it
+is missing, when `postgres-pool` is not among them, or when a connection to the test database outlives the
+process.
 
 Measured with the Docker image: `docker stop` returns in about 1.2 s with exit code 0, including an idle
 keep-alive connection. Keep the orchestrator's grace period above `SERVER_SHUTDOWN_TIMEOUT` (Docker's
@@ -244,13 +281,16 @@ entry can appear on the same line in a log collector. `node .output/migrate.mjs`
 - `request error`: an error that reached Nitro's `error` hook from the request pipeline (`tags`,
   `method`, `path`). Nitro answers it with a bare JSON 500.
 - `starting` and `shutdown complete` bracket the process lifetime. `starting` records `appUrl`,
-  `trustedIpHeader` and `databasePoolMax`; `shutdown complete` lists the cleanups that ran.
+  `trustedProxies` and `databasePoolMax`; `shutdown complete` lists the cleanups that ran (the Postgres
+  pool, the Effect runtime, pending background tasks and the mailer).
 - `shutdown cleanup failed`: a cleanup (`cleanup` field) rejected during shutdown.
 - `uncaught exception, exiting` and `unhandled rejection`: see below.
 - `postgres pool error`: an idle Postgres connection failed (for example, the database restarted).
-- `ignoring TRUSTED_IP_HEADER from a public address` and
-  `request has X-Forwarded-For from a private address but TRUSTED_IP_HEADER is unset`: `warn`, each at
-  most once per process. See [Client IP](#client-ip-and-rate-limiting).
+- `background task failed`: work scheduled after a response (a mail send, Better Auth's cleanup) failed,
+  for example because the SMTP server refused the message.
+- `mail not delivered: SMTP_URL is unset`: `warn`, one per message. See [Accounts and mail](#accounts-and-mail).
+- `Rate limiting could not determine a client IP ...` (`source: "better-auth"`): `warn`, once per process.
+  See [Client IP](#client-ip-and-rate-limiting).
 
 Logs never include headers, cookies, bodies or query strings. Error messages keep only their first
 line, and stacks keep only their frames, because Drizzle and pg append SQL parameters (emails, session
@@ -281,15 +321,21 @@ rejections are logged and the process continues.
   Without it, the `Origin` header (or, if that is missing, the origin of `Referer`) must equal
   `APP_URL`. Anything else, including a request with none of these headers, gets 403 before
   authentication runs.
-- **Auth endpoints:** only `POST /api/auth/sign-in/email`, `POST /api/auth/sign-out` and
-  `GET /api/auth/get-session` are reachable (`src/server/http/auth-handler.ts`), the ones the UI uses.
-  Every other Better Auth endpoint returns 404. Signing in again does not revoke a session the browser
-  already held; that session stays valid until it expires or its user signs out from it.
+- **Auth endpoints:** Better Auth answers only the endpoints the app uses (the plugin in
+  `src/server/http/auth-endpoints.ts`): `GET /get-session`, `POST /sign-in/email`, `POST /sign-out`,
+  `POST /sign-up/email` (with `AUTH_SIGN_UP=open` only), `POST /send-verification-email`,
+  `GET /verify-email`, `POST /request-password-reset`, `POST /reset-password`, `POST /change-password`,
+  `GET /list-sessions`, `POST /revoke-session`, `POST /revoke-other-sessions`, `POST /revoke-sessions` and
+  `POST /delete-user`. Every other Better Auth endpoint returns 404. The UI reaches them through server
+  functions (`src/lib/auth.functions.ts`) that run Better Auth's router in-process, so the allowlist,
+  rate limits and origin check apply to both paths; the browser gets no session tokens (sessions are
+  revoked by id). Signing in again does not revoke a session the browser already held; changing the
+  password ends every other session, and resetting it ends all of them.
 - **Server functions:** an error inside a server function reaches the browser only as
-  `Error('Internal error')` (see [Logs](#logs)). A request to `/_serverFn/<id>` with an unknown id gets
-  Nitro's bare JSON 500 (`{"status":500,"unhandled":true,"message":"HTTPError"}`), without the id or a
-  stack, until TanStack/router#8246 makes it a 404
-  ([ADR 0009](decisions/0009-unknown-server-function-id.md)).
+  `Error('Internal error')` (see [Logs](#logs)); expected account failures (wrong password, rate limit)
+  are returned as values, not thrown. A request to `/_serverFn/<id>` with an unknown id gets Nitro's bare
+  JSON 500 (`{"status":500,"unhandled":true,"message":"HTTPError"}`), without the id or a stack, until
+  TanStack/router#8246 makes it a 404 ([ADR 0009](decisions/0009-unknown-server-function-id.md)).
 - **Cookies:** `HttpOnly`, `SameSite=Lax`, `Path=/`, 7-day expiry, and `__Secure-` plus `Secure` over
   https.
 - **Headers:** every response gets `X-Content-Type-Options`, `X-Frame-Options: DENY`,
@@ -332,7 +378,7 @@ rejections are logged and the process continues.
 ## CI and local CI
 
 Every job in `.github/workflows/ci.yml` runs one script; the YAML only checks out, sets up Node, pnpm,
-browsers and Postgres, and moves artifacts. The logic lives in `scripts/ci-jobs.ts`:
+browsers, Postgres and (for `verify`) Mailpit, and moves artifacts. The logic lives in `scripts/ci-jobs.ts`:
 
 | Script | Job |
 | --- | --- |
@@ -340,15 +386,15 @@ browsers and Postgres, and moves artifacts. The logic lives in `scripts/ci-jobs.
 | `pnpm ci:static` | `pnpm check` without its drift gate |
 | `pnpm ci:drift` | `pnpm check:drift`, all four checks (`DATABASE_URL`) |
 | `pnpm ci:build` | `pnpm build` with placeholder configuration (the same as the Dockerfile's) |
-| `pnpm ci:verify` | `verify:app` on all five Playwright projects |
+| `pnpm ci:verify` | `verify:app` on all five Playwright projects (needs Mailpit: the `mailpit` service) |
 | `pnpm ci:lighthouse` | `pnpm lighthouse --runs=5`, through the edge. Exit 2 means inconclusive (see AGENTS.md) |
 | `pnpm ci:docker` | `scripts/docker-smoke.ts`: builds the image, migrates twice, serves it behind Caddy on a private network, checks pages through the edge, stops it gracefully. Brings its own Postgres. Needs Docker. |
 
 `pnpm ci:local [job ...]` is the faithful local equivalent (default: every job, in CI order). It runs the
 container jobs (`static`, `drift`, `build`, `verify`, `lighthouse`) in the official Playwright image
 for `@playwright/test` 1.63.0 (Ubuntu 24.04, all browsers including WebKit), with Node from
-`.node-version`, pnpm from `packageManager` and the pinned Caddy binary added, next to Postgres 18.6 on a
-private Docker network. The host jobs (`workflows`, `docker`) drive Docker and run on the host.
+`.node-version`, pnpm from `packageManager` and the pinned Caddy binary added, next to Postgres 18.6 and
+Mailpit (`MAILPIT_HOST=mailpit` for `verify:app`) on a private Docker network. The host jobs (`workflows`, `docker`) drive Docker and run on the host.
 
 - The repository is mounted read-only. The container copies what a CI checkout would contain (tracked
   files and untracked files that are not ignored, as they are on disk) and installs its own

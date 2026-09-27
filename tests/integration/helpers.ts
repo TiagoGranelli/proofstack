@@ -2,6 +2,8 @@
 import { createClient } from '#/sdk/client/index.ts'
 
 export const appUrl = process.env.APP_URL!
+/** A second server on the same database: AUTH_SIGN_UP=closed, and TRUSTED_PROXIES excludes the test process. */
+export const closedAppUrl = process.env.CLOSED_APP_URL!
 
 export const users = {
   author: {
@@ -17,9 +19,11 @@ export const users = {
 }
 
 /**
- * Client IPs for one test file. verify:app starts the server with TRUSTED_IP_HEADER=x-forwarded-for, so
- * each value is its own sign-in rate-limit bucket (3 per 10 s): give every file its own prefix and every
- * group of sign-ins its own address, and no test ever waits for another's bucket to drain.
+ * Client IPs for one test file. verify:app starts the server with loopback in TRUSTED_PROXIES, so the
+ * X-Forwarded-For value the tests send is the client IP, and each value is its own sign-in rate-limit bucket
+ * (3 per 10 s): give every file its own prefix and every group of sign-ins its own address, and no test ever
+ * waits for another's bucket to drain. Requests without X-Forwarded-For come from the trusted proxy itself and
+ * share one bucket.
  */
 export const clientIps = (prefix: string) => {
   let last = 0

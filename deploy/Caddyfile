@@ -30,8 +30,8 @@
 	# reach the client unchanged. Host, Origin, Referer and Sec-Fetch-* are forwarded as received.
 	reverse_proxy {$EDGE_UPSTREAM:app:3000} {
 		# The client IP as Caddy resolved it: the TCP peer, or with EDGE_TRUSTED_PROXIES the rightmost
-		# untrusted X-Forwarded-For entry. Overwrites whatever the client sent. The app reads it with
-		# TRUSTED_IP_HEADER=x-real-ip.
-		header_up X-Real-IP {client_ip}
+		# untrusted X-Forwarded-For entry. It replaces the whole X-Forwarded-For chain, so the app sees one
+		# address plus this edge as the peer, and trusts it with TRUSTED_PROXIES set to the edge's address.
+		header_up X-Forwarded-For {client_ip}
 	}
 }

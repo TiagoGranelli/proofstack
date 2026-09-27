@@ -1,4 +1,5 @@
-// Creates an email/password account. Public sign-up is disabled over HTTP.
+// Creates an email/password account with a verified address: the operator vouches for it, so the account can
+// sign in at once and no confirmation mail is sent. Works whether public sign-up is open or closed.
 // Usage: pnpm user:create <email> <name>
 // The password comes from PROOFSTACK_USER_PASSWORD, else from stdin: typed at a hidden prompt (asked twice)
 // in a terminal, or read whole from a pipe (`printf %s "$pw" | pnpm user:create ...`).
@@ -63,11 +64,22 @@ try {
     throw new Error(`password too short: use at least ${minPasswordLength} characters`)
   if (password.length > maxPasswordLength)
     throw new Error(`password too long: use at most ${maxPasswordLength} characters`)
-  // signUpEmail reports success for existing emails (enumeration protection), so check first.
   const [existing] = await db.select({ id: user.id }).from(user).where(eq(user.email, email))
   if (existing) throw new Error(`a user with email ${email} already exists`)
-  const result = await auth.api.signUpEmail({ body: { email, name, password } })
-  console.log(`created ${result.user.email}`)
+  // What sign-up does, minus the verification mail: Better Auth's password hash, user and credential account.
+  const context = await auth.$context
+  const hash = await context.password.hash(password)
+  const created = await context.internalAdapter.createUser(
+    { email, name, emailVerified: true },
+    { method: 'email-password' },
+  )
+  await context.internalAdapter.linkAccount({
+    userId: created.id,
+    providerId: 'credential',
+    accountId: created.id,
+    password: hash,
+  })
+  console.log(`created ${created.email}`)
 } catch (error) {
   console.error(error instanceof Error ? error.message : error)
   process.exitCode = 1

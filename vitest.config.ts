@@ -25,7 +25,8 @@ const COVERAGE_GATE = [
   'src/features/auth/utils/safe-redirect.ts',
   // Every error the UI shows goes through here; it must never render raw server output.
   'src/lib/api-error.ts',
-  // The trusted-proxy client-IP resolver (plan section 2) joins here when it lands, with its unit tests.
+  // The X-Forwarded-For value Better Auth resolves the client IP from (rate limits, sessions).
+  'src/server/http/forwarded-for.ts',
 ]
 for (const file of COVERAGE_GATE) {
   // A renamed file would otherwise drop out of the gate silently: a threshold glob that matches nothing passes.
@@ -76,7 +77,7 @@ export default defineConfig({
             DATABASE_URL: 'postgres://unused:unused@127.0.0.1:9/unused',
             APP_URL: 'http://localhost:3000',
             BETTER_AUTH_SECRET: 'api-handler-tests-only-not-a-secret-000',
-            TRUSTED_IP_HEADER: '',
+            TRUSTED_PROXIES: '',
             NODE_ENV: 'test',
           },
           testTimeout: 5_000,
@@ -93,7 +94,6 @@ export default defineConfig({
             'react-dom/client',
             '@tanstack/react-query',
             '@tanstack/react-router',
-            'better-auth/react',
             'class-variance-authority',
             'cn',
             'radix-ui',
@@ -107,6 +107,10 @@ export default defineConfig({
             {
               find: '#/lib/api-client.ts',
               replacement: fileURLToPath(new URL('./tests/component/stubs/api-client.ts', import.meta.url)),
+            },
+            {
+              find: '#/lib/auth.functions.ts',
+              replacement: fileURLToPath(new URL('./tests/component/stubs/auth-functions.ts', import.meta.url)),
             },
           ],
         },

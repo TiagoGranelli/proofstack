@@ -209,15 +209,6 @@ describe('security', () => {
     await myPostsRemove({ client: author, path: { id: post.id } })
   })
 
-  it('keeps public sign-up closed', async () => {
-    const res = await fetch(`${appUrl}/api/auth/sign-up/email`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', origin: appUrl, 'x-forwarded-for': nextIp() },
-      body: JSON.stringify({ email: 'new@example.test', password: 'a-long-enough-password', name: 'New' }),
-    })
-    expect(res.status).toBe(404)
-  })
-
   it('sends security headers and keeps private pages out of shared caches', async () => {
     const home = await fetch(appUrl)
     expect(home.headers.get('x-content-type-options')).toBe('nosniff')

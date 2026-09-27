@@ -42,7 +42,7 @@ describe('LoginForm', () => {
   })
 
   it.each([
-    ['wrong credentials', 'invalid', 'Invalid email or password'],
+    ['wrong credentials', 'invalid', 'Wrong email or password.'],
     ['a network failure', 'network', 'Could not reach the server. Check your connection and try again.'],
   ] as const)('shows %s and lets the author retry', async (_, outcome, message) => {
     worker.use(auth.signIn(outcome))

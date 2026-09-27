@@ -1,19 +1,23 @@
 // Runs the built app against a fresh test database and exercises it end to end: SDK integration tests
 // (Vitest, tests/integration), browser flows (Playwright, tests/e2e) and a graceful-shutdown check.
 // Both test runners always run; the exit code is non-zero if either (or the shutdown check) fails.
-// Server output goes to test-results/app-server.log and is printed only on failure.
+// Two servers share the database: APP_URL with AUTH_SIGN_UP=open, and CLOSED_APP_URL with the shipped defaults
+// (closed sign-up, the test process not a trusted proxy). Mail goes to Mailpit, which must be running
+// (`pnpm mail:up`). Server output goes to test-results/app-server*.log and is printed only on failure.
 // Usage: pnpm build && pnpm verify:app [--no-e2e] [--no-integration] [--edge] [filter ...]
 //   filter: file name filters passed to both runners, e.g. `pnpm verify:app security flows`
 //   --edge: run both suites through the reference edge (Caddy, deploy/Caddyfile) as in production; its log
 //           is test-results/edge.log. Playwright projects: PW_PROJECTS (see playwright.config.ts).
 // Env: TEST_DATABASE_URL overrides the database (default: proofstack_verify_<pid>_test next to DATABASE_URL,
 //      dropped afterwards unless KEEP_TEST_DB=1). ALLOW_STALE_BUILD=1 skips the build freshness check.
+//      MAILPIT_HOST (default 127.0.0.1), MAILPIT_SMTP_PORT and MAILPIT_HTTP_PORT locate Mailpit.
 import { spawnSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
-import { assertChromium, startApp, tail } from './app-server.ts'
+import { assertChromium, LOOPBACK, startApp, tail } from './app-server.ts'
 import { dropTestDatabase, openConnections, testDatabaseUrl } from './test-db.ts'
 
 const LOG_FILE = 'test-results/app-server.log'
+const CLOSED_LOG_FILE = 'test-results/app-server-closed.log'
 /** srvx drains requests, then the close hook from src/server/lifecycle.ts ends the pool; both are quick with no traffic. */
 const MAX_SHUTDOWN_MS = 3_000
 
@@ -48,19 +52,45 @@ let exitCode = 1
 try {
   if (e2e) await assertChromium()
   const databaseUrl = testDatabaseUrl('verify', process.env.TEST_DATABASE_URL)
+  // Mail goes to Mailpit (`pnpm mail:up`); the E2E tests read the links from its API. MAILPIT_HOST is for
+  // runners where it is another container (`pnpm ci:local`).
+  const mailpitHost = process.env.MAILPIT_HOST || '127.0.0.1'
+  const mailpit = {
+    smtp: `smtp://${mailpitHost}:${process.env.MAILPIT_SMTP_PORT || '54325'}`,
+    api: `http://${mailpitHost}:${process.env.MAILPIT_HTTP_PORT || '54380'}`,
+  }
+  const ready = await fetch(`${mailpit.api}/readyz`).catch(() => undefined)
+  if (!ready?.ok) throw new Error(`Mailpit is not reachable at ${mailpit.api}. Start it with \`pnpm mail:up\`.`)
+  const mail = { SMTP_URL: mailpit.smtp, MAIL_FROM: 'ProofStack <no-reply@example.test>' }
   const app = await startApp({
     databaseUrl,
     logFile: LOG_FILE,
     port: process.env.VERIFY_PORT,
     // The test process is the "proxy": each suite sends its own X-Forwarded-For and so gets its own sign-in
-    // rate-limit bucket. The server honors the header only from loopback/private peers.
-    trustedIpHeader: 'x-forwarded-for',
+    // rate-limit bucket. The server believes the header only from these peers.
+    trustedProxies: LOOPBACK,
     // Behind the edge the test process is a proxy in front of Caddy instead: Caddy believes its
     // X-Forwarded-For (it connects from loopback) and hands the resolved client IP to the app.
     ...(edge ? { edge: { trustedProxies: 'private_ranges', logFile: 'test-results/edge.log' } } : {}),
+    // Open sign-up, so the E2E tests can create the throwaway accounts the account lifecycle flows consume.
+    settings: { AUTH_SIGN_UP: 'open', ...mail },
+  })
+  // The shipped defaults next to it, on the same database and never behind the edge: closed sign-up, and a
+  // proxy list that excludes the test process, whose X-Forwarded-For must then be ignored
+  // (tests/integration/auth-*.test.ts, tests/e2e/auth-closed.spec.ts).
+  const closed = await startApp({
+    databaseUrl,
+    logFile: CLOSED_LOG_FILE,
+    trustedProxies: '10.0.0.0/8',
+    settings: { AUTH_SIGN_UP: 'closed', ...mail },
+    alongside: app,
+  }).catch(async (error: unknown) => {
+    await app.stop()
+    throw error
   })
   console.log(
-    `app ${app.url}${edge ? ` (edge in front of ${app.directUrl})` : ''} (database ${new URL(databaseUrl).pathname.slice(1)}, log ${LOG_FILE})`,
+    `app ${app.url}${edge ? ` (edge in front of ${app.directUrl})` : ''} (database ${new URL(databaseUrl).pathname.slice(1)}, ` +
+      `log ${LOG_FILE}), closed sign-up ${closed.url} (log ${CLOSED_LOG_FILE}), Mailpit ${mailpit.api}`,
   )
   try {
     const testEnv = {
@@ -71,6 +101,8 @@ try {
       TEST_OTHER_USER_EMAIL: app.otherUser.email,
       TEST_OTHER_USER_PASSWORD: app.otherUser.password,
       TEST_OTHER_USER_NAME: app.otherUser.name,
+      CLOSED_APP_URL: closed.url,
+      MAILPIT_URL: mailpit.api,
     }
     if (integration)
       timed(
@@ -82,7 +114,7 @@ try {
     if (e2e)
       timed('e2e (playwright)', 'pnpm', ['exec', 'playwright', 'test', '--pass-with-no-tests', ...filters], testEnv)
   } finally {
-    const stopped = await app.stop()
+    const [stopped] = await Promise.all([app.stop(), closed.stop()])
     // The process exited, so its sockets are gone; Postgres may take a moment to reap the backends.
     let leftover = await openConnections(databaseUrl)
     for (let i = 0; i < 10 && leftover.length; i++) {

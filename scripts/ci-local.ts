@@ -1,6 +1,6 @@
 // The faithful local CI: runs the same `pnpm ci:<job>` scripts as .github/workflows/ci.yml inside the
 // official Playwright Ubuntu image (all five browser projects work there, WebKit included), next to a
-// Postgres 18.6 container on a private Docker network, with CPU, memory and /dev/shm limits.
+// Postgres 18.6 container and Mailpit on a private Docker network, with CPU, memory and /dev/shm limits.
 // Usage: pnpm ci:local [job ...]   (default: every job, in CI order)
 //   Container jobs: static drift build verify lighthouse. Host jobs (they drive Docker): workflows docker.
 //   verify and lighthouse need build, which is added when missing (CI's `needs: build`).
@@ -42,6 +42,7 @@ const prefix = dockerPrefix()
 const id = `${prefix}-local-${process.pid}`
 const NETWORK = id
 const DB = `${id}-db`
+const MAIL = `${id}-mailpit`
 const RUNNER = `${id}-runner`
 const STORE = `${prefix}-pnpm-store`
 const RESULTS = resolve('test-results/ci-local')
@@ -117,7 +118,7 @@ const gitFiles = (args: string[]) =>
   spawnSync('git', ['ls-files', '-z', ...args], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).stdout.split('\0')
 
 const cleanup = () => {
-  docker(['rm', '--force', '--volumes', RUNNER, DB], { quiet: true, allowFailure: true })
+  docker(['rm', '--force', '--volumes', RUNNER, DB, MAIL], { quiet: true, allowFailure: true })
   docker(['network', 'rm', NETWORK], { quiet: true, allowFailure: true })
 }
 for (const signal of ['SIGINT', 'SIGTERM'] as const)
@@ -144,6 +145,22 @@ try {
         .concat(['--env', 'POSTGRES_PASSWORD=proofstack-ci', '--env', 'POSTGRES_DB=proofstack', IMAGES.postgres]),
       { quiet: true },
     )
+    // verify:app sends account emails here and the E2E tests read them back (the CI service `mailpit`).
+    docker(
+      [
+        'run',
+        '--detach',
+        '--name',
+        MAIL,
+        '--network',
+        NETWORK,
+        '--network-alias',
+        'mailpit',
+        '--memory',
+        '128m',
+      ].concat([IMAGES.mailpit]),
+      { quiet: true },
+    )
     rmSync(RESULTS, { recursive: true, force: true })
     mkdirSync(RESULTS, { recursive: true })
     docker(
@@ -162,6 +179,12 @@ try {
           'CI=true',
           '--env',
           'DATABASE_URL=postgres://proofstack:proofstack-ci@postgres:5432/proofstack',
+          '--env',
+          'MAILPIT_HOST=mailpit',
+          '--env',
+          'MAILPIT_SMTP_PORT=1025',
+          '--env',
+          'MAILPIT_HTTP_PORT=8025',
         ])
         .concat([RUNNER_IMAGE, 'sleep', 'infinity']),
       { quiet: true },

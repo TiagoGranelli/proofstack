@@ -1,6 +1,8 @@
-# Local development database: `pnpm db:up` / `pnpm db:down`. Compose reads COMPOSE_PROJECT_NAME,
-# POSTGRES_PORT and POSTGRES_PASSWORD from .env (see .env.example); DATABASE_URL must match them.
-# POSTGRES_PASSWORD only takes effect when the volume is first created.
+# Local development services. Compose reads COMPOSE_PROJECT_NAME and the ports and passwords below from .env
+# (see .env.example); the URLs in .env must match them.
+# db: `pnpm db:up` / `pnpm db:down`. DATABASE_URL must match POSTGRES_PORT and POSTGRES_PASSWORD, which only
+# takes effect when the volume is first created.
+# mailpit: `pnpm mail:up`, the local inbox for account emails.
 #
 # Profile `edge`: the production topology, for trying it locally (docs/operations.md, "Edge proxy (Caddy)"):
 # `docker compose --profile edge up --build --wait` builds the image, migrates, and serves the app behind
@@ -23,6 +25,15 @@ services:
       timeout: 3s
       retries: 30
 
+  # Catches every email the app sends (`pnpm mail:up`): SMTP_URL=smtp://127.0.0.1:${MAILPIT_SMTP_PORT}, inbox and
+  # REST API (the E2E tests read links from it) at http://127.0.0.1:${MAILPIT_HTTP_PORT}. Nothing leaves the host.
+  # Pinned by digest; the image's own healthcheck (`mailpit readyz`) lets `--wait` return when it is ready.
+  mailpit:
+    image: axllent/mailpit:v1.31.2@sha256:74d609a42ec279aa63c6b4622a6fa9b5408d1ad5b1d76a1c4be40a265ce0863d
+    ports:
+      - 127.0.0.1:${MAILPIT_SMTP_PORT:-54325}:1025
+      - 127.0.0.1:${MAILPIT_HTTP_PORT:-54380}:8025
+
   migrate:
     profiles: [edge]
     build: .
@@ -42,8 +53,11 @@ services:
       # The public origin is the edge's.
       APP_URL: http://localhost:${EDGE_PORT:-8080}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-}
-      # Set by the edge to the client IP it resolved (deploy/Caddyfile).
-      TRUSTED_IP_HEADER: x-real-ip
+      # Believe X-Forwarded-For from the edge, which replaces it with the client IP it resolved
+      # (deploy/Caddyfile). Only compose services reach the app, and the network's subnet is Docker's choice,
+      # so this trusts the private ranges; clients with a private address then share one rate-limit bucket.
+      # In a real deployment, list only the edge's address.
+      TRUSTED_PROXIES: 10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
     depends_on:
       migrate:
         condition: service_completed_successfully

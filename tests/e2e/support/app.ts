@@ -3,9 +3,10 @@
 //
 // Isolation. The specs run in parallel against one server and one database, so no spec may depend on data
 // another spec writes:
-// - Every worker signs in as its own `author`, created for it through scripts/create-user.ts (the same path an
-//   operator uses; the app has no public sign-up). A worker runs one test at a time, so a dashboard only
-//   ever shows the posts of tests in that worker, and each test finds its own by a unique body.
+// - Every worker signs in as its own `author`, created for it (verified) through scripts/create-user.ts, the
+//   same path an operator uses. A worker runs one test at a time, so a dashboard only ever shows the posts
+//   of tests in that worker, and each test finds its own by a unique body. Tests that change or delete an
+//   account use a throwaway one from ./accounts.ts instead.
 // - States that need the whole app to look a certain way (no posts at all, an API failure) are reached with
 //   `navigateWithApiResponse`, which answers the browser's own API call instead of changing the database.
 // - The public list is shared by definition. The one bulk write, more posts than fit on a page, happens in
@@ -14,7 +15,7 @@
 import { execFile } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
-import type { APIRequestContext, Page } from '@playwright/test'
+import type { APIRequestContext, Page, Route } from '@playwright/test'
 import { POST_MAX_LENGTH, POSTS_PAGE_DEFAULT } from '#/contract/limits.ts'
 import type { Post, PostPage } from '#/sdk/types.gen.ts'
 // Every spec gets the Content-Security-Policy violation collector from ../fixtures.ts.
@@ -55,7 +56,7 @@ const createAuthor = async (name: string): Promise<Author> => {
 // client IP and never waits for another's sign-in rate limit (3 per 10 s per IP). The integration tests use
 // other ranges (tests/integration).
 let clientCount = 0
-const nextClientIp = (workerIndex: number) => `198.19.${workerIndex % 256}.${++clientCount % 256}`
+export const nextClientIp = (workerIndex: number) => `198.19.${workerIndex % 256}.${++clientCount % 256}`
 
 export const test = base.extend<object, { author: Author }>({
   author: [
@@ -93,6 +94,18 @@ export const signIn = async (client: Page | APIRequestContext, author: Author) =
     headers: { origin: appUrl },
   })
   expect(res.status()).toBe(200)
+}
+
+const abortPost = (route: Route) => (route.request().method() === 'POST' ? route.abort() : route.fallback())
+
+/**
+ * Makes the page's server function POSTs fail like a lost connection: sign-out and every other account action
+ * (src/lib/auth.functions.ts). The GET server functions (the route guards' session check) still pass. Returns
+ * the undo.
+ */
+export const failServerFunctionPosts = async (page: Page) => {
+  await page.route('**/_serverFn/**', abortPost)
+  return () => page.unroute('**/_serverFn/**', abortPost)
 }
 
 /** Publishes a post as `author` through the API (its own session, apart from the browser's). */

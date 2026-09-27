@@ -6,6 +6,7 @@ import { expectAccessible, SITE_HEADER } from './support/a11y.ts'
 import {
   dashboardWithMyPost,
   expect,
+  failServerFunctionPosts,
   fakePost,
   lastPage,
   navigateWithApiResponse,
@@ -81,9 +82,38 @@ const STATES: Record<string, (fixtures: Fixtures) => Promise<unknown>> = {
   'dashboard, sign-out failed': async ({ page, author }) => {
     await signIn(page, author)
     await visit(page, '/dashboard')
-    await page.route('**/api/auth/sign-out', (route) => route.abort())
+    await failServerFunctionPosts(page)
     await page.getByRole('button', { name: 'Sign out' }).click()
     await expect(page.getByRole('alert')).toContainText('Could not sign out')
+  },
+  'sign-up': ({ page }) => visit(page, '/sign-up'),
+  'sign-up, sent': async ({ page }) => {
+    await visit(page, '/sign-up')
+    await page.getByLabel('Name').fill('A11y Account')
+    await page.getByLabel('Email').fill(`a11y-${crypto.randomUUID()}@example.test`)
+    await page.getByLabel('Password').fill(`pw-${crypto.randomUUID()}`)
+    await page.getByRole('button', { name: 'Create account' }).click()
+    await expect(page.getByRole('status')).toContainText('Check your inbox')
+  },
+  'forgot password': ({ page }) => visit(page, '/forgot-password'),
+  'reset password, no link': async ({ page }) => {
+    await visit(page, '/reset-password')
+    await expect(page.getByRole('link', { name: 'Ask for a new one' })).toBeVisible()
+  },
+  'reset password, invalid link': async ({ page }) => {
+    await visit(page, '/reset-password?token=not-a-token')
+    await page.getByLabel('New password').fill(`pw-${crypto.randomUUID()}`)
+    await page.getByRole('button', { name: 'Set new password' }).click()
+    await expect(page.getByRole('alert')).toContainText('This link is invalid or has expired')
+  },
+  'verify email, invalid link': async ({ page }) => {
+    await visit(page, '/verify-email?token=not-a-token')
+    await expect(page.getByRole('alert')).toContainText('This link is invalid or has expired')
+  },
+  account: async ({ page, author }) => {
+    await signIn(page, author)
+    await visit(page, '/account')
+    await expect(page.getByTestId('sessions').getByRole('listitem')).not.toHaveCount(0)
   },
   'not found': async ({ page }) => {
     await visit(page, '/no-such-page')
@@ -136,6 +166,41 @@ test.describe('landmarks', () => {
   - button "Sign in"`)
   })
 
+  test('sign-up', async ({ page }) => {
+    await visit(page, '/sign-up')
+    await expect(page.locator('body')).toMatchAriaSnapshot(`${SITE_HEADER}
+- main:
+  - heading "Create an account" [level=1]
+  - textbox "Name"
+  - textbox "Email"
+  - textbox "Password"
+  - button "Create account"`)
+  })
+
+  test('forgot password', async ({ page }) => {
+    await visit(page, '/forgot-password')
+    await expect(page.locator('body')).toMatchAriaSnapshot(`${SITE_HEADER}
+- main:
+  - heading "Forgot your password?" [level=1]
+  - textbox "Email"
+  - button "Send reset link"`)
+  })
+
+  test('account', async ({ page, author }) => {
+    await signIn(page, author)
+    await visit(page, '/account')
+    await expect(page.locator('body')).toMatchAriaSnapshot(`${SITE_HEADER}
+- main:
+  - heading "Account" [level=1]
+  - region "Password":
+    - heading "Password" [level=2]
+  - region "Sessions":
+    - heading "Sessions" [level=2]
+    - list "Active sessions"
+  - region "Delete account":
+    - heading "Delete account" [level=2]`)
+  })
+
   test('dashboard', async ({ page, author }) => {
     await signIn(page, author)
     await navigateWithApiResponse(page, '/api/me/posts', { json: lastPage(fakePost('One of mine')) })
@@ -143,6 +208,7 @@ test.describe('landmarks', () => {
     await expect(page.locator('body')).toMatchAriaSnapshot(`${SITE_HEADER}
 - main:
   - heading /'s posts$/ [level=1]
+  - link "Account"
   - button "Sign out"
   - text: New post
   - textbox "New post"

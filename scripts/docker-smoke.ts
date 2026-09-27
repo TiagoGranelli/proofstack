@@ -106,11 +106,15 @@ try {
   const port = await freePort()
   const origin = `http://localhost:${port}`
   await step(`serve behind the edge at ${origin}`, async () => {
+    const subnet = docker(['network', 'inspect', NETWORK, '--format', '{{range .IPAM.Config}}{{.Subnet}},{{end}}'], {
+      quiet: true,
+    }).replace(/,$/, '')
     docker(
       ['run', '--detach', '--name', APP, '--network', NETWORK, '--network-alias', 'app', '--memory', '512m']
         .concat(['--env', `DATABASE_URL=${DATABASE_URL}`, '--env', `APP_URL=${origin}`])
         .concat(['--env', `BETTER_AUTH_SECRET=${randomBytes(32).toString('base64')}`])
-        .concat(['--env', 'TRUSTED_IP_HEADER=x-real-ip', IMAGE]),
+        // The edge connects from this network: its X-Forwarded-For (the client IP it resolved) is believed.
+        .concat(['--env', `TRUSTED_PROXIES=${subnet}`, IMAGE]),
       { quiet: true },
     )
     docker(

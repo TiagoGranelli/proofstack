@@ -22,6 +22,20 @@
       "when": 1790505402435,
       "tag": "0002_post_keyset_pagination_idx",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1790509274798,
+      "tag": "0003_auth_rate_limit",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790509278025,
+      "tag": "0004_auth_timestamptz",
+      "breakpoints": true
     }
   ]
 }

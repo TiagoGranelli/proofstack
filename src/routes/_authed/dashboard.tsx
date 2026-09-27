@@ -1,5 +1,5 @@
 import { useSuspenseInfiniteQuery } from '@tanstack/react-query'
-import { createFileRoute } from '@tanstack/react-router'
+import { Link, createFileRoute } from '@tanstack/react-router'
 import { useRef, useState } from 'react'
 import { SignOutAlert, SignOutButton, useSignOut } from '#/features/auth/components/sign-out-button.tsx'
 import { getMyPostsQueryOptions } from '#/features/posts/api/get-my-posts.ts'
@@ -26,7 +26,12 @@ function Dashboard() {
     <main className="mx-auto grid max-w-2xl gap-6 p-4">
       <div className="flex items-center justify-between gap-2">
         <h1 className="text-2xl font-semibold">{user.name}'s posts</h1>
-        <SignOutButton signOut={signOut} />
+        <div className="flex items-center gap-4">
+          <Link to="/account" className="text-sm underline underline-offset-4">
+            Account
+          </Link>
+          <SignOutButton signOut={signOut} />
+        </div>
       </div>
       <SignOutAlert signOut={signOut} />
       <PostComposer onPublished={() => announce('Post published.')} />

@@ -1,64 +1,32 @@
-import { useQueryClient } from '@tanstack/react-query'
-import { useHydrated, useNavigate } from '@tanstack/react-router'
-import { useState } from 'react'
-import { Button } from '#/components/ui/button.tsx'
-import { Input } from '#/components/ui/input.tsx'
-import { Label } from '#/components/ui/label.tsx'
+import { useNavigate } from '@tanstack/react-router'
+import { useSignIn } from '#/features/auth/api/sign-in.ts'
+import { AuthField, AuthForm } from '#/features/auth/components/auth-form.tsx'
+import { formText } from '#/features/auth/utils/form-text.ts'
 import { safeRedirect } from '#/features/auth/utils/safe-redirect.ts'
-import { authClient } from '#/lib/auth-client.ts'
 
 /** Email and password sign-in. On success it goes to `redirectTo` if that is a safe same-origin path. */
 export function LoginForm(props: { redirectTo?: string }) {
   const navigate = useNavigate()
-  const queryClient = useQueryClient()
-  // A native submit before hydration must never send credentials, so the button waits for hydration.
-  const hydrated = useHydrated()
-  const [failure, setFailure] = useState<string | null>(null)
-  const [pending, setPending] = useState(false)
+  const signIn = useSignIn({
+    mutationConfig: { onSuccess: () => navigate({ href: safeRedirect(props.redirectTo), replace: true }) },
+  })
   return (
-    <form
-      method="post"
-      className="grid gap-3"
-      aria-busy={pending}
-      aria-describedby={failure ? 'sign-in-error' : undefined}
-      onSubmit={async (event) => {
-        event.preventDefault()
-        const form = new FormData(event.currentTarget)
-        const field = (name: string) => {
-          const value = form.get(name)
-          return typeof value === 'string' ? value : ''
-        }
-        setPending(true)
-        setFailure(null)
-        try {
-          const { error } = await authClient.signIn.email({ email: field('email'), password: field('password') })
-          if (error) return setFailure(error.message ?? 'Sign-in failed. Try again.')
-        } catch {
-          return setFailure('Could not reach the server. Check your connection and try again.')
-        } finally {
-          setPending(false)
-        }
-        // Nothing cached for a previous user in this tab (their private posts) may survive a sign-in.
-        queryClient.clear()
-        await navigate({ href: safeRedirect(props.redirectTo), replace: true })
-      }}
+    <AuthForm
+      id="sign-in"
+      submitLabel="Sign in"
+      pending={signIn.isPending}
+      error={signIn.error}
+      onSubmit={(form) => signIn.mutate({ email: formText(form, 'email'), password: formText(form, 'password') })}
     >
-      <div className="grid gap-1.5">
-        <Label htmlFor="email">Email</Label>
-        <Input id="email" name="email" type="email" autoComplete="username" required />
-      </div>
-      <div className="grid gap-1.5">
-        <Label htmlFor="password">Password</Label>
-        <Input id="password" name="password" type="password" autoComplete="current-password" required />
-      </div>
-      <Button type="submit" disabled={!hydrated || pending}>
-        Sign in
-      </Button>
-      {failure ? (
-        <p id="sign-in-error" role="alert" className="text-sm text-destructive">
-          {failure}
-        </p>
-      ) : null}
-    </form>
+      <AuthField id="email" name="email" label="Email" type="email" autoComplete="username" required />
+      <AuthField
+        id="password"
+        name="password"
+        label="Password"
+        type="password"
+        autoComplete="current-password"
+        required
+      />
+    </AuthForm>
   )
 }

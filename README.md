@@ -23,12 +23,12 @@ Requirements: Node 26 (see `.node-version`), pnpm 12 (`npm install -g pnpm@12.3.
 
 ```sh
 pnpm install
-pnpm bootstrap                      # creates .env with a secret, starts Postgres, applies migrations
+pnpm bootstrap                      # creates .env with a secret, starts Postgres and Mailpit, applies migrations
 pnpm user:create you@example.com "Your Name"   # prompts for the password without echo
 pnpm dev                            # http://localhost:3000
 ```
 
-Public sign-up is closed; accounts are created with `pnpm user:create`. Before handing off a change, run `pnpm check`. Contract, database, auth, and UI changes also need `pnpm check:drift` and `pnpm build && pnpm verify:app` (install the test browser once with `pnpm exec playwright install chromium`).
+Public sign-up is closed by default (`AUTH_SIGN_UP=open` enables it, with email verification); accounts are created with `pnpm user:create`. Before handing off a change, run `pnpm check`. Contract, database, auth, and UI changes also need `pnpm check:drift` and `pnpm build && pnpm verify:app` (needs Mailpit, `pnpm mail:up`; install the test browsers once with `pnpm exec playwright install chromium firefox`).
 
 - [AGENTS.md](AGENTS.md): architecture, workflows, and rules for coding agents and humans.
 - [docs/operations.md](docs/operations.md): configuration, deployment, and security notes.

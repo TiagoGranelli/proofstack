@@ -1,10 +1,12 @@
 // Network mocks for component tests. Contract endpoints use the MSW handlers Hey API generates from
 // openapi.json (src/sdk/msw.gen.ts), so a mock cannot drift from the contract: paths, methods and success
 // bodies are typed by it, and `apiError` only accepts a status and body the operation declares.
-// Better Auth's endpoints are outside the contract and are mocked by hand in `auth`.
+// Account actions are server functions outside the contract (src/lib/auth.functions.ts); `auth` mocks them
+// through their component-test stub (tests/component/stubs/auth-functions.ts), typed by their AuthOutcome.
 import type { InfiniteData } from '@tanstack/react-query'
 import { http, HttpResponse, type HttpHandler, type JsonBodyType } from 'msw'
 import { setupWorker } from 'msw/browser'
+import type { AuthOutcome } from '#/lib/auth.functions.ts'
 import { createMswHandlers, type MswHandlerFactories } from '#/sdk/msw.gen.ts'
 import type {
   MyPostsCreateErrors,
@@ -16,6 +18,7 @@ import type {
   PublicPostsListErrors,
   SystemReadyErrors,
 } from '#/sdk/types.gen.ts'
+import { type AuthFunctionName, authFunctionPath } from './stubs/auth-functions.ts'
 
 /** Started and reset by tests/component/setup.ts. Add handlers per test with `worker.use(...)`. */
 export const worker = setupWorker()
@@ -85,24 +88,36 @@ export const postPages = (...pages: PostPage[]): InfiniteData<PostPage> => ({
   pageParams: pages.map((_, index) => (index === 0 ? {} : pages[index - 1]!.nextCursor)),
 })
 
-/** Better Auth endpoints the UI calls through `authClient` (src/lib/auth-client.ts). */
+/**
+ * How a mocked account server function answers: its outcome (`{ ok: true, value }` or a Better Auth failure
+ * code), `'network'` (the request fails), `'thrown'` (the handler threw: Start answers 500), or `held()` to
+ * answer `{ ok: true, value: null }` only once released.
+ */
+type AuthAnswer<T> = AuthOutcome<T> | 'network' | 'thrown' | { wait: () => Promise<void> }
+
+/** A server function of src/lib/auth.functions.ts, answered with `answer`. */
+export const authFunction = <T = null>(name: AuthFunctionName, answer: AuthAnswer<T>): HttpHandler =>
+  http.post(`*${authFunctionPath(name)}`, async () => {
+    if (answer === 'network') return HttpResponse.error()
+    if (answer === 'thrown') return HttpResponse.json({ message: 'Internal Server Error' }, { status: 500 })
+    if ('wait' in answer) {
+      await answer.wait()
+      return HttpResponse.json({ ok: true, value: null } satisfies AuthOutcome)
+    }
+    return HttpResponse.json(answer as JsonBodyType)
+  })
+
+/** The sign-in and sign-out server functions, with the answers the tests use most. */
 export const auth = {
   signIn: (outcome: 'ok' | 'invalid' | 'network' | { wait: () => Promise<void> }) =>
-    http.post('*/api/auth/sign-in/email', async () => {
-      if (outcome === 'network') return HttpResponse.error()
-      if (outcome === 'invalid')
-        return HttpResponse.json(
-          { code: 'INVALID_EMAIL_OR_PASSWORD', message: 'Invalid email or password' },
-          { status: 401 },
-        )
-      if (typeof outcome === 'object') await outcome.wait()
-      return HttpResponse.json({ redirect: false, token: 'session-token', user: { id: 'u1', name: 'Test Author' } })
-    }),
+    authFunction(
+      'signIn',
+      outcome === 'ok'
+        ? { ok: true, value: null }
+        : outcome === 'invalid'
+          ? { ok: false, failure: { code: 'INVALID_EMAIL_OR_PASSWORD' } }
+          : outcome,
+    ),
   signOut: (outcome: 'ok' | 'failed' | 'network' | { wait: () => Promise<void> }) =>
-    http.post('*/api/auth/sign-out', async () => {
-      if (outcome === 'network') return HttpResponse.error()
-      if (outcome === 'failed') return HttpResponse.json({ message: 'Failed to sign out' }, { status: 500 })
-      if (typeof outcome === 'object') await outcome.wait()
-      return HttpResponse.json({ success: true })
-    }),
+    authFunction('signOut', outcome === 'ok' ? { ok: true, value: null } : outcome === 'failed' ? 'thrown' : outcome),
 }

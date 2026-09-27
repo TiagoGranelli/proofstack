@@ -7,6 +7,8 @@ const REQUIRED = [
   'TEST_OTHER_USER_EMAIL',
   'TEST_OTHER_USER_PASSWORD',
   'TEST_OTHER_USER_NAME',
+  'CLOSED_APP_URL',
+  'MAILPIT_URL',
 ] as const
 
 export default async function setup() {

@@ -1,15 +1,9 @@
-// Content-Security-Policy in the browser. Every E2E test fails on a violation (./fixtures.ts); these tests
-// prove that the collector works and walk every page and navigation kind under both policies: the SSR
-// nonce policy with 'strict-dynamic' and the hash policy of the prerendered /about.
+// Content-Security-Policy in the browser. Every E2E test fails on a violation (./fixtures.ts, through
+// ./support/app.ts); these tests prove that the collector works and walk every page and navigation kind
+// under both policies: the SSR nonce policy with 'strict-dynamic' and the hash policy of the prerendered
+// /about.
 import type { Page } from '@playwright/test'
-import { expect, test } from './fixtures.ts'
-
-let clientCount = 0
-test.beforeEach(async ({ context }, testInfo) => {
-  await context.setExtraHTTPHeaders({ 'x-forwarded-for': `198.19.${testInfo.workerIndex % 256}.${++clientCount}` })
-})
-
-const author = { email: process.env.TEST_USER_EMAIL!, password: process.env.TEST_USER_PASSWORD! }
+import { expect, signIn, test } from './support/app.ts'
 
 const hydrated = (page: Page) => expect(page.locator('body[data-hydrated="true"]')).toBeAttached()
 
@@ -19,9 +13,16 @@ const navLink = (page: Page, name: string) =>
 test('blocks and reports markup injected into a page', async ({ page, cspViolations }) => {
   // Simulates stored XSS: the server's response, with its real policy, plus inline code without the nonce.
   await page.route('/', async (route) => {
-    const response = await route.fetch()
+    // Playwright's fetch cannot decode zstd, which Firefox accepts and the edge then uses (`verify:app --edge`).
+    const response = await route.fetch({ headers: { ...route.request().headers(), 'accept-encoding': 'gzip' } })
     const injected = '<script>window.injected = true</script><style>body { color: red }</style>'
-    await route.fulfill({ response, body: (await response.text()).replace('</main>', `${injected}</main>`) })
+    // The body is passed decoded, so the edge's Content-Encoding must not describe it.
+    const { 'content-encoding': _encoding, 'content-length': _length, ...headers } = response.headers()
+    await route.fulfill({
+      response,
+      headers,
+      body: (await response.text()).replace('</main>', `${injected}</main>`),
+    })
   })
   await page.goto('/')
   await hydrated(page)
@@ -32,7 +33,7 @@ test('blocks and reports markup injected into a page', async ({ page, cspViolati
   cspViolations.length = 0
 })
 
-test('SSR pages load every module and route chunk under the nonce policy', async ({ page, baseURL }) => {
+test('SSR pages load every module and route chunk under the nonce policy', async ({ page, author }) => {
   const response = await page.goto('/')
   expect(response?.headers()['content-security-policy']).toContain("'strict-dynamic'")
   await hydrated(page)
@@ -43,8 +44,7 @@ test('SSR pages load every module and route chunk under the nonce policy', async
   await expect(page).toHaveURL(/\/login\?redirect=/)
   await expect(page.getByRole('button', { name: 'Sign in' })).toBeEnabled()
 
-  const signIn = await page.request.post('/api/auth/sign-in/email', { data: author, headers: { origin: baseURL! } })
-  expect(signIn.status()).toBe(200)
+  await signIn(page, author)
   await page.goto('/dashboard')
   await hydrated(page)
   await expect(page.getByLabel('New post')).toBeVisible()

@@ -7,7 +7,7 @@ import { log } from '../log.ts'
 export default definePlugin((nitroApp) => {
   log('info', 'starting', {
     appUrl: env.appUrl,
-    trustedIpHeader: env.trustedIpHeader ?? null,
+    trustedProxies: env.trustedProxies,
     databasePoolMax: env.databasePoolMax,
   })
 

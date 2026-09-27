@@ -1,8 +1,6 @@
-import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import { useState } from 'react'
 import { Button } from '#/components/ui/button.tsx'
-import { authClient } from '#/lib/auth-client.ts'
+import { useSignOutMutation } from '#/features/auth/api/sign-out.ts'
 
 /**
  * Sign-out state shared by SignOutButton and SignOutAlert, so the page can place the button and its failure
@@ -10,21 +8,9 @@ import { authClient } from '#/lib/auth-client.ts'
  */
 export function useSignOut() {
   const navigate = useNavigate()
-  const queryClient = useQueryClient()
-  const [status, setStatus] = useState<'idle' | 'pending' | 'failed'>('idle')
-  const signOut = async () => {
-    setStatus('pending')
-    try {
-      const { error } = await authClient.signOut()
-      if (error) return setStatus('failed')
-    } catch {
-      // The request never got a response (offline, connection reset).
-      return setStatus('failed')
-    }
-    queryClient.clear()
-    await navigate({ to: '/' })
-  }
-  return { status, signOut }
+  const mutation = useSignOutMutation({ mutationConfig: { onSuccess: () => navigate({ to: '/' }) } })
+  const status: 'idle' | 'pending' | 'failed' = mutation.isPending ? 'pending' : mutation.isError ? 'failed' : 'idle'
+  return { status, signOut: () => mutation.mutate() }
 }
 
 type SignOut = ReturnType<typeof useSignOut>

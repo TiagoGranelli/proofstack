@@ -1,7 +1,7 @@
 // Boots the built app (.output) against a fresh, migrated test database with two author accounts.
 // Shared by scripts/verify-app.ts and scripts/lighthouse.ts. Server output goes to a log file.
 // With `edge`, the app sits behind the reference edge (deploy/Caddyfile, scripts/edge.ts) as in production:
-// the returned url and APP_URL are the edge's, the Node server trusts only the X-Real-IP header it sets.
+// the returned url and APP_URL are the edge's, and the Node server trusts X-Forwarded-For only from the edge.
 import { spawn } from 'node:child_process'
 import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { createServer } from 'node:net'
@@ -28,6 +28,9 @@ export type RunningApp = {
 }
 
 const noop = async () => {}
+
+/** Where the edge (and the test runners, without one) connect from. */
+export const LOOPBACK = '127.0.0.1/32,::1/128'
 
 const password = () => `pw-${crypto.randomUUID()}`
 
@@ -89,18 +92,26 @@ const assertFreshBuild = () => {
 /**
  * Starts the built server on a free port against `databaseUrl`, which must name a *_test database: it is
  * dropped and recreated. Two accounts are created: `user` (the author the tests act as) and `otherUser`
- * (a second author for isolation checks).
+ * (a second author for isolation checks). With `alongside`, the server shares that one's database, accounts
+ * and secret instead, so a run can test two configurations (for example both sign-up policies) at once.
  */
 export const startApp = async (options: {
   databaseUrl: string
   logFile: string
   port?: string
-  /** TRUSTED_IP_HEADER for the server; tests use x-forwarded-for to give every suite its own rate-limit bucket. */
-  trustedIpHeader?: string
+  /**
+   * TRUSTED_PROXIES for the server: trusting loopback lets each test suite pick its client IP (X-Forwarded-For).
+   * Ignored with `edge`: the server then trusts only the edge, which connects from loopback.
+   */
+  trustedProxies?: string
+  /** More server settings, such as AUTH_SIGN_UP, SMTP_URL and MAIL_FROM. */
+  settings?: NodeJS.ProcessEnv
+  /** Share this running app's database, accounts and secret instead of resetting the database. */
+  alongside?: RunningApp
   /**
    * Put the reference edge in front. `trustedProxies` becomes the edge's EDGE_TRUSTED_PROXIES: the test
-   * runners send their own X-Forwarded-For per suite, so they pass `private_ranges`. The server then reads
-   * the client IP from X-Real-IP, which the edge overwrites (`trustedIpHeader` is ignored).
+   * runners send their own X-Forwarded-For per suite, so they pass `private_ranges`. The edge replaces
+   * X-Forwarded-For with the client IP it resolved, and the server trusts only the edge (loopback).
    */
   edge?: { trustedProxies?: string; logFile: string }
 }): Promise<RunningApp> => {
@@ -110,24 +121,32 @@ export const startApp = async (options: {
   const edgePort = options.edge ? await freePort() : undefined
   const url = edgePort ? `http://localhost:${edgePort}` : directUrl
   const { databaseUrl } = options
-  const user = { email: 'author@example.test', name: 'Test Author', password: password() }
-  const otherUser = { email: 'other@example.test', name: 'Other Author', password: password() }
+  const user = options.alongside?.user ?? { email: 'author@example.test', name: 'Test Author', password: password() }
+  const otherUser = options.alongside?.otherUser ?? {
+    email: 'other@example.test',
+    name: 'Other Author',
+    password: password(),
+  }
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     DATABASE_URL: databaseUrl,
     APP_URL: url,
     PORT: appPort,
     NODE_ENV: 'production',
-    BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET || crypto.randomUUID().repeat(2),
-    TRUSTED_IP_HEADER: options.edge ? 'x-real-ip' : (options.trustedIpHeader ?? ''),
+    BETTER_AUTH_SECRET:
+      options.alongside?.env.BETTER_AUTH_SECRET || process.env.BETTER_AUTH_SECRET || crypto.randomUUID().repeat(2),
+    TRUSTED_PROXIES: options.edge ? LOOPBACK : (options.trustedProxies ?? ''),
+    ...options.settings,
   }
 
-  await resetTestDatabase(databaseUrl)
-  await Promise.all(
-    [user, otherUser].map((u) =>
-      runQuiet('node', ['scripts/create-user.ts', u.email, u.name], { ...env, PROOFSTACK_USER_PASSWORD: u.password }),
-    ),
-  )
+  if (!options.alongside) {
+    await resetTestDatabase(databaseUrl)
+    await Promise.all(
+      [user, otherUser].map((u) =>
+        runQuiet('node', ['scripts/create-user.ts', u.email, u.name], { ...env, PROOFSTACK_USER_PASSWORD: u.password }),
+      ),
+    )
+  }
 
   mkdirSync(dirname(options.logFile), { recursive: true })
   const log = openSync(options.logFile, 'w')

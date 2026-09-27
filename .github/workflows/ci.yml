@@ -100,6 +100,12 @@ jobs:
     timeout-minutes: 25
     services:
       postgres: *postgres
+      # verify:app sends account emails here; the E2E tests read the links back (default ports of verify:app).
+      mailpit:
+        image: axllent/mailpit:v1.31.2@sha256:74d609a42ec279aa63c6b4622a6fa9b5408d1ad5b1d76a1c4be40a265ce0863d
+        ports:
+          - 54325:1025
+          - 54380:8025
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

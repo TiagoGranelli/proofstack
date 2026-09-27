@@ -3,9 +3,11 @@
 // back; alerts and status messages appear where the design says. Pointer-free, so skipped on touch projects.
 import type { Page } from '@playwright/test'
 import { tabOrder, tabThrough } from './support/a11y.ts'
+import { createAccount } from './support/accounts.ts'
 import {
   dashboardWithMyPost,
   expect,
+  failServerFunctionPosts,
   fakePost,
   lastPage,
   navigateWithApiResponse,
@@ -31,7 +33,48 @@ test.describe('tab order', () => {
     // The seed project publishes more than a page of posts (seed.setup.ts), so `/` always ends in Load more.
     ['home', (page) => visit(page, '/'), [...NAV, 'button "Load more posts"']],
     ['about', (page) => visit(page, '/about'), NAV],
-    ['login', (page) => visit(page, '/login'), [...NAV, 'textbox "Email"', 'textbox "Password"', 'button "Sign in"']],
+    [
+      'login',
+      (page) => visit(page, '/login'),
+      // verify:app's APP_URL server has open sign-up, so the page links to it.
+      [
+        ...NAV,
+        'textbox "Email"',
+        'textbox "Password"',
+        'button "Sign in"',
+        'link "Forgot your password?"',
+        'link "Create one"',
+      ],
+    ],
+    [
+      'sign-up',
+      (page) => visit(page, '/sign-up'),
+      [...NAV, 'textbox "Name"', 'textbox "Email"', 'textbox "Password"', 'button "Create account"', 'link "Sign in"'],
+    ],
+    [
+      'forgot password',
+      (page) => visit(page, '/forgot-password'),
+      [...NAV, 'textbox "Email"', 'button "Send reset link"', 'link "Back to sign in"'],
+    ],
+    [
+      'account',
+      // A new account, so this browser holds its only session and the list has no Sign out buttons.
+      async (page) => {
+        await signIn(page, await createAccount(page.request))
+        await visit(page, '/account')
+      },
+      [
+        ...NAV,
+        'textbox "Current password"',
+        'textbox "New password"',
+        'button "Change password"',
+        // Sign out other sessions is disabled without other sessions.
+        'button "Sign out everywhere"',
+        'textbox "Password"',
+        'checkbox "I understand that my account and all my posts are deleted for good."',
+        'button "Delete account"',
+      ],
+    ],
     ['not found', (page) => visit(page, '/no-such-page'), [...NAV, 'link "Go to latest posts"']],
     [
       'error page',
@@ -47,6 +90,7 @@ test.describe('tab order', () => {
       },
       [
         ...NAV,
+        'link "Account"',
         'button "Sign out"',
         'textbox "New post"',
         // Publish is disabled until there is text, so it is not a Tab stop yet.
@@ -174,13 +218,13 @@ test.describe('announcements', () => {
   }) => {
     await signIn(page, author)
     await visit(page, '/dashboard')
-    await page.route('**/api/auth/sign-out', (route) => route.abort())
+    const restore = await failServerFunctionPosts(page)
     const signOut = page.getByRole('button', { name: 'Sign out' })
     await signOut.focus()
     await page.keyboard.press('Enter')
     await expect(page.getByRole('alert')).toHaveText('Could not sign out. Check your connection and try again.')
     await expect(signOut).toBeEnabled()
-    await page.unroute('**/api/auth/sign-out')
+    await restore()
     await signOut.focus()
     await page.keyboard.press('Enter')
     await expect(page).toHaveURL(/\/$/)

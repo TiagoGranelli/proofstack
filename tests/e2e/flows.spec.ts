@@ -1,11 +1,6 @@
 import type { Page } from '@playwright/test'
-import { expect, signIn, test, visit, type Author } from './support/app.ts'
-
-const signInWithForm = async (page: Page, author: Author) => {
-  await page.getByLabel('Email').fill(author.email)
-  await page.getByLabel('Password').fill(author.password)
-  await page.getByRole('button', { name: 'Sign in' }).click()
-}
+import { signInWithForm } from './support/accounts.ts'
+import { expect, failServerFunctionPosts, signIn, test, visit } from './support/app.ts'
 
 /**
  * On the dashboard, hydrated and rendered. Leaving a page before that (a `goto`, cleared cookies) races with
@@ -234,11 +229,12 @@ test('client-side navigation shows a post published or edited moments ago, never
 test('a failed sign-out says so and can be retried', async ({ page, author }) => {
   await signIn(page, author)
   await visit(page, '/dashboard')
-  await page.route('**/api/auth/sign-out', (route) => route.abort())
+  // Sign-out is a server function (POST /_serverFn/...).
+  const restore = await failServerFunctionPosts(page)
   await page.getByRole('button', { name: 'Sign out' }).click()
   await expect(page.getByRole('alert')).toContainText('Could not sign out')
   await expect(page.getByRole('button', { name: 'Sign out' })).toBeEnabled()
-  await page.unroute('**/api/auth/sign-out')
+  await restore()
   await page.getByRole('button', { name: 'Sign out' }).click()
   await expect(page).toHaveURL(/\/$/)
 })

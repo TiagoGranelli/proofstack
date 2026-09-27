@@ -43,9 +43,9 @@ const GUARDS: Array<{ file: string; pattern: RegExp; problem: string }> = [
   },
   {
     file: 'src/server/auth.ts',
-    pattern: /disabledPaths:\s*\[[^\]]*['"]\/sign-up\/email['"]/,
+    pattern: /disabledPaths: env\.authSignUp === 'open' \? \[\] : \['\/sign-up\/email'\]/,
     problem:
-      "must keep `disabledPaths: ['/sign-up/email']`: public sign-up stays closed even if the HTTP allowlist changes (ADR 0003)",
+      "must keep `disabledPaths: env.authSignUp === 'open' ? [] : ['/sign-up/email']`: sign-up stays closed unless AUTH_SIGN_UP=open, even if the endpoint allowlist changes (ADR 0003)",
   },
 ]
 
@@ -108,8 +108,9 @@ const GATES: Gate[] = [
       spawnSync('node', ['scripts/check-drift.ts', 'contract', 'migrations', 'auth'], { stdio: 'inherit' }).status ===
       0,
     fix:
-      'regenerate what the drift report names: contract -> `pnpm codegen`, migrations -> `pnpm db:generate`, ' +
-      'auth -> `pnpm auth:generate`. Commit the generated files with their source',
+      'regenerate what the drift report names: contract -> `pnpm codegen`, migrations -> `pnpm db:generate`; ' +
+      'auth -> edit src/server/db/schema/auth.ts by hand (AGENTS.md, "Auth config change"). Commit the ' +
+      'generated files with their source',
   },
   {
     name: 'guards',

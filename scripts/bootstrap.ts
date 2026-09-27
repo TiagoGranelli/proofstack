@@ -1,4 +1,4 @@
-// One-command local setup after `pnpm install`: .env with a fresh auth secret, Postgres, migrations.
+// One-command local setup after `pnpm install`: .env with a fresh auth secret, Postgres, Mailpit, migrations.
 // Idempotent and non-destructive: an existing .env is never overwritten, only an empty secret is filled in.
 // Usage: pnpm bootstrap   (named so because `pnpm setup` is a built-in pnpm command)
 import { spawnSync } from 'node:child_process'
@@ -45,6 +45,12 @@ step(
   'pnpm',
   ['run', '--silent', 'db:up'],
   'Is Docker running? If the port is taken, set POSTGRES_PORT (and the port in DATABASE_URL) in .env.',
+)
+step(
+  'pnpm mail:up',
+  'pnpm',
+  ['run', '--silent', 'mail:up'],
+  'Is Docker running? If a port is taken, set MAILPIT_SMTP_PORT (and the port in SMTP_URL) or MAILPIT_HTTP_PORT in .env.',
 )
 // The same migrator as deploys (advisory lock, JSON logs with the failing statement's error).
 step(

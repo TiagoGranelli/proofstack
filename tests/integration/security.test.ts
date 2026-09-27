@@ -79,29 +79,27 @@ describe('csrf', () => {
 })
 
 describe('auth surface', () => {
+  // Better Auth endpoints the app does not use (the allowlist in src/server/http/auth-endpoints.ts), and
+  // method or path variants of ones it does. Sign-up's absence with AUTH_SIGN_UP=closed: auth-sign-up.test.ts.
   const unused = [
-    ['POST', '/sign-up/email'],
     ['POST', '/sign-in/social'],
     ['POST', '/update-user'],
     ['POST', '/change-email'],
-    ['POST', '/change-password'],
-    ['POST', '/delete-user'],
     ['POST', '/verify-password'],
-    ['POST', '/request-password-reset'],
-    ['POST', '/reset-password'],
+    ['POST', '/set-password'],
     ['GET', '/reset-password/some-token'],
-    ['GET', '/verify-email?token=x'],
+    ['GET', '/delete-user/callback?token=x'],
     ['GET', '/callback/github'],
-    ['GET', '/list-sessions'],
-    ['POST', '/revoke-session'],
-    ['POST', '/revoke-sessions'],
-    ['POST', '/revoke-other-sessions'],
+    ['GET', '/list-accounts'],
+    ['POST', '/update-session'],
     ['GET', '/sign-out'],
     ['POST', '/get-session'],
     ['POST', '/sign-in/email/'],
+    ['POST', '/list-sessions'],
+    ['GET', '/revoke-sessions'],
   ] as const
   // Sent without a session: an exposed endpoint then answers 400/401 instead of 404, and a regression that
-  // re-exposes e.g. /revoke-other-sessions cannot end the sessions other tests are using.
+  // re-exposes e.g. /update-user cannot change the users other tests are using.
   it.each(unused)('%s %s is not exposed', async (method, path) => {
     const res = await fetch(`${appUrl}/api/auth${path}`, {
       method,
@@ -203,12 +201,11 @@ describe('sessions', () => {
     expect(attempts.map((res) => res.status)).toEqual([401, 401, 401, 429])
     expect(Number(attempts[3]!.headers.get('x-retry-after'))).toBeLessThanOrEqual(10)
 
-    // The proxy appends the real peer, so only the last X-Forwarded-For value counts: prepending addresses
-    // or sending the internal client-IP header neither resets the bucket nor moves it, even with the right password.
+    // The test process is the trusted proxy and its value is the last hop it vouches for: addresses prepended
+    // in front of it neither reset the bucket nor move it, even with the right password.
     const forgeries: Array<Record<string, string> & { 'x-forwarded-for': string }> = [
       { 'x-forwarded-for': `203.0.113.7, ${client}` },
       { 'x-forwarded-for': `203.0.113.8, 198.18.0.9, ${client}` },
-      { 'x-forwarded-for': client, 'x-proofstack-client-ip': '203.0.113.9' },
     ]
     for (const headers of forgeries)
       expect((await postSignIn({ email, password }, headers)).status, JSON.stringify(headers)).toBe(429)
