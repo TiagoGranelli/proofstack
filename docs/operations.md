@@ -781,27 +781,28 @@ browsers, Postgres and (for `verify`) Mailpit, and moves artifacts. The logic li
 | `pnpm ci:lighthouse` | `pnpm lighthouse --runs=5`, through the edge. Exit 2 means inconclusive (see docs/agents/gates.md) |
 | `pnpm ci:docker` | `scripts/docker-smoke.ts` on the adopters' recipe itself: `deploy/compose.production.yaml` plus `compose.smoke.yaml` (PgBouncer in transaction mode in front of Postgres, the image built from this checkout, the edge on an ephemeral loopback port). Builds the image, scans it with grype (see below), migrates with three runs at once through the pooler and once directly, creates the first account with the bundled `create-user`, brings the stack up, checks pages and a sign-in through the edge, stops the app gracefully, and `down -v` removes everything. Needs Docker. |
 
-`pnpm ci:local [job ...]` is the faithful local equivalent (default: every job, in CI order). It runs the
-container jobs (`static`, `supply-chain`, `drift`, `build`, `verify`, `lighthouse`) in the official Playwright image
-for `@playwright/test` 1.63.0 (Ubuntu 24.04, all browsers including WebKit), with Node from
-the `node` image (the version in `devEngines`), pnpm from `packageManager` and the pinned Caddy binary added, next to Postgres 18.6 and
-Mailpit (`MAILPIT_HOST=mailpit` for `verify:app`) on a private Docker network. The host jobs (`workflows`, `secrets`, `docker`) drive Docker and run on the host.
+`pnpm ci:local [job ...]` is the faithful local equivalent (default: every job, in CI order). The container jobs
+(`static`, `supply-chain`, `drift`, `build`, `verify`, `lighthouse`) run in `compose.ci.yaml`: a `runner` built
+from the official Playwright image for `@playwright/test` 1.63.0 (Ubuntu 24.04, all browsers including WebKit)
+with pnpm from `packageManager` and the pinned Caddy binary, next to Postgres 18.6 and Mailpit
+(`MAILPIT_HOST=mailpit`). pnpm installs the Node of `devEngines.runtime` there as it does everywhere. The host
+jobs (`workflows`, `secrets`, `docker`) drive Docker themselves and run on the host.
 
-- The repository is mounted read-only. The container copies what a CI checkout would contain (tracked
-  files and untracked files that are not ignored, as they are on disk) and installs its own
-  `node_modules` with `pnpm install --frozen-lockfile`; the host's `node_modules` and `.output` are never
-  touched. The pnpm store is the volume `<prefix>-pnpm-store`, kept between runs.
-- Limits: `CI_LOCAL_CPUS` (default 4, like a GitHub-hosted runner), `CI_LOCAL_MEMORY` (default `6g`, no
-  swap) and `CI_LOCAL_SHM` (default `2g`; Chrome needs a large `/dev/shm`). Postgres keeps its data in
-  memory (1 GB limit).
+- The runner never touches the host's `node_modules` or `.output`. Once per run, the script fills the `work`
+  volume with what a CI checkout contains: a clone of HEAD and its parent (the static job diffs against
+  `HEAD^`), with the files as they are on disk on top (tracked and untracked ones that are not ignored), then
+  `pnpm install --frozen-lockfile`. The pnpm store is the volume `<prefix>-pnpm-store`, kept between runs.
+- Each job is `docker compose run --rm runner pnpm ci:<job>` in a fresh container. Limits: `CI_LOCAL_CPUS`
+  (default 4, like a GitHub-hosted runner), `CI_LOCAL_MEMORY` (default `6g`, no swap) and `CI_LOCAL_SHM`
+  (default `2g`; Chrome needs a large `/dev/shm`). Postgres keeps its data in memory.
 - `verify` and `lighthouse` add `build` when it is missing, like CI's `needs: build`. Jobs run one at a
   time; a Lighthouse run shares the machine with nothing else.
-- Reports are copied to `test-results/ci-local/<job>/`. The summary lists every job's time and the
-  runner container's peak memory (cgroup `memory.current`, including page cache, and anonymous memory).
-- Containers and the network are named `<prefix>-local-<pid>-*` and removed at the end, also on Ctrl-C.
-  `CI_DOCKER_PREFIX` sets the prefix (default `<package name>-ci`). The runner image
-  (`<prefix>-runner:<hash>`) and the store volume stay for the next run; remove them with
-  `docker image rm` and `docker volume rm`.
+- Reports are copied to `test-results/ci-local/<job>/`. The summary lists every job's time and its
+  container's peak memory, read inside the container (`/sys/fs/cgroup/memory.peak`, page cache included), so
+  it works wherever Docker runs Linux containers.
+- The compose project is `<prefix>-local-<pid>`; `docker compose down -v` removes its containers, network,
+  image tag and `work` volume at the end, also on Ctrl-C. `CI_DOCKER_PREFIX` sets the prefix (default
+  `<package name>-ci`).
 
 `act` still works as a smoke test of the YAML for the jobs without artifacts, but not as a CI
 replacement: `actions/upload-artifact` v7 fails under act (nektos/act#6022).
@@ -825,8 +826,7 @@ The tooling targets Linux, macOS and Windows; CI runs everything on Linux and `p
   path is written for Docker Desktop and has not been run there yet. On Linux it needs a host firewall that
   lets containers reach the host (it timed out on the maintainer's machine), which is why Linux keeps the
   host network by default.
-- **`pnpm ci:local` and `pnpm ci:docker`** need Docker; `ci:local` samples memory from the cgroup, which
-  exists on Linux only.
+- **`pnpm ci:local` and `pnpm ci:docker`** need Docker.
 
 ### Linux: memory caps
 
