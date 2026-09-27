@@ -23,7 +23,10 @@
     "isolatedModules": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "erasableSyntaxOnly": true
+    "erasableSyntaxOnly": true,
+    // Effect's diagnostics (floating effects, leaking requirements, missing yield*, …): in the editor through
+    // @effect/tsgo's language service, and in `pnpm check` as the `effect` gate (`effect-tsgo diagnostics`).
+    "plugins": [{ "name": "@effect/language-service" }]
   },
   "include": ["src", "scripts", "tests", "*.config.ts"],
   "exclude": ["node_modules", ".output", "repos"]
