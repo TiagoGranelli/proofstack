@@ -33,6 +33,5 @@
 /.gitleaksignore              @TiagoGranelli
 /.squawk.toml                 @TiagoGranelli
 
-# CI workflows, actions, Renovate and this file.
+# CI workflows, actions, Renovate (renovate.json), the community files and this file.
 /.github/            @TiagoGranelli
-/renovate.json       @TiagoGranelli

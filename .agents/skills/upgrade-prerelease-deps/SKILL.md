@@ -28,8 +28,8 @@ description: Upgrade dependencies in this repo, above all the pinned pre-release
 
 ## Steps
 
-1. Renovate (`renovate.json`) opens the PRs, a week after each release; it follows the `rc` dist-tag for Effect
-   and `next` for Hey API. By hand, `pnpm outdated` lists what is newer.
+1. Renovate (`.github/renovate.json`) opens the PRs, a week after each release; it follows the `rc` dist-tag for
+   Effect and `next` for Hey API. By hand, `pnpm outdated` lists what is newer.
 2. Upgrade one pre-release package per PR: `pnpm add --save-exact <name>@<version>`.
 3. Package-specific work:
    - **Effect:** starting with the next RC after `4.0.0-rc.117`, `effect/unstable/httpapi` becomes

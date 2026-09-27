@@ -859,7 +859,7 @@ What guards the dependencies, the image and the repository, and where each gate 
   reason and a review date), and an image finding in `.grype.yaml` (an `ignore` rule with the package, a
   `reason` and a review date in it), only when it cannot apply here. The usual fix is an upgrade, an exact
   `overrides` entry in `pnpm-workspace.yaml` naming the advisory, or a newer base image.
-- **Renovate** (`renovate.json`; install the Renovate GitHub App to turn it on) proposes updates for the npm
+- **Renovate** (`.github/renovate.json`; install the Renovate GitHub App to turn it on) proposes updates for the npm
   packages, pnpm (`packageManager`), Node (`devEngines`), every container image and the GitHub Actions, the
   last two pinned by digest. An image pinned in several files (`scripts/images.ts`, the compose files, `ci.yml`,
   the Dockerfiles) moves in one PR. It waits 7 days after a release, except for a vulnerability fix: its OSV

@@ -18,6 +18,7 @@ repository created from the template.
   image with `grype --only-fixed --fail-on high`.
 - `pnpm ci:local` runs its container jobs in `compose.ci.yaml`.
 - `CONTRIBUTING.md`, `SECURITY.md` and `CODE_OF_CONDUCT.md` live in `.github/`, where GitHub finds them first.
+- The Renovate configuration is `.github/renovate.json`, one of the locations Renovate searches.
 
 ### Fixed
 

@@ -1,8 +1,8 @@
 // Container images the CI scripts run, pinned by digest (tag kept for humans). The compose files, the workflows in
 // .github/workflows and the Dockerfiles repeat some of them; `pnpm ci:workflows` fails when a copy
 // differs from this file (scripts/image-pins.ts). Renovate updates the pins here (a regex manager in
-// renovate.json) and every copy in the same PR. By hand, `docker buildx imagetools inspect <name>:<tag>` prints the
-// index digest.
+// .github/renovate.json) and every copy in the same PR. By hand, `docker buildx imagetools inspect <name>:<tag>`
+// prints the index digest.
 import { readFileSync } from 'node:fs'
 
 export const IMAGES = {
