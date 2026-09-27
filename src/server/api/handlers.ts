@@ -6,6 +6,7 @@ import { ServiceUnavailable } from '#/contract/errors.ts'
 import { POSTS_PAGE_DEFAULT } from '#/contract/limits.ts'
 import { CurrentUser } from '#/contract/middleware.ts'
 import { PostNotFound } from '#/contract/posts.ts'
+import { isDraining } from '../lifecycle.ts'
 import { PostsRepo, type PageRequest } from '../posts/repo.ts'
 
 const pageRequest = (query: { readonly cursor?: PageRequest['cursor']; readonly limit?: number }): PageRequest => ({
@@ -18,14 +19,24 @@ export const SystemHandlers = HttpApiBuilder.group(
   'system',
   Effect.fn(function* (handlers) {
     const repo = yield* PostsRepo
-    return handlers
-      .handle('health', () => Effect.succeed({ status: 'ok' as const }))
-      .handle('ready', () =>
-        repo.ping.pipe(
-          Effect.as({ status: 'ok' as const }),
-          Effect.catchTag('DbError', () => Effect.fail(new ServiceUnavailable({ message: 'Database unavailable' }))),
-        ),
-      )
+    return (
+      handlers
+        .handle('health', () => Effect.succeed({ status: 'ok' as const }))
+        // A draining process is not ready, whatever the database says: the load balancer stops routing to it
+        // while it finishes what it has (../lifecycle.ts).
+        .handle('ready', () =>
+          Effect.suspend(() =>
+            isDraining()
+              ? Effect.fail(new ServiceUnavailable({ message: 'Shutting down' }))
+              : repo.ping.pipe(
+                  Effect.as({ status: 'ok' as const }),
+                  Effect.catchTag('DbError', () =>
+                    Effect.fail(new ServiceUnavailable({ message: 'Database unavailable' })),
+                  ),
+                ),
+          ),
+        )
+    )
   }),
 )
 

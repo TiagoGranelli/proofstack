@@ -1,5 +1,6 @@
 import { definePlugin } from 'nitro'
 import { env } from '../env.ts'
+import { isDraining } from '../lifecycle.ts'
 import { log } from '../log.ts'
 
 const https = env.appUrl.startsWith('https://')
@@ -25,6 +26,38 @@ const LOCKED_DOWN_CSP = "default-src 'none'; base-uri 'none'; form-action 'none'
 
 const QUIET = /^\/(api\/(health|ready)$|assets\/|favicon)/
 const started = new WeakMap<object, number>()
+/**
+ * Status logged for a request whose client disconnected before the response (nginx's "client closed request").
+ * Its response still settles, usually as a 500 from the aborted body or render, but nobody receives it. Logged as
+ * that 500 at `error`, the end of every load test and every impatient client tripped 5xx alerts.
+ */
+const CLIENT_CLOSED = 499
+
+type Event = { req: Request }
+
+/** The production security headers, where the response does not set its own. */
+const addSecurityHeaders = (headers: Headers) => {
+  for (const [name, value] of baselineHeaders) if (!headers.has(name)) headers.set(name, value)
+  const csp = headers.get('content-security-policy')
+  if (!csp) headers.set('content-security-policy', LOCKED_DOWN_CSP)
+  else if (https) headers.set('content-security-policy', `${csp}; upgrade-insecure-requests`)
+}
+
+/** One JSON line per request. Never the query string, headers or body: they can carry credentials. */
+const logRequest = (response: Response, event: Event) => {
+  const path = new URL(event.req.url).pathname
+  const aborted = event.req.signal.aborted
+  const status = aborted ? CLIENT_CLOSED : response.status
+  if (QUIET.test(path) && status < 400) return
+  const since = started.get(event)
+  log(status >= 500 ? 'error' : 'info', 'request', {
+    method: event.req.method,
+    path,
+    status,
+    ...(aborted ? { aborted: true } : {}),
+    ms: since === undefined ? undefined : Math.round(performance.now() - since),
+  })
+}
 
 // Runs for every response Nitro sends: SSR pages, API and auth routes, server functions, and also
 // public/ files and prerendered pages, which never reach the TanStack Start request middleware.
@@ -33,26 +66,16 @@ export default definePlugin((nitroApp) => {
 
   nitroApp.hooks.hook('request', (event) => {
     started.set(event, performance.now())
+    // srvx creates the request's abort signal on first access and aborts it when the client disconnects;
+    // touching it here arms it, so the response hook can tell an abandoned request from a failed one.
+    void event.req.signal
   })
 
   nitroApp.hooks.hook('response', (response, event) => {
-    if (production) {
-      for (const [name, value] of baselineHeaders) if (!response.headers.has(name)) response.headers.set(name, value)
-      const csp = response.headers.get('content-security-policy')
-      if (!csp) response.headers.set('content-security-policy', LOCKED_DOWN_CSP)
-      else if (https) response.headers.set('content-security-policy', `${csp}; upgrade-insecure-requests`)
-    }
-
-    // One JSON line per request. Never the query string, headers or body: they can carry credentials.
-    const path = new URL(event.req.url).pathname
-    const status = response.status
-    if (QUIET.test(path) && status < 400) return
-    const since = started.get(event)
-    log(status >= 500 ? 'error' : 'info', 'request', {
-      method: event.req.method,
-      path,
-      status,
-      ms: since === undefined ? undefined : Math.round(performance.now() - since),
-    })
+    // Once draining, every response closes its connection: a keep-alive client (a load balancer) then opens a
+    // new one, which the closed listener refuses, instead of sending more requests to a stopping process.
+    if (isDraining()) response.headers.set('connection', 'close')
+    if (production) addSecurityHeaders(response.headers)
+    logRequest(response, event)
   })
 })

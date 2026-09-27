@@ -1,5 +1,6 @@
 // Runs the built app against a fresh test database and exercises it end to end: SDK integration tests
-// (Vitest, tests/integration), browser flows (Playwright, tests/e2e) and a graceful-shutdown check. Before the
+// (Vitest, tests/integration), browser flows (Playwright, tests/e2e) and a graceful-shutdown check that stops the
+// main server while it drains (stopWhileDraining in scripts/app-server.ts). Before the
 // app starts, the `db` Vitest project (tests/db: the rate-limit storage and query budgets) runs against its own
 // fresh database. Every runner always runs; the exit code is non-zero if any (or the shutdown check) fails.
 // Two servers share the database: APP_URL with AUTH_SIGN_UP=open, and CLOSED_APP_URL with the shipped defaults
@@ -18,7 +19,7 @@
 //      dropped afterwards unless KEEP_TEST_DB=1). ALLOW_STALE_BUILD=1 skips the build freshness check.
 //      MAILPIT_HOST (default 127.0.0.1), MAILPIT_SMTP_PORT and MAILPIT_HTTP_PORT locate Mailpit.
 import { readdirSync, readFileSync, rmSync } from 'node:fs'
-import { assertChromium, LOOPBACK, startApp, tail } from './app-server.ts'
+import { assertChromium, LOOPBACK, startApp, stopWhileDraining, tail } from './app-server.ts'
 import { type Invocation, pnpmInvocation, runSync } from './spawn.ts'
 import { dropTestDatabase, openConnections, testDatabaseUrl } from './test-db.ts'
 
@@ -176,7 +177,7 @@ try {
     if (runs.has('e2e')) timed('e2e (playwright)', pnpmInvocation(['exec', 'playwright', 'test', ...filters]), testEnv)
     else if (e2e) results.push({ name: 'e2e (playwright)', ok: true, detail: 'skipped: no test matches' })
   } finally {
-    const [stopped] = await Promise.all([app.stop(), closed.stop()])
+    const [{ stopped, problems: drain }] = await Promise.all([stopWhileDraining(app), closed.stop()])
     // The process exited, so its sockets are gone; Postgres may take a moment to reap the backends.
     let leftover = await openConnections(databaseUrl)
     for (let i = 0; i < 10 && leftover.length; i++) {
@@ -188,6 +189,7 @@ try {
       .split('\n')
       .some((line) => line.includes('"shutdown complete"') && line.includes('postgres-pool'))
     const problems = [
+      ...drain,
       stopped.ms > MAX_SHUTDOWN_MS ? `took ${stopped.ms} ms (max ${MAX_SHUTDOWN_MS})` : '',
       stopped.code === 0 ? '' : `exit ${stopped.code ?? stopped.signal}`,
       closedPool ? '' : 'no "shutdown complete" log line listing postgres-pool',

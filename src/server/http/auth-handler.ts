@@ -1,6 +1,7 @@
 import '@tanstack/react-start/server-only'
 import { getRequestHeaders, getRequestIP, getResponseHeaders } from '@tanstack/react-start/server'
 import { auth } from '../auth.ts'
+import { finishBeforeShutdown } from '../background-tasks.ts'
 import { env } from '../env.ts'
 import { log } from '../log.ts'
 import { AUTH_BASE_PATH, isHttpEndpoint, notFound } from './auth-endpoints.ts'
@@ -22,10 +23,11 @@ const withPeerAddress = (source: Headers): Headers => {
  * Better Auth's router, which applies disabledPaths, the endpoint allowlist, rate limiting and the origin check.
  * Unexpected failures (for example, the database is down) are thrown (`onAPIError.throw` in ../auth.ts) and
  * logged here without the request, as an empty 500. Auth failures such as a wrong password answer normally.
+ * Shutdown waits for it even when its client disconnected (../background-tasks.ts).
  */
 const dispatch = async (request: Request): Promise<Response> => {
   try {
-    return await auth.handler(request)
+    return await finishBeforeShutdown(auth.handler(request))
   } catch (error) {
     log('error', 'auth request failed', { path: new URL(request.url).pathname, error })
     return new Response(null, { status: 500, headers: { 'cache-control': 'no-store' } })

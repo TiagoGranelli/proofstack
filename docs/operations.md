@@ -397,7 +397,7 @@ or tokens ([Logs](#logs)), but request logs hold paths and times.
 | Endpoint | Meaning | Use for |
 | --- | --- | --- |
 | `GET /api/health` | The process answers HTTP. No dependencies are checked. | Liveness, the Docker `HEALTHCHECK` (see below) |
-| `GET /api/ready` | Postgres answers `select 1`. Otherwise 503 with a JSON body carrying `"_tag":"ServiceUnavailable"` and `"message":"Database unavailable"`. | Readiness, load balancer routing |
+| `GET /api/ready` | Postgres answers `select 1` and the process is not shutting down. Otherwise 503 with a JSON body carrying `"_tag":"ServiceUnavailable"` and `"message":"Database unavailable"` or `"Shutting down"`. | Readiness, load balancer routing |
 
 Postgres connection attempts time out after 5 s, so `/api/ready` answers 503 within about 5 s even when
 the database host does not respond. Do not use `/api/ready` for liveness: a database outage would restart
@@ -410,17 +410,31 @@ the address like the server does: `NITRO_PORT`, else `PORT`, else 3000; `NITRO_H
 
 ## Shutdown
 
-On SIGTERM or SIGINT, srvx (Nitro's HTTP server) stops accepting connections, waits for in-flight
-requests up to `SERVER_SHUTDOWN_TIMEOUT` seconds (default 5) and then force-closes them. Nitro then runs
-its `close` hook, where the startup plugin (`src/server/nitro/startup.ts`) runs the shutdown steps one
-after another, in this order: stop the periodic auth cleanup, wait for pending background tasks (mail
-sends, bounded by the SMTP timeouts of 5 s to connect and 15 s per socket operation, and rate-limit
-pruning and a running cleanup pass, which query Postgres), close the mail transport, dispose the Effect runtime, end the Postgres pool. Server code registers each step
-with `onShutdown` (`src/server/lifecycle.ts`), which does not import Nitro, so CLI scripts can load the
-same modules. A failed step is logged (`shutdown cleanup failed`) and the next one still runs. The log
-line `shutdown complete` lists the steps in the order they ran (`cleanups`, with each one's duration in
-`steps`), and `verify:app` fails when it is missing, when `postgres-pool` is not among them, or when a
-connection to the test database outlives the process.
+On SIGTERM or SIGINT the process logs `draining` and, from then on, `/api/ready` answers 503
+(`Shutting down`) and every response carries `Connection: close`, so a load balancer stops routing here
+and does not reuse a keep-alive connection. srvx (Nitro's HTTP server) stops accepting connections,
+closes idle ones, waits for in-flight requests up to `SERVER_SHUTDOWN_TIMEOUT` seconds (default 5) and
+then force-closes them. Nitro then runs its `close` hook, where the startup plugin
+(`src/server/nitro/startup.ts`) runs the shutdown steps one after another, in this order: stop the
+periodic auth cleanup, wait for pending background tasks (mail sends, bounded by the SMTP timeouts of 5 s
+to connect and 15 s per socket operation; rate-limit pruning and a running cleanup pass; and Better Auth
+requests whose client disconnected, see below), close the mail transport, dispose the Effect runtime, end
+the Postgres pool. Server code registers each step with `onShutdown` (`src/server/lifecycle.ts`), which
+does not import Nitro, so CLI scripts can load the same modules. A failed step is logged (`shutdown
+cleanup failed`) and the next one still runs. The log line `shutdown complete` lists the steps in the
+order they ran (`cleanups`, with each one's duration in `steps`).
+
+srvx's drain waits for connections, not for the work behind them. When a client disconnects during a
+sign-in, its response settles at once (logged as 499), but Better Auth goes on hashing the password and
+then writes the session; a load test found such writes failing with `Failed query` after the pool had
+closed. Every Better Auth call therefore counts as a background task until it finishes
+(`finishBeforeShutdown`, `src/server/background-tasks.ts`).
+
+`verify:app` stops its main server the hard way (`stopWhileDraining` in `scripts/app-server.ts`): a
+request to `/api/ready` that arrives at the moment of SIGTERM must get 503 with `Connection: close`, and a
+sign-in abandoned just before it must be logged as 499 before `shutdown complete`, with no failed query
+after. It also fails when `shutdown complete` is missing or lacks `postgres-pool`, or when a connection to
+the test database outlives the process.
 
 Measured with the Docker image: `docker stop` returns in about 1.2 s with exit code 0, including an idle
 keep-alive connection. Keep the orchestrator's grace period above `SERVER_SHUTDOWN_TIMEOUT` (Docker's
@@ -444,7 +458,11 @@ entry can appear on the same line in a log collector. `node .output/migrate.mjs`
 
 - `request`: `method`, `path` (without the query string), `status`, `ms`, for every response including
   static files. `/api/health`, `/api/ready`, `/assets/*` and `/favicon*` are logged only when they
-  answer 400 or above. 5xx responses are logged at `error` level.
+  answer 400 or above. 5xx responses are logged at `error` level. A request whose client disconnected
+  before the response is logged at `info` with `status: 499` and `aborted: true`, whatever the unsent
+  response was (usually a 500 from the aborted body or render), so load-test endings and impatient
+  clients do not trip 5xx alerts. The contract-coverage check ignores these lines.
+- `draining`: SIGTERM or SIGINT arrived (`signal`); see [Shutdown](#shutdown).
 - `api defect`: an unexpected failure inside the Effect API, with the error chain. This includes a
   response that does not match its own schema (`ResponseSchemaError`, with the field paths but not the
   values). The client gets an empty 500.

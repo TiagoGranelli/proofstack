@@ -31,13 +31,23 @@ export const operations = (spec: {
     })),
   )
 
-/** Requests from Nitro's request log lines; other lines (startup, errors) are skipped. */
+/**
+ * Requests from Nitro's request log lines; other lines (startup, errors) are skipped, and so are requests whose
+ * client disconnected first (`aborted`, logged as 499): nobody received their response.
+ */
 export const logObservations = (text: string): Observation[] =>
   text.split('\n').flatMap((line) => {
     if (!line.startsWith('{')) return []
     try {
-      const entry = JSON.parse(line) as { msg?: unknown; method?: unknown; path?: unknown; status?: unknown }
+      const entry = JSON.parse(line) as {
+        msg?: unknown
+        method?: unknown
+        path?: unknown
+        status?: unknown
+        aborted?: unknown
+      }
       return entry.msg === 'request' &&
+        entry.aborted !== true &&
         typeof entry.method === 'string' &&
         typeof entry.path === 'string' &&
         typeof entry.status === 'number'
