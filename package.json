@@ -45,6 +45,7 @@
     "test:e2e": "playwright test",
     "verify:app": "node scripts/verify-app.ts",
     "check:drift": "node scripts/check-drift.ts",
+    "deps:check": "node scripts/deps-check.ts",
     "lighthouse": "node scripts/lighthouse.ts",
     "db:reset-test": "node --env-file-if-exists=.env scripts/test-db.ts",
     "ci:workflows": "node scripts/ci-jobs.ts workflows",
