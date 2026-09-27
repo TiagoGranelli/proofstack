@@ -13,6 +13,12 @@ Test each behavior in the cheapest layer that can observe it:
 | integration | `tests/integration` | `test`, `verify:app` | The built app over HTTP: SQL, Better Auth, CSRF, headers, rate limits, shutdown |
 | e2e | `tests/e2e` | `test:e2e`, `verify:app` | Browser flows, axe on every page state, keyboard and focus, ARIA landmark snapshots |
 
+Every new function is reached by a test in the cheapest layer that can observe it, and every bug fix adds a test
+that fails without the fix. Fakes are named and defined once: a Layer in `tests/api/harness.ts`, a handler factory
+in `tests/component/api-mocks.ts`, a module in `tests/component/stubs/`; a test body does not stub a project
+module itself. A test body holds at most 15 statements (Oxlint `max-statements`; a `describe` has no length
+limit) and four nested callbacks.
+
 ## Running
 
 - `pnpm test:unit|test:api|test:component [filter ...]` runs one fast layer; `pnpm test:fast` runs all three with

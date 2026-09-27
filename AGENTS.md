@@ -42,6 +42,38 @@ layer. Imports flow one way: `components` → `features` → app (`routes/`).
 - Import the file that defines a symbol. Barrel files (`index.ts` re-exporting a folder) fail Oxlint
   `oxc/no-barrel-file`; the only one is `src/server/db/schema/index.ts`, Drizzle's schema entry.
 
+## Code style
+
+Code is read by agents one file at a time: a module fits one read, a name greps to its definition, and a
+failure says what was wrong. Oxlint (`.oxlintrc.json`) enforces the numbers; the rest is for review. Tests:
+[tests/AGENTS.md](tests/AGENTS.md); dependencies of the Effect API: [src/server/AGENTS.md](src/server/AGENTS.md).
+
+- **Size.** Functions up to 20 lines, components (`.tsx`) up to 80, files up to 300, blank and comment lines not
+  counted (`max-lines-per-function`, `max-lines`). Over a limit, split by responsibility, not by moving lines:
+  a component extracts a child component, a Layer moves its methods into functions that take the service
+  (`listPublic(db, page)`), a switch that maps codes to text becomes a table.
+- **Nesting.** At most two nested blocks per function (`max-depth`), three nested callbacks
+  (`max-nested-callbacks`), JSX four elements deep (`react/jsx-max-depth`), three parameters, more go in an
+  options object (`max-params`). Return early; no nested ternaries (`no-nested-ternary`).
+- **Names.** A name says what the value is, specifically enough that `rg -w <name>` finds its definition and its
+  uses: `outcome`, `listed`, `lintRun`, never `result`, `info`, `item`, `tmp` (`id-denylist`). `data` and
+  `handler` are keys TanStack and Effect impose: keep them as keys, destructure into a specific name
+  (`({ data: credentials })`), and never declare your own. Name a module after what it does, never
+  `utils.ts` or `helpers.ts` (`src/lib/utils.ts` is shadcn's).
+- **Types.** No `any` (`no-explicit-any`, `no-unsafe-*`): read an untyped library value as `unknown` and narrow
+  it. Exports of `src/server`, `src/lib`, `src/contract` and `scripts` declare their return type
+  (`explicit-module-boundary-types`); components and hooks infer theirs.
+- **Errors.** A message names the offending value and the shape expected:
+  `` `${name} must be an integer between ${min} and ${max} (got "${raw}")` `` (`unicorn/error-message` only
+  rejects an empty one). Never echo a secret, a password or user content: give its length, scheme or path. Across
+  a trust boundary the client gets a generic message and `log` gets the cause (`src/lib/server-function-errors.ts`).
+- **Comments.** Say why, not what. Keep them when you refactor, update them when the reason changes. A line that
+  exists because of an upstream bug or limit links the issue (`better-auth#9920`) and says when to remove it.
+  Exports of `src/server`, `src/lib` and `features/*/{api,utils}` get a JSDoc sentence on intent, plus a
+  one-line example when the types do not make the call obvious.
+- **Logging.** Server code logs through `log` (`src/server/log.ts`), one JSON object per line; `console` is for
+  scripts (`no-console`).
+
 ## Workflows
 
 Each multi-step workflow is a project skill in `.agents/skills/` (linked into `.claude/skills/`). Load it first:
