@@ -289,7 +289,8 @@ export const stopWhileDraining = async (app: RunningApp) => {
   await sleep(10)
   abandoned.socket.destroy()
   const stopping = app.stop()
-  await sleep(10)
+  // With an edge in front, stop() ends the edge first: wait until the server itself has the signal.
+  for (let i = 0; i < 1000 && !readFileSync(app.logFile, 'utf8').includes('"msg":"draining"'); i++) await sleep(10)
   ready.socket.write('\r\n')
   const [response, stopped] = await Promise.all([ready.closed, stopping])
   const log = readFileSync(app.logFile, 'utf8').split('\n')
