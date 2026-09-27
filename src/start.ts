@@ -40,26 +40,7 @@ const cspNonce = createMiddleware().server(({ request, next }) => {
   return next({ context: { cspNonce: nonce } })
 })
 
-// Start looks server functions up by the id in /_serverFn/<id> and throws a plain Error for an unknown
-// id, which it would answer with a 500 and an error log. An unknown id is a client error: answer 404.
-// Start exposes no typed error for this, so the message is matched: the production resolver says "Server
-// function info not found for <id>" (or "Server function not accessible from client: <id>" for a
-// server-only function), the dev server "Invalid server function ID: <id>". If the wording changes, the
-// fallback is the old 500, and tests/integration/security.test.ts fails for the production build.
-// Everything else is rethrown untouched.
-const UNKNOWN_SERVER_FN =
-  /^(?:Server function info not found for |Server function not accessible from client: |Invalid server function ID: )/
-const serverFnNotFound = createMiddleware().server(async ({ handlerType, next }) => {
-  if (handlerType !== 'serverFn') return next()
-  try {
-    return await next()
-  } catch (error) {
-    if (error instanceof Error && UNKNOWN_SERVER_FN.test(error.message)) return new Response(null, { status: 404 })
-    throw error
-  }
-})
-
 export const startInstance = createStart(() => ({
-  requestMiddleware: [serverFnNotFound, csrf, bodyLimit, cspNonce],
+  requestMiddleware: [csrf, bodyLimit, cspNonce],
   functionMiddleware: [serverFunctionErrors],
 }))
