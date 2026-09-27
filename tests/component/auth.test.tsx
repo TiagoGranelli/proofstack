@@ -1,9 +1,14 @@
 // LoginForm and sign-out: pending states, every failure message, and where each success leads.
-import { describe, expect, it } from 'vitest'
-import { page } from 'vitest/browser'
+import { QueryClientProvider } from '@tanstack/react-query'
+import { RouterContextProvider } from '@tanstack/react-router'
+import { hydrateRoot } from 'react-dom/client'
+import { renderToString } from 'react-dom/server'
+import { describe, expect, it, onTestFinished } from 'vitest'
+import { page, userEvent } from 'vitest/browser'
 import { LoginForm } from '#/features/auth/components/login-form.tsx'
 import { SignOutAlert, SignOutButton, useSignOut } from '#/features/auth/components/sign-out-button.tsx'
-import { auth, held, worker } from './api-mocks.ts'
+import type { AuthFailure } from '#/lib/auth.functions.ts'
+import { auth, authCalls, authFunction, held, worker } from './api-mocks.ts'
 import { renderInApp } from './test-utils.tsx'
 
 const email = () => page.getByLabelText('Email')
@@ -51,12 +56,85 @@ describe('LoginForm', () => {
     await expect.element(page.getByRole('alert')).toHaveTextContent(message)
     await expect.element(formOf()).toHaveAccessibleDescription(message)
     await expect.element(signInButton()).toBeEnabled()
+    // Focus stays on the button, so Enter retries.
+    await expect.element(signInButton()).toHaveFocus()
     expect(router.state.location.pathname).toBe('/login')
 
     // The failure is cleared as soon as the next attempt starts.
     worker.use(auth.signIn(held()))
     await signInButton().click()
     await expect.element(page.getByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('sends the typed credentials once, however often it is submitted while pending', async () => {
+    const response = held()
+    const calls = authCalls('signIn')
+    worker.use(calls.handler, auth.signIn(response))
+    await renderInApp(<LoginForm />, { url: '/login' })
+    await signIn()
+    await expect.element(signInButton()).toBeDisabled()
+    await userEvent.click(password())
+    await userEvent.keyboard('{Enter}')
+    await signInButton().click({ force: true })
+    response.release()
+    await expect.element(formOf()).toHaveAttribute('aria-busy', 'false')
+    expect(calls.data).toEqual([{ email: 'author@example.test', password: 'a long enough password' }])
+  })
+
+  it.each<[string, AuthFailure, string]>([
+    [
+      'an unverified address',
+      { code: 'EMAIL_NOT_VERIFIED' },
+      'Confirm your email address first. We have sent you a new link.',
+    ],
+    ['a rate limit', { code: 'RATE_LIMITED', retryAfter: 30 }, 'Too many attempts. Try again in 30 seconds.'],
+    [
+      'a rate limit of one second',
+      { code: 'RATE_LIMITED', retryAfter: 1 },
+      'Too many attempts. Try again in 1 second.',
+    ],
+    ['a rate limit without Retry-After', { code: 'RATE_LIMITED' }, 'Too many attempts. Try again in a moment.'],
+    ['an unknown failure', { code: 'FAILED_TO_CREATE_SESSION' }, 'Something went wrong. Try again.'],
+  ])('explains %s without showing the code', async (_, failure, message) => {
+    worker.use(authFunction('signIn', { ok: false, failure }))
+    const { router } = await renderInApp(<LoginForm />, { url: '/login' })
+    await signIn()
+    await expect.element(page.getByRole('alert')).toHaveTextContent(message)
+    await expect.element(formOf()).toHaveAccessibleDescription(message)
+    expect(document.body.textContent).not.toContain(failure.code)
+    expect(router.state.location.pathname).toBe('/login')
+  })
+
+  it('never shows what a failing server answered', async () => {
+    worker.use(authFunction('signIn', 'thrown'))
+    await renderInApp(<LoginForm />, { url: '/login' })
+    await signIn()
+    await expect
+      .element(page.getByRole('alert'))
+      .toHaveTextContent('Could not reach the server. Check your connection and try again.')
+    expect(document.body.textContent).not.toMatch(/Internal Server Error|500/)
+  })
+
+  it('keeps its button disabled until hydration, so a native submit cannot post the password', async () => {
+    const { router, queryClient, unmount } = await renderInApp(null, { url: '/login' })
+    await unmount()
+    const tree = (
+      <RouterContextProvider router={router}>
+        <QueryClientProvider client={queryClient}>
+          <LoginForm />
+        </QueryClientProvider>
+      </RouterContextProvider>
+    )
+    const container = document.createElement('div')
+    container.innerHTML = renderToString(tree)
+    document.body.append(container)
+    onTestFinished(() => container.remove())
+    const button = page.elementLocator(container).getByRole('button', { name: 'Sign in' })
+    await expect.element(button).toBeDisabled()
+
+    const root = hydrateRoot(container, tree)
+    onTestFinished(() => root.unmount())
+    await expect.element(button).toBeEnabled()
   })
 
   it.each([
