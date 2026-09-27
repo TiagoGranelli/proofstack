@@ -116,9 +116,11 @@ runs through it, `pnpm verify:app --edge` optionally, and `pnpm ci:docker` serve
 It uses Caddy 2.11.4 (image pinned by digest in `compose.yaml` and `scripts/images.ts`) and does four
 things:
 
-- **TLS:** with a domain as `EDGE_ADDRESS` (`app.example.com`), Caddy obtains and renews the certificate
-  and redirects HTTP to HTTPS. `:8080` (the default) serves plain HTTP. Set `APP_URL` to the resulting
-  origin.
+- **TLS and HTTP/2:** with a domain as `EDGE_ADDRESS` (`app.example.com`), Caddy obtains and renews the
+  certificate, redirects HTTP to HTTPS (from `EDGE_HTTP_PORT`, default 80) and serves HTTP/2 and HTTP/3.
+  `:8080` (the default) serves plain HTTP/1.1. Set `APP_URL` to the resulting origin. Browsers only speak
+  HTTP/2 over TLS, so production pages always load over one multiplexed connection; see
+  [Lighthouse through the edge](#lighthouse-through-the-edge).
 - **Compression:** `encode zstd gzip` compresses what the app sends uncompressed: SSR HTML, API JSON.
   The build's precompressed `.br` assets already carry `Content-Encoding` and pass through unchanged, as
   do their `Cache-Control: public, max-age=31536000, immutable` headers. Nitro does not compress
@@ -156,6 +158,33 @@ the pinned image with `--network host` (`EDGE_RUNTIME=docker`, the default; Linu
 Desktop's host networking differs) or from a `caddy` binary (`EDGE_RUNTIME=binary`, `CADDY_BIN`), which
 is what `pnpm ci:local` uses inside its container. The edge log goes next to the app log
 (`test-results/edge.log`, `lighthouse-report/edge.log`).
+
+### Lighthouse through the edge
+
+`pnpm lighthouse` measures the topology users get: HTTPS with HTTP/2. `scripts/edge.ts` starts Caddy at
+`https://localhost:<port>` with a certificate from Caddy's internal CA (`skip_install_trust` keeps that CA
+out of the system trust store). The script trusts the CA for its own requests and hands Chrome
+`--ignore-certificate-errors-spki-list=<hash>`: Chrome accepts exactly the key of that one certificate,
+the page is a secure `https:` origin, and the best-practices audits see the same page as in production.
+`--ignore-certificate-errors` would also do, but it accepts every certificate and marks the page as a
+certificate error. Lighthouse starts each run with a fresh profile, so Chrome has not seen Caddy's
+`Alt-Svc` yet and uses HTTP/2, as on a first visit; HTTP/3 is not measured.
+
+The protocol matters for the mobile score. Lighthouse simulates a slow network (150 ms RTT, 1.6 Mbps)
+from the requests of an unthrottled load. Over HTTP/1.1 every parallel request of the page (the stylesheet
+and each preloaded script) opens a new connection in that simulation and pays its TCP (and TLS) handshake
+and slow start; over HTTP/2 they share the warm connection of the document. Mobile medians of 3 runs,
+same build, every page but `/dashboard` alike:
+
+| Edge | FCP = LCP | Performance |
+| --- | --- | --- |
+| Plain HTTP/1.1 (`--edge-protocol=http`) | 1.95 s (`/dashboard` 2.10 s) | 98 (97) |
+| HTTPS, HTTP/1.1 (`--edge-protocol=h1`) | 2.25 s (`/dashboard` 2.40 s) | 96 (95) |
+| HTTPS, HTTP/2 (default) | 1.50 s (`/dashboard` 1.51 s) | 100 |
+
+`--edge-protocol=h1|http` exist to compare; the gate uses HTTP/2. See
+[ADR 0011](decisions/0011-lighthouse-over-https-http2.md) for why the remaining 1.5 s are the page's
+JavaScript and what upstream changes would lower it.
 
 ### Client IP and rate limiting
 
