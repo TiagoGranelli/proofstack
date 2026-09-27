@@ -78,11 +78,18 @@ test('dashboard hydrates from SSR without refetching my posts', async ({ page, a
   expect(errors).toEqual([])
 })
 
-test('login form never submits credentials before hydration', async ({ page }) => {
+test('before hydration, a form never posts credentials to the page itself', async ({ page }) => {
   await page.route('**/assets/**', (route) => route.abort())
+  // The login form posts to its server function (ADR 0014), never to /login.
   await page.goto('/login')
-  await expect(page.locator('form')).toHaveAttribute('method', 'post')
-  await expect(page.getByRole('button', { name: 'Sign in' })).toBeDisabled()
+  const login = page.locator('form')
+  await expect(login).toHaveAttribute('method', 'post')
+  await expect(login).toHaveAttribute('action', /^\/_serverFn\/[0-9a-f]+$/)
+  await expect(page.getByRole('button', { name: 'Sign in' })).toBeEnabled()
+  // A form without an action keeps its button disabled until the scripts run.
+  await page.goto('/forgot-password')
+  await expect(page.locator('form')).not.toHaveAttribute('action')
+  await expect(page.getByRole('button', { name: 'Send reset link' })).toBeDisabled()
 })
 
 test('private routes redirect anonymous visitors to login and back after sign-in', async ({ page, author }) => {
