@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 /** Valid values for every required variable; each test overrides what it checks. */
 const BASE = {
-  DATABASE_URL: 'postgres://app:secret@127.0.0.1:5432/app',
+  DATABASE_URL: 'postgres://app:not-a-secret@127.0.0.1:5432/app',
   APP_URL: 'https://app.example.com',
   BETTER_AUTH_SECRET: 'x'.repeat(32),
   TRUSTED_PROXIES: '',
@@ -130,7 +130,10 @@ describe('env', () => {
   })
 
   describe('AUTH_SIGN_UP and mail', () => {
-    const smtp = { SMTP_URL: 'smtps://user:pass@smtp.example.com:465', MAIL_FROM: 'ProofStack <no-reply@example.com>' }
+    const smtp = {
+      SMTP_URL: 'smtps://user:password@smtp.example.com:465',
+      MAIL_FROM: 'ProofStack <no-reply@example.com>',
+    }
 
     it('is closed by default, and open only when asked, trimmed', async () => {
       expect((await load({ AUTH_SIGN_UP: undefined })).authSignUp).toBe('closed')

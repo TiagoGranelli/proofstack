@@ -1,0 +1,8 @@
+# Findings gitleaks may skip, by fingerprint (commit:file:rule:line). Only for history that cannot be rewritten:
+# a value in the current tree follows the fake-value convention in .gitleaks.toml instead.
+#
+# Commit f62cfb6 (already on main) added two made-up test URLs to tests/unit/env.test.ts, `app:secret` and
+# `user:pass`, before the convention existed. Nothing ever connected with them; the file now uses `not-a-secret`
+# and `password`, which the allowlist knows.
+f62cfb6ce3df07e37666b38a5c8d537cbc78f783:tests/unit/env.test.ts:url-credentials:7
+f62cfb6ce3df07e37666b38a5c8d537cbc78f783:tests/unit/env.test.ts:url-credentials:120
