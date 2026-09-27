@@ -71,19 +71,9 @@ export class Database extends Context.Service<Database, Db>()('app/Database') {
       return yield* Effect.callback<A, E>((resume) => {
         // The body runs as its own fiber inside Drizzle's callback; interrupting the caller interrupts it.
         const controller = new AbortController()
-        const settled = database
-          .transaction(async (tx) => {
-            const exit = await Effect.runPromiseExitWith(Context.add(context, Database, tx))(effect, {
-              signal: controller.signal,
-            })
-            if (Exit.isFailure(exit)) throw new Rollback(exit)
-            return exit
-          })
-          .then(
-            (exit): Exit.Exit<A, E> => exit,
-            // A Rollback holds the body's own Exit, so its type is `Exit<A, E>`.
-            (error: unknown) => (error instanceof Rollback ? (error.exit as Exit.Exit<A, E>) : Exit.die(error)),
-          )
+        const settled = transactionExit(database, (tx) =>
+          Effect.runPromiseExitWith(Context.add(context, Database, tx))(effect, { signal: controller.signal }),
+        )
         void settled.then(resume)
         // On interruption, wait for the ROLLBACK, so the caller never outlives its transaction.
         return Effect.promise(() => {
@@ -93,3 +83,20 @@ export class Database extends Context.Service<Database, Db>()('app/Database') {
       })
     })
 }
+
+/**
+ * Runs `body` in a Drizzle transaction on `database` and resolves to its Exit: committed when it succeeded, rolled
+ * back when it failed. A failure of the transaction itself (BEGIN, COMMIT) becomes a defect.
+ */
+const transactionExit = <A, E>(database: Db, body: (tx: Db) => Promise<Exit.Exit<A, E>>): Promise<Exit.Exit<A, E>> =>
+  database
+    .transaction(async (tx) => {
+      const exit = await body(tx)
+      if (Exit.isFailure(exit)) throw new Rollback(exit)
+      return exit
+    })
+    .then(
+      (exit): Exit.Exit<A, E> => exit,
+      // A Rollback holds the body's own Exit, so its type is `Exit<A, E>`.
+      (error: unknown) => (error instanceof Rollback ? (error.exit as Exit.Exit<A, E>) : Exit.die(error)),
+    )

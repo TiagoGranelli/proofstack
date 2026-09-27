@@ -18,7 +18,7 @@ const INTERVAL_MS = 10 * 60 * 1000
  * Deletes sessions that expired more than EXPIRED_SESSION_RETENTION_MS ago and verification tokens (email
  * confirmation, password reset) that have expired. Returns how many rows each delete removed.
  */
-export const deleteExpiredAuthRows = async (now = Date.now()) => {
+export const deleteExpiredAuthRows = async (now = Date.now()): Promise<{ sessions: number; verifications: number }> => {
   const sessions = await db.delete(session).where(lt(session.expiresAt, new Date(now - EXPIRED_SESSION_RETENTION_MS)))
   const verifications = await db.delete(verification).where(lt(verification.expiresAt, new Date(now)))
   return { sessions: sessions.rowCount ?? 0, verifications: verifications.rowCount ?? 0 }
@@ -36,7 +36,7 @@ const cleanUp = async () => {
  * auth module loads (../auth.ts). The timer does not keep a process alive (CLI scripts load the same module),
  * and shutdown stops it before it drains the background tasks, so no pass starts after the pool is closing.
  */
-export const scheduleAuthCleanup = () => {
+export const scheduleAuthCleanup = (): void => {
   if (timer) return
   timer = setInterval(() => runInBackground(cleanUp()), INTERVAL_MS).unref()
   onShutdown('auth-cleanup', () => {

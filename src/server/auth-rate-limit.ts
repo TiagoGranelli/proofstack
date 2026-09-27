@@ -11,6 +11,13 @@ type RateLimitStorage = NonNullable<NonNullable<BetterAuthOptions['rateLimit']>[
 const IDLE_ROW_MS = 10 * 60 * 1000
 let lastPrune = 0
 
+/** Deletes idle rows in the background, at most once per IDLE_ROW_MS per process. */
+const pruneIdleRows = (now: number): void => {
+  if (now - lastPrune <= IDLE_ROW_MS) return
+  lastPrune = now
+  runInBackground(db.delete(rateLimit).where(lt(rateLimit.lastRequest, now - IDLE_ROW_MS)))
+}
+
 /**
  * Better Auth's rate-limit `consume` on the rate_limit table (also the business API's write limit, keys
  * `api-write|<user id>`, ./api/rate-limit.ts) as one INSERT ... ON CONFLICT DO UPDATE, which
@@ -40,10 +47,7 @@ export const postgresRateLimitStorage: RateLimitStorage = {
         },
       })
       .returning({ count: rateLimit.count, lastRequest: rateLimit.lastRequest })
-    if (now - lastPrune > IDLE_ROW_MS) {
-      lastPrune = now
-      runInBackground(db.delete(rateLimit).where(lt(rateLimit.lastRequest, now - IDLE_ROW_MS)))
-    }
+    pruneIdleRows(now)
     // `count` is the number of requests since the window started, refused ones included.
     if (row && row.count <= rule.max) return { allowed: true, retryAfter: null }
     const lastRequest = row?.lastRequest ?? now
