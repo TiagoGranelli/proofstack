@@ -24,7 +24,8 @@ changes to the contract, database, auth, or UI flows.
   included) directly: account actions are server functions that run Better Auth's router in-process
   (`callAuthEndpoint` in `src/server/http/auth-handler.ts`), so rate limits and the endpoint allowlist apply.
   Only the server adapters import `src/server`: `src/routes/api/**`, `src/lib/*.functions.ts`,
-  `src/lib/api-client.ts` and `src/lib/server-function-errors.ts`, the global function middleware
+  `src/lib/api-client.ts`, `src/lib/app-origin.ts` (the validated APP_URL for `src/start.ts`, through
+  `createServerOnlyFn`) and `src/lib/server-function-errors.ts`, the global function middleware
   (Fallow zone `server-adapters`).
 - SSR loaders call the same SDK. On the server it dispatches in-process to the Effect handler
   (`src/server/api/in-process-client.ts`), so every business operation goes through the contract.
