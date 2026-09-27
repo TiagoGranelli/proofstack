@@ -56,11 +56,7 @@ export function PostList(props: {
     <div className="grid gap-3">
       <ul ref={list} data-testid={props.testId} className="grid gap-3">
         {posts.map((post) => (
-          <li
-            key={post.id}
-            tabIndex={-1}
-            className="rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-          >
+          <li key={post.id} tabIndex={-1} className="rounded-xl">
             {renderPost(post)}
           </li>
         ))}
