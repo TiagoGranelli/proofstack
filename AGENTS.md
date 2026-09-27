@@ -47,8 +47,10 @@ The UI follows [Bulletproof React](https://github.com/alan2207/bulletproof-react
   - Data access for a feature: `features/<name>/api/<verb>-<noun>.ts`. Queries export
     `get<Noun>QueryOptions()` bound to `client: apiClient()` over `#/sdk/@tanstack/react-query.gen.ts`.
     Mutations export a `use<Verb><Noun>({ mutationConfig })` hook that owns cache updates and invalidation
-    and runs the caller's `onSuccess` before invalidating. Components never spread a generated
-    `*Mutation()` themselves. Cache helpers shared by a feature's hooks go in `api/<noun>-cache.ts`.
+    and runs the caller's `onSuccess` before invalidating (`useCreatePost`, `useSignIn`, `useSignOut`). Where
+    the user goes afterwards is the caller's `onSuccess`, never the hook's. Components never spread a generated
+    `*Mutation()` themselves, and component files export components, not hooks. Cache helpers shared by a
+    feature's hooks go in `api/<noun>-cache.ts`.
   - Feature UI: `features/<name>/components/`; pure helpers: `features/<name>/utils/`.
   - UI shared by several features and free of feature knowledge: `components/` (`ui/`, `errors/`,
     `layouts/`). shadcn primitives go in `components/ui/` through `pnpm exec shadcn add`.

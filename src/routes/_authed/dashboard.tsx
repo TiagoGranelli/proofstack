@@ -1,7 +1,8 @@
 import { useSuspenseInfiniteQuery } from '@tanstack/react-query'
-import { Link, createFileRoute } from '@tanstack/react-router'
+import { Link, createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useRef, useState } from 'react'
-import { SignOutAlert, SignOutButton, useSignOut } from '#/features/auth/components/sign-out-button.tsx'
+import { useSignOut } from '#/features/auth/api/sign-out.ts'
+import { SignOutAlert, SignOutButton } from '#/features/auth/components/sign-out-button.tsx'
 import { getMyPostsQueryOptions } from '#/features/posts/api/get-my-posts.ts'
 import { MyPost } from '#/features/posts/components/my-post.tsx'
 import { PostComposer } from '#/features/posts/components/post-composer.tsx'
@@ -20,7 +21,8 @@ function Dashboard() {
   // write, so the same sentence twice in a row ("Post saved.") is a new node and is announced again.
   const [status, setStatus] = useState({ text: '', id: 0 })
   const announce = (text: string) => setStatus((previous) => ({ text, id: previous.id + 1 }))
-  const signOut = useSignOut()
+  const navigate = useNavigate()
+  const signOut = useSignOut({ mutationConfig: { onSuccess: () => navigate({ to: '/' }) } })
   const listHeading = useRef<HTMLHeadingElement>(null)
   return (
     <main className="mx-auto grid max-w-2xl gap-6 p-4">
