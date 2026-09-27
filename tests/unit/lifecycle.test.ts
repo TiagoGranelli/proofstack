@@ -32,10 +32,13 @@ describe('runShutdown', () => {
     onShutdown('effect-api', step('effect-api', 0))
     onShutdown('mailer', step('mailer', 5))
     onShutdown('background-tasks', step('background-tasks', 10))
+    onShutdown('auth-cleanup', step('auth-cleanup', 0))
 
     await runShutdown()
 
     expect(events).toEqual([
+      'auth-cleanup start',
+      'auth-cleanup end',
       'background-tasks start',
       'background-tasks end',
       'mailer start',
@@ -47,7 +50,7 @@ describe('runShutdown', () => {
     ])
     expect(lines.at(-1)).toMatchObject({
       msg: 'shutdown complete',
-      cleanups: ['background-tasks', 'mailer', 'effect-api', 'postgres-pool'],
+      cleanups: ['auth-cleanup', 'background-tasks', 'mailer', 'effect-api', 'postgres-pool'],
     })
   })
 

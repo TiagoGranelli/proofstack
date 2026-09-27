@@ -4,11 +4,12 @@ import { log } from './log.ts'
 type Cleanup = () => Promise<void> | void
 
 /**
- * What shutdown releases, in the order it runs, one step at a time: pending background tasks (mail sends,
- * rate-limit pruning) still query the database or use the mail transport, so they finish before the mail
- * transport closes, and the Effect runtime and the Postgres pool go last.
+ * What shutdown releases, in the order it runs, one step at a time: the periodic auth cleanup stops scheduling
+ * passes, pending background tasks (mail sends, rate-limit pruning, a running cleanup pass) still query the
+ * database or use the mail transport, so they finish before the mail transport closes, and the Effect runtime
+ * and the Postgres pool go last.
  */
-const STEPS = ['background-tasks', 'mailer', 'effect-api', 'postgres-pool'] as const
+const STEPS = ['auth-cleanup', 'background-tasks', 'mailer', 'effect-api', 'postgres-pool'] as const
 export type ShutdownStep = (typeof STEPS)[number]
 
 // Nitro bundles its plugins (src/server/nitro/startup.ts, which runs the steps) apart from the SSR code that

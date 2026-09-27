@@ -364,6 +364,31 @@ Locally, `pnpm mail:up` (also run by `pnpm bootstrap`) starts Mailpit from `comp
 digest: SMTP on `MAILPIT_SMTP_PORT` (54325), the inbox and its API on `MAILPIT_HTTP_PORT` (54380). Nothing
 leaves the machine. `pnpm verify:app` needs it: the E2E tests read links from its API.
 
+## Data retention
+
+What the database keeps about people, and for how long:
+
+| Rows | Hold | Deleted |
+| --- | --- | --- |
+| `user`, `account`, `post` | Email, name, password hash, posts | With the account (`/account`, "Delete account"): `session`, `account` and `post` rows cascade |
+| `session` | Client IP (IPv6 as its /64), user agent, times | On sign-out or revocation; a session expires 7 days after its last refresh, and the periodic cleanup deletes it 7 days after that |
+| `verification` | Email-confirmation and password-reset tokens, keyed by the address or user | Once used; the periodic cleanup deletes expired ones (they are valid for 1 hour) |
+| `rate_limit` | Client IP (auth limits) or user id (`api-write\|<id>`), a counter and a time | 10 minutes after the key's last request, when a later request prunes |
+
+Better Auth (1.7.6) deletes an expired session only when its token is presented again, so without a
+cleanup a user who never returns would leave their IP address and user agent behind indefinitely. Each
+server process therefore runs `deleteExpiredAuthRows` (`src/server/auth-cleanup.ts`) every 10 minutes as
+a background task: sessions that expired more than 7 days ago (`EXPIRED_SESSION_RETENTION_MS`, index
+`session_expires_at_idx`) and expired verification tokens. It starts when the auth module loads (the first
+request that reads a session) and stops at shutdown. `tests/db/auth-cleanup.test.ts` covers what it deletes
+and keeps.
+
+After an account is deleted, its unused verification tokens stay until they expire (at most an hour, then
+the next cleanup) and its `rate_limit` rows until they are pruned. Backups keep everything for as long as
+they are retained: that is the real erasure horizon, so state it in your privacy notice and keep backups no
+longer than you need ([Backups and restore](#backups-and-restore)). Production logs hold no email addresses
+or tokens ([Logs](#logs)), but request logs hold paths and times.
+
 ## Health checks
 
 | Endpoint | Meaning | Use for |
@@ -385,9 +410,9 @@ the address like the server does: `NITRO_PORT`, else `PORT`, else 3000; `NITRO_H
 On SIGTERM or SIGINT, srvx (Nitro's HTTP server) stops accepting connections, waits for in-flight
 requests up to `SERVER_SHUTDOWN_TIMEOUT` seconds (default 5) and then force-closes them. Nitro then runs
 its `close` hook, where the startup plugin (`src/server/nitro/startup.ts`) runs the shutdown steps one
-after another, in this order: wait for pending background tasks (mail sends, bounded by the SMTP timeouts
-of 5 s to connect and 15 s per socket operation, and rate-limit pruning, which queries Postgres), close
-the mail transport, dispose the Effect runtime, end the Postgres pool. Server code registers each step
+after another, in this order: stop the periodic auth cleanup, wait for pending background tasks (mail
+sends, bounded by the SMTP timeouts of 5 s to connect and 15 s per socket operation, and rate-limit
+pruning and a running cleanup pass, which query Postgres), close the mail transport, dispose the Effect runtime, end the Postgres pool. Server code registers each step
 with `onShutdown` (`src/server/lifecycle.ts`), which does not import Nitro, so CLI scripts can load the
 same modules. A failed step is logged (`shutdown cleanup failed`) and the next one still runs. The log
 line `shutdown complete` lists the steps in the order they ran (`cleanups`, with each one's duration in
@@ -429,8 +454,11 @@ entry can appear on the same line in a log collector. `node .output/migrate.mjs`
 - `request error`: an error that reached Nitro's `error` hook from the request pipeline (`tags`,
   `method`, `path`). Nitro answers it with a bare JSON 500.
 - `starting` and `shutdown complete` bracket the process lifetime. `starting` records `appUrl`,
-  `trustedProxies`, `databasePoolMax` and `databaseUrlPooled`; `shutdown complete` lists the cleanups that ran (the Postgres
-  pool, the Effect runtime, pending background tasks and the mailer).
+  `trustedProxies`, `databasePoolMax` and `databaseUrlPooled`; `shutdown complete` lists the cleanups
+  that ran (the auth cleanup timer, pending background tasks, the mailer, the Effect runtime and the
+  Postgres pool).
+- `expired auth rows deleted`: the periodic cleanup removed expired sessions or verification tokens
+  (`sessions`, `verifications`: how many). See [Data retention](#data-retention).
 - `shutdown cleanup failed`: a cleanup (`cleanup` field) rejected during shutdown.
 - `uncaught exception, exiting` and `unhandled rejection`: see below.
 - `postgres pool error`: an idle Postgres connection failed (for example, the database restarted).

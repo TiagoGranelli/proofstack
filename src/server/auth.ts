@@ -4,6 +4,7 @@ import { betterAuth } from 'better-auth'
 import { APIError, createAuthMiddleware } from 'better-auth/api'
 import { tanstackStartCookies } from 'better-auth/tanstack-start'
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '#/contract/limits.ts'
+import { scheduleAuthCleanup } from './auth-cleanup.ts'
 import { postgresRateLimitStorage } from './auth-rate-limit.ts'
 import { runInBackground } from './background-tasks.ts'
 import { db } from './db/client.ts'
@@ -105,3 +106,6 @@ export const auth = betterAuth({
   // Must stay last: forwards Set-Cookie through TanStack Start.
   plugins: [endpointAllowlist(), tanstackStartCookies()],
 })
+
+// Expired sessions and verification tokens are deleted periodically; Better Auth only removes them lazily.
+scheduleAuthCleanup()
