@@ -10,8 +10,8 @@ import { spawnSync } from 'node:child_process'
 import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { xSync } from 'tinyexec'
 import { dockerPrefix, IMAGES } from './images.ts'
-import { pnpmInvocation, runSync } from './spawn.ts'
 
 const OUT = resolve('sbom')
 const version = spawnSync('git', ['describe', '--always', '--dirty'], { encoding: 'utf8' }).stdout.trim()
@@ -27,11 +27,12 @@ const docker = (args: string[]) => {
 }
 
 mkdirSync(OUT, { recursive: true })
-const npm = runSync(
-  pnpmInvocation(['sbom', '--sbom-format', 'cyclonedx', '--sbom-type', 'application', '--prod', '--lockfile-only']),
-  { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 },
+const npm = xSync(
+  'pnpm',
+  ['sbom', '--sbom-format', 'cyclonedx', '--sbom-type', 'application', '--prod', '--lockfile-only'],
+  { nodeOptions: { maxBuffer: 256 * 1024 * 1024 } },
 )
-if (npm.status !== 0) fail(`pnpm sbom failed:\n${npm.stderr}`)
+if (npm.exitCode !== 0) fail(`pnpm sbom failed:\n${npm.stderr}`)
 writeFileSync(join(OUT, 'proofstack-npm.cdx.json'), npm.stdout)
 console.log(`wrote sbom/proofstack-npm.cdx.json (${version})`)
 

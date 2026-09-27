@@ -4,6 +4,7 @@ import { eq } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/node-postgres'
 import { computeMedianRun } from 'lighthouse/core/lib/median-run.js'
 import { Pool } from 'pg'
+import { xSync } from 'tinyexec'
 import { post, user } from '#/server/db/schema/index.ts'
 import { assertChromium, startApp } from './app-server.ts'
 // Lighthouse gate. Boots the built app against a fresh database with seeded posts and a signed-in author,
@@ -19,7 +20,6 @@ import { assertChromium, startApp } from './app-server.ts'
 // Env: LIGHTHOUSE_DATABASE_URL overrides the database (default: proofstack_lighthouse_<pid>_test next to
 //      DATABASE_URL, dropped afterwards). Logs: lighthouse-report/{app-server,edge}.log. EDGE_RUNTIME: see
 //      scripts/edge.ts.
-import { pnpmInvocation, runSync } from './spawn.ts'
 import { dropTestDatabase, testDatabaseUrl } from './test-db.ts'
 
 type Category = 'performance' | 'accessibility' | 'best-practices' | 'seo' | 'agentic-browsing'
@@ -172,13 +172,12 @@ const lighthouse = (url: string, formFactor: FormFactor, outputBase: string, coo
     ...(formFactor === 'desktop' ? ['--preset=desktop'] : []),
     ...(cookie ? [`--extra-headers=${JSON.stringify({ cookie })}`] : []),
   ]
-  const result = runSync(pnpmInvocation(args), {
-    stdio: 'inherit',
-    env: { ...process.env, CHROME_PATH: chromePath },
+  const result = xSync('pnpm', args, {
     timeout: 180_000,
+    nodeOptions: { stdio: 'inherit', env: { CHROME_PATH: chromePath } },
   })
-  if (result.status !== 0)
-    throw new Error(`lighthouse failed for ${url} (${formFactor}): ${result.status ?? result.signal}`)
+  if (result.exitCode !== 0)
+    throw new Error(`lighthouse failed for ${url} (${formFactor}): ${result.exitCode ?? result.signalCode}`)
   return JSON.parse(readFileSync(`${outputBase}.report.json`, 'utf8')) as Lhr
 }
 

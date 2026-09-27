@@ -10,15 +10,17 @@
 import { spawnSync } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, sep } from 'node:path'
+import { xSync } from 'tinyexec'
 import { routeCoverage } from './route-coverage.ts'
-import { binInvocation, pnpmInvocation, runSync } from './spawn.ts'
 
 type Gate = { name: string; run: () => boolean; fix: string }
 
+// tinyexec puts node_modules/.bin first on PATH and, on Windows, resolves `.cmd` shims and escapes their
+// arguments for cmd.exe, so tools and pnpm start the same way on every platform.
 const script = (name: string) => () =>
-  runSync(pnpmInvocation(['run', '--silent', name]), { stdio: 'inherit' }).status === 0
+  xSync('pnpm', ['run', '--silent', name], { nodeOptions: { stdio: 'inherit' } }).exitCode === 0
 const tool = (name: string, args: string[]) => () =>
-  runSync(binInvocation(name, args), { stdio: 'inherit' }).status === 0
+  xSync(name, args, { nodeOptions: { stdio: 'inherit' } }).exitCode === 0
 
 const ON_CI = process.env.GITHUB_ACTIONS === 'true'
 const BASE_REF = process.env.PROOFSTACK_BASE_REF ?? (ON_CI ? 'HEAD^' : 'HEAD')
@@ -36,16 +38,12 @@ const NO_BASE = ON_CI
  * with the JSDoc tag or `@effect-diagnostics` comment its message names, with the reason next to it.
  */
 const effect = () => {
-  const result = runSync(
-    binInvocation('effect-tsgo', ['diagnostics', '--project', 'tsconfig.json', '--format', 'text']),
-    {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'inherit'],
-    },
-  )
+  const result = xSync('effect-tsgo', ['diagnostics', '--project', 'tsconfig.json', '--format', 'text'], {
+    nodeOptions: { stdio: ['ignore', 'pipe', 'inherit'] },
+  })
   const output = result.stdout
   const counts = /(\d+) errors?, (\d+) warnings? and (\d+) messages?/.exec(output)
-  const clean = result.status === 0 && counts?.slice(1).every((count) => count === '0') === true
+  const clean = result.exitCode === 0 && counts?.slice(1).every((count) => count === '0') === true
   process.stdout.write(clean ? `${counts[0]}\n` : output)
   return clean
 }
@@ -87,11 +85,10 @@ const security = () => {
     console.log(NO_BASE ?? 'security: skipped, no git history to compare with')
     return NO_BASE === undefined
   }
-  const result = runSync(binInvocation('fallow', ['security', '--gate', 'new', '--diff-stdin', 'src']), {
-    input: handWrittenSrc(diff),
-    stdio: ['pipe', 'inherit', 'inherit'],
+  const result = xSync('fallow', ['security', '--gate', 'new', '--diff-stdin', 'src'], {
+    nodeOptions: { input: handWrittenSrc(diff), stdio: ['pipe', 'inherit', 'inherit'] },
   })
-  return result.status === 0
+  return result.exitCode === 0
 }
 
 /**
@@ -99,10 +96,8 @@ const security = () => {
  * duplication percentage, which a new 20-line copy in a growing code base would never reach.
  */
 const dupes = () => {
-  const result = runSync(binInvocation('fallow', ['dupes', '--format', 'json', '--no-fragments']), {
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'inherit'],
-    maxBuffer: 64 * 1024 * 1024,
+  const result = xSync('fallow', ['dupes', '--format', 'json', '--no-fragments'], {
+    nodeOptions: { stdio: ['ignore', 'pipe', 'inherit'], maxBuffer: 64 * 1024 * 1024 },
   })
   let groups = Number.NaN
   try {
@@ -110,7 +105,7 @@ const dupes = () => {
   } catch {
     // Not a report (the tool failed): the human run below shows why.
   }
-  if (result.status === 0 && groups === 0) {
+  if (result.exitCode === 0 && groups === 0) {
     console.log('No clone groups outside the ignored files.')
     return true
   }
@@ -170,6 +165,15 @@ const LINE_GUARDS: LineGuard[] = [
     pattern:
       /\bexpect\s*\(\s*(?:true|false|null|undefined|-?\d[\d_]*(?:\.\d+)?|'[^'\\]*'|"[^"\\]*"|`[^`$\\]*`)\s*\)\s*\.(?:not\.)?to(?:Be|Equal|StrictEqual)\b/,
     problem: 'asserts on a literal, so it can never fail. Put the value under test in `expect(...)`',
+  },
+  {
+    id: 'shim-spawn',
+    files: ALL_CODE,
+    pattern: /\b(?:spawn|spawnSync|execFile|execFileSync)\s*\(\s*['"`](?:pnpm|npm|npx|yarn|node_modules)\b/,
+    problem:
+      'starts a package manager or a node_modules/.bin tool with node:child_process. On Windows it is a `.cmd` shim, ' +
+      'which Node refuses to start without a shell (CVE-2024-27980). Use `xSync` or `x` from tinyexec, which ' +
+      'resolves the shim and escapes its arguments for cmd.exe',
   },
   {
     id: 'double-cast',
@@ -545,9 +549,19 @@ if (unknown.length) {
 }
 const selected = GATES.filter((gate) => (!only || only.includes(gate.name)) && !skip?.includes(gate.name))
 
+/** A gate that throws (a tool that cannot start: tinyexec throws ENOENT) fails, and the others still run. */
+const passes = (gate: Gate) => {
+  try {
+    return gate.run()
+  } catch (error) {
+    console.error(`${gate.name}: ${error instanceof Error ? error.message : String(error)}`)
+    return false
+  }
+}
+
 const results = selected.map((gate) => {
   const started = performance.now()
-  const ok = gate.run()
+  const ok = passes(gate)
   return { name: gate.name, fix: gate.fix, ok, seconds: (performance.now() - started) / 1000 }
 })
 

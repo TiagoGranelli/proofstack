@@ -810,10 +810,10 @@ The tooling targets Linux, macOS and Windows; CI runs everything on Linux and `p
 (`static-windows`, not blocking yet, on main and on demand).
 
 - **Starting pnpm and tools.** On Windows, `pnpm`, `npm` and the files in `node_modules/.bin` are `.cmd`
-  shims, which Node refuses to start without a shell (CVE-2024-27980). The scripts start them through
-  `scripts/spawn.ts`: pnpm itself when pnpm runs the script (`npm_execpath`), the `.bin` tools through
-  `pnpm exec` on Windows, and a shim through `cmd.exe` only as the last resort, with every argument quoted
-  and one that `cmd.exe` could still expand (`"`, `%`) refused.
+  shims, which Node refuses to start without a shell (CVE-2024-27980). The scripts start them with
+  [tinyexec](https://github.com/tinylibs/tinyexec)'s `xSync`, which puts `node_modules/.bin` first on PATH and,
+  on Windows, resolves the command through PATHEXT and runs a shim through `cmd.exe` with every argument
+  escaped (twice for `node_modules/.bin` shims, which re-parse them), as cross-spawn does.
 - **Line endings.** `.gitattributes` keeps text files LF on every platform; with the CRLF that Git for
   Windows checks out by default, the format check would fail.
 - **The pre-commit hook** is POSIX `sh`. Git for Windows runs it with its own `sh`; there it links

@@ -13,9 +13,9 @@ import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { createClient } from '@hey-api/openapi-ts'
 import { Client } from 'pg'
+import { xSync } from 'tinyexec'
 import heyApiConfig from '../openapi-ts.config.ts'
 import { renderOpenApi } from './openapi.ts'
-import { pnpmInvocation, runSync } from './spawn.ts'
 import { dropTestDatabase, resetTestDatabase, testDatabaseUrl } from './test-db.ts'
 
 if (existsSync('.env')) process.loadEnvFile('.env')
@@ -50,19 +50,13 @@ const diffTrees = (committed: string, generated: string): string[] => {
 }
 
 /** `pnpm <args>` with its output captured; throws with the output when it fails. */
-const pnpm = (args: string[], env: NodeJS.ProcessEnv = process.env) => {
-  const result = runSync(pnpmInvocation(args), {
-    encoding: 'utf8',
-    env,
-    stdio: ['ignore', 'pipe', 'pipe'],
-    timeout: 120_000,
-  })
-  // Node types these as strings, but a stream that is not piped, or a command that did not start, gives null.
-  const { stdout, stderr } = result as { stdout: string | null; stderr: string | null }
-  const output = `${stdout ?? ''}${stderr ?? ''}`
-  // A drizzle-kit rename prompt cannot be answered without a TTY; it ends here as a failure or a timeout.
-  if (result.status !== 0)
-    throw new Error(`pnpm ${args.join(' ')} failed (${result.status ?? result.signal})\n${output}`)
+const pnpm = (args: string[]) => {
+  // A drizzle-kit rename prompt cannot be answered without a TTY; it ends here as a failure or a timeout
+  // (tinyexec throws ETIMEDOUT).
+  const result = xSync('pnpm', args, { timeout: 120_000, nodeOptions: { stdio: ['ignore', 'pipe', 'pipe'] } })
+  const output = `${result.stdout}${result.stderr}`
+  if (result.exitCode !== 0)
+    throw new Error(`pnpm ${args.join(' ')} failed (${result.exitCode ?? result.signalCode})\n${output}`)
   return output
 }
 
@@ -106,21 +100,19 @@ const checks = {
     // Better Auth's own check: every table, column, nullability and default the configuration writes exists in
     // the Drizzle schema (src/server/db/schema/auth.ts is application code, not generated). It only loads the
     // config, so placeholders let it run without a local .env.
-    const result = runSync(pnpmInvocation(['exec', 'auth', 'check', 'schema', '--config', 'src/server/auth.ts']), {
-      encoding: 'utf8',
-      env: {
-        ...process.env,
-        DATABASE_URL: process.env.DATABASE_URL || 'postgres://unused@127.0.0.1:1/unused',
-        APP_URL: process.env.APP_URL || 'http://localhost:3000',
-        BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET || 'check-drift-placeholder-secret-0123456789',
-      },
-      stdio: ['ignore', 'pipe', 'pipe'],
+    const result = xSync('pnpm', ['exec', 'auth', 'check', 'schema', '--config', 'src/server/auth.ts'], {
       timeout: 120_000,
+      nodeOptions: {
+        env: {
+          DATABASE_URL: process.env.DATABASE_URL || 'postgres://unused@127.0.0.1:1/unused',
+          APP_URL: process.env.APP_URL || 'http://localhost:3000',
+          BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET || 'check-drift-placeholder-secret-0123456789',
+        },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
     })
-    if (result.status === 0) return []
-    // Node types these as strings, but a stream that is not piped, or a command that did not start, gives null.
-    const { stdout, stderr } = result as { stdout: string | null; stderr: string | null }
-    const report = `${stdout ?? ''}${stderr ?? ''}`.trim()
+    if (result.exitCode === 0) return []
+    const report = `${result.stdout}${result.stderr}`.trim()
     return [`src/server/db/schema/auth.ts does not hold what src/server/auth.ts writes:\n${report}`]
   },
 

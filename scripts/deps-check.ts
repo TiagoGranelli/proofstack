@@ -7,8 +7,8 @@
 //   (`npm view <pkg> dist-tags time`).
 // Usage: pnpm deps:check   (needs the npm registry)
 import { readFileSync } from 'node:fs'
+import { xSync } from 'tinyexec'
 import { table } from './report-table.ts'
-import { npmInvocation, pnpmInvocation, runSync } from './spawn.ts'
 
 /** Packages pinned from a dist-tag other than `latest`, and why. */
 const CHANNELS: Record<string, { tag: string; why: string }> = {
@@ -23,7 +23,7 @@ const problems: string[] = []
 
 // pnpm outdated exits 1 when it finds something; its JSON is on stdout either way.
 type Outdated = Record<string, { current?: string; wanted?: string; latest?: string; dependencyType?: string }>
-const outdatedRun = runSync(pnpmInvocation(['outdated', '--format', 'json']), { encoding: 'utf8' })
+const outdatedRun = xSync('pnpm', ['outdated', '--format', 'json'])
 let outdated: Outdated | undefined
 try {
   outdated = JSON.parse(outdatedRun.stdout || '{}') as Outdated
@@ -48,7 +48,7 @@ const pinned = (name: string) =>
   manifest.dependencies?.[name] ?? manifest.devDependencies?.[name] ?? '(not a dependency)'
 
 const channelRows = Object.entries(CHANNELS).map(([name, { tag, why }]) => {
-  const view = runSync(npmInvocation(['view', name, 'dist-tags', 'time', '--json']), { encoding: 'utf8' })
+  const view = xSync('npm', ['view', name, 'dist-tags', 'time', '--json'])
   let info: { 'dist-tags'?: Record<string, string>; time?: Record<string, string> } | undefined
   try {
     info = JSON.parse(view.stdout) as typeof info
