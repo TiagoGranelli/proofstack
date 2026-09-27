@@ -2,7 +2,7 @@
 // every generator runs into a temporary directory and its output is compared byte for byte.
 //   contract   src/contract -> openapi.json -> src/sdk (Hey API)
 //   migrations src/server/db/schema -> drizzle/ (`drizzle-kit generate` adds nothing, `drizzle-kit check` passes)
-//   auth       src/server/auth.ts (Better Auth) -> src/server/db/schema/auth.ts
+//   auth       src/server/db/schema/auth.ts holds what src/server/auth.ts writes (Better Auth `auth check schema`)
 //   database   drizzle/*.sql applied to an empty database == the Drizzle schema (`drizzle-kit push` changes nothing)
 // Usage: pnpm check:drift [contract] [migrations] [auth] [database]   (default: all; database needs Postgres)
 // `pnpm check` runs the first three. The database check uses DRIFT_DATABASE_URL if set, otherwise a
@@ -100,17 +100,23 @@ const checks = {
   },
 
   async auth() {
-    const output = join(scratch('auth'), 'auth.ts')
-    // Generation only reads the config; placeholders let it run without a local .env.
-    run('pnpm', ['exec', 'auth', 'generate', '--config', 'src/server/auth.ts', '--output', output, '-y'], {
-      ...process.env,
-      DATABASE_URL: process.env.DATABASE_URL || 'postgres://unused@127.0.0.1:1/unused',
-      APP_URL: process.env.APP_URL || 'http://localhost:3000',
-      BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET || 'check-drift-placeholder-secret-0123456789',
+    // Better Auth's own check: every table, column, nullability and default the configuration writes exists in
+    // the Drizzle schema (src/server/db/schema/auth.ts is application code, not generated). It only loads the
+    // config, so placeholders let it run without a local .env.
+    const result = spawnSync('pnpm', ['exec', 'auth', 'check', 'schema', '--config', 'src/server/auth.ts'], {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        DATABASE_URL: process.env.DATABASE_URL || 'postgres://unused@127.0.0.1:1/unused',
+        APP_URL: process.env.APP_URL || 'http://localhost:3000',
+        BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET || 'check-drift-placeholder-secret-0123456789',
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 120_000,
     })
-    return readFileSync(output, 'utf8') === readFileSync('src/server/db/schema/auth.ts', 'utf8')
-      ? []
-      : ['differs: src/server/db/schema/auth.ts (run `pnpm auth:generate`)']
+    if (result.status === 0) return []
+    const report = `${result.stdout ?? ''}${result.stderr ?? ''}`.trim()
+    return [`src/server/db/schema/auth.ts does not hold what src/server/auth.ts writes:\n${report}`]
   },
 
   async database() {

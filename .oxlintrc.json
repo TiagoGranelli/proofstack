@@ -10,7 +10,6 @@
     "repos/**",
     "src/sdk/**",
     "src/routeTree.gen.ts",
-    "src/server/db/schema/auth.ts",
     "test-results/**",
     "playwright-report/**",
     ".agents/**",

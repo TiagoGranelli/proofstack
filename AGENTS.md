@@ -62,9 +62,10 @@ The UI follows [Bulletproof React](https://github.com/alan2207/bulletproof-react
 **API change.** Edit `src/contract/*` and `src/server/api/handlers.ts`. Run `pnpm codegen` to regenerate
 `openapi.json` and `src/sdk/`. Commit all three together. `pnpm check:drift contract` must pass.
 
-**Database change.** Edit `src/server/db/schema/*.ts` (never `auth.ts`). Run
-`pnpm db:generate --name <slug>`, review the new SQL in `drizzle/`, apply it with `pnpm db:migrate` (after
-`pnpm db:up`), and run `pnpm check:drift migrations`.
+**Database change.** Edit `src/server/db/schema/*.ts`. Run `pnpm db:generate --name <slug>`, review the new
+SQL in `drizzle/` (a type change that must convert data gets its `USING` clause there, as in
+`0003_auth_timestamptz.sql`), apply it with `pnpm db:migrate` (after `pnpm db:up`), and run
+`pnpm check:drift migrations`.
 
 **Feature checklist.** A new feature usually touches every layer, in this order:
 
@@ -79,8 +80,12 @@ The UI follows [Bulletproof React](https://github.com/alan2207/bulletproof-react
 6. UI in `src/features/<name>/` (see [Frontend structure](#frontend-structure)) and routes in `src/routes/`.
 7. Integration tests in `tests/integration/` and E2E tests in `tests/e2e/` (see [Tests](#tests)).
 
-**Auth config change** (plugins, user fields). Run `pnpm auth:generate` to rewrite
-`src/server/db/schema/auth.ts`, then follow the database workflow.
+**Auth config change** (plugins, user fields, rate-limit storage). `src/server/db/schema/auth.ts` is
+application code: edit it by hand (timestamps stay `timestamptz`), then follow the database workflow.
+`pnpm auth:check` (Better Auth's `auth check schema`, also run by `pnpm check`) fails until every table,
+column, nullability and default the configuration writes exists. To see what Better Auth would generate, run
+`pnpm exec auth generate --config src/server/auth.ts --output /tmp/auth-schema.ts -y` and port the
+difference; never write its output over `auth.ts`.
 
 **Users.** Run `pnpm user:create <email> <name>`. The password comes from `PROOFSTACK_USER_PASSWORD`,
 otherwise from stdin: a hidden prompt (asked twice) in a terminal, or the whole input of a pipe. Public
@@ -96,7 +101,7 @@ Postgres, and applies migrations.
 | `pnpm check` | `format:check`, `lint` (warnings are counted in the summary but do not fail), `typecheck`, `deadcode`, `unit` (Vitest project `unit`, `tests/unit`), the database-free drift checks (contract, migrations, auth) and repo guards (including kebab-case folder names). No database, no build, about 4 s. Run it before every hand-off. |
 | `pnpm test:unit [filter ...]` | Unit tests only: pure functions, no app |
 | `pnpm format`, `pnpm lint:fix` | Autofixes |
-| `pnpm check:drift [contract\|migrations\|auth\|database]` | Checks that generated files match their sources; `database` needs Postgres |
+| `pnpm check:drift [contract\|migrations\|auth\|database]` | Checks that generated files match their sources and that the auth schema holds what Better Auth writes; `database` needs Postgres |
 | `pnpm build && pnpm verify:app [--no-e2e] [--no-integration] [filter ...]` | Starts the built server against a fresh per-run `proofstack_<purpose>_<pid>_test` database (dropped afterwards) and runs Vitest (`tests/integration`) and Playwright (`tests/e2e`); app logs go to `test-results/app-server.log`. Refuses a stale `.output` |
 | `pnpm build && pnpm lighthouse [--runs=3] [--page=<name>] [--form-factor=mobile\|desktop]` | Lighthouse gate on the built app; see the policy below |
 
@@ -153,8 +158,7 @@ Regenerate these files; never edit them by hand:
 
 - `src/sdk/**` and `openapi.json`: `pnpm codegen`
 - `src/routeTree.gen.ts`: `pnpm dev` or `pnpm build`
-- `src/server/db/schema/auth.ts`: `pnpm auth:generate`
-- `drizzle/**`: `pnpm db:generate`
+- `drizzle/**`: `pnpm db:generate` (only the new SQL file may be adjusted by hand, before it is applied anywhere)
 - `.agents/skills/**`, `.claude/skills/**`, and `skills-lock.json`: the `skills` CLI
 - `repos/**`: `scripts/vendor-source.ts`
 

@@ -31,7 +31,7 @@
     "db:down": "docker compose down",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node --env-file-if-exists=.env scripts/migrate.ts",
-    "auth:generate": "auth generate --config src/server/auth.ts --output src/server/db/schema/auth.ts -y",
+    "auth:check": "auth check schema --config src/server/auth.ts",
     "user:create": "node --env-file-if-exists=.env scripts/create-user.ts",
     "openapi:generate": "node scripts/openapi.ts",
     "sdk:generate": "openapi-ts",
