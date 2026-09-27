@@ -106,6 +106,6 @@ production (needs Docker); see [ADR 0011](../decisions/0011-lighthouse-over-http
 | Command | Covers |
 | --- | --- |
 | `pnpm audit:check` | `pnpm audit --audit-level high` over production and development packages: fails on a high or critical advisory not in `auditConfig.ignoreGhsas` (`pnpm-workspace.yaml`). Needs the npm registry; CI job `supply-chain` |
-| `pnpm sbom:release [--image=<ref>] [--no-image]` | CycloneDX SBOMs in `sbom/` for a release: production npm dependencies, and the production image with syft (Docker). Not a gate |
+| `pnpm sbom:release` | `pnpm sbom`: a CycloneDX 1.7 SBOM of the production npm dependencies, with licenses, in `sbom/proofstack.cdx.json`, for a release. Needs `node_modules`. Not a gate |
 | `pnpm ci:local [job ...]` | The CI jobs (`workflows secrets static supply-chain drift build verify lighthouse docker`, default all) as `pnpm ci:<job>` scripts in the Playwright Ubuntu container next to Postgres and Mailpit, all five browser projects included. Needs Docker. See [docs/operations.md](../operations.md#ci-and-local-ci) |
 | `harbor run -p evals/tasks -a <agent> -m <model>` | The agent eval ([evals.md](evals.md)): an agent solves each task in a container, graded by `pnpm check`, drift and hidden checks. Needs Docker and Harbor, and runs a paid agent; not a gate |

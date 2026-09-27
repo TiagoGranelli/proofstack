@@ -863,5 +863,8 @@ What guards the dependencies, the image and the repository, and where each gate 
   process runs as the unprivileged `node` user, under Node's permission model: it may read `.output/` and
   use the network, and nothing else (no file writes, child processes, workers or addons;
   [ADR 0012](decisions/0012-node-permission-model.md)). The tests run the server with the same flags.
-- **SBOM.** `pnpm sbom:release` writes CycloneDX documents for the production npm dependencies and for the
-  whole image (syft) into `sbom/`, to attach to a release.
+- **SBOM.** `pnpm sbom:release` runs pnpm's `pnpm sbom` and writes a CycloneDX document of the production npm
+  dependencies (with their licenses) to `sbom/proofstack.cdx.json`, to attach to a release. Nothing publishes
+  an image yet; a workflow that does should build it with `docker buildx build --sbom=true
+  --provenance=mode=max`, which attaches the image's SBOM (OS packages included) and a SLSA provenance
+  attestation to the pushed image.

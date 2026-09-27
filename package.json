@@ -48,7 +48,7 @@
     "verify:app": "node scripts/verify-app.ts",
     "check:drift": "node scripts/check-drift.ts",
     "check:migrations": "node scripts/check-migrations.ts",
-    "sbom:release": "node scripts/sbom.ts",
+    "sbom:release": "pnpm sbom --sbom-format cyclonedx --sbom-type application --prod --out sbom/proofstack.cdx.json",
     "audit:check": "pnpm audit --audit-level high",
     "licenses:check": "node scripts/licenses.ts",
     "lighthouse": "node scripts/lighthouse.ts",
