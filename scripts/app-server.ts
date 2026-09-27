@@ -4,9 +4,10 @@
 // With `edge`, the app sits behind the reference edge (deploy/Caddyfile, scripts/edge.ts) as in production:
 // the returned url and APP_URL are the edge's, and the Node server trusts X-Forwarded-For only from the edge.
 import { type ChildProcess, spawn } from 'node:child_process'
-import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync } from 'node:fs'
 import { createServer } from 'node:net'
-import { dirname, join, resolve as resolvePath } from 'node:path'
+import { dirname, resolve as resolvePath } from 'node:path'
+import { assertFreshBuild } from './build-freshness.ts'
 import { edgePeers, type RunningEdge, startEdge } from './edge.ts'
 import { dropTestDatabase, resetTestDatabase, testDatabaseUrl } from './test-db.ts'
 
@@ -60,35 +61,6 @@ const runQuiet = (command: string, args: string[], env: NodeJS.ProcessEnv) =>
 /** Last lines of a log file, for failure messages. */
 export const tail = (file: string, lines = 60) =>
   existsSync(file) ? readFileSync(file, 'utf8').trimEnd().split('\n').slice(-lines).join('\n') : '(no log)'
-
-// Everything the build reads. drizzle/ is not built in (migrations are applied from the folder).
-const BUILD_INPUTS = ['src', 'public', 'vite.config.ts', 'package.json', 'pnpm-lock.yaml', 'tsconfig.json']
-
-const newestInput = (): { path: string; mtime: number } => {
-  let newest = { path: '', mtime: 0 }
-  const visit = (path: string) => {
-    if (!existsSync(path)) return
-    const stat = statSync(path)
-    if (stat.isDirectory()) for (const entry of readdirSync(path)) visit(join(path, entry))
-    else if (stat.mtimeMs > newest.mtime) newest = { path, mtime: stat.mtimeMs }
-  }
-  for (const input of BUILD_INPUTS) visit(input)
-  return newest
-}
-
-/** Refuses to test a build older than its sources. ALLOW_STALE_BUILD=1 skips this (CI downloads a fresh one). */
-const assertFreshBuild = () => {
-  if (!existsSync('.output/server/index.mjs') || !existsSync('.output/nitro.json'))
-    throw new Error('No build found in .output. Run `pnpm build` first.')
-  if (process.env.ALLOW_STALE_BUILD === '1') return
-  const built = statSync('.output/nitro.json').mtimeMs
-  const newest = newestInput()
-  if (newest.mtime > built)
-    throw new Error(
-      `.output is older than ${newest.path} (built ${new Date(built).toISOString()}). Run \`pnpm build\` first ` +
-        '(or set ALLOW_STALE_BUILD=1 to test the old build anyway).',
-    )
-}
 
 type StartAppOptions = {
   databaseUrl: string

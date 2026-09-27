@@ -27,7 +27,8 @@ const run = (command: string, args: string[] = [], env: NodeJS.ProcessEnv = {}) 
   }
 }
 
-// GitHub Actions tests the build job's artifact: its file times say nothing about the checkout's.
+// GitHub Actions tests the build job's artifact, built from this commit by another job (its .output/build-inputs.json
+// should match the checkout, so this override may go once a CI run confirms it: scripts/build-freshness.ts).
 const downloadedBuild = process.env.GITHUB_ACTIONS === 'true' ? { ALLOW_STALE_BUILD: '1' } : {}
 
 /** Runs every step even after a failure, so one run shows every problem. */

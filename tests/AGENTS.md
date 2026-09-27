@@ -152,8 +152,8 @@ limit) and four nested callbacks.
   `sdkClient(cookie)` and `postSignIn` send it; the anonymous `sdkClient()` does not.
 - Optional environment for both runners and `verify:app` (`ALLOW_STALE_BUILD` also applies to `lighthouse`):
   - `KEEP_TEST_DB=1`: keep the per-run database after the run.
-  - `ALLOW_STALE_BUILD=1`: skip the check that `.output` is newer than its sources (CI tests a downloaded
-    build).
+  - `ALLOW_STALE_BUILD=1`: skip the check that `.output` was built from the sources on disk (content hashes,
+    `scripts/build-freshness.ts`; CI tests a downloaded build).
   - `TEST_EDGE=1`: put the Caddy edge (`deploy/Caddyfile`, `scripts/edge.ts`) in front of the open server; its
     log is `test-results/edge-<runner>.log`.
 - Vitest skips its global teardown on Ctrl-C, and a killed run skips any teardown: the servers go with the
