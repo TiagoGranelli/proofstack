@@ -91,7 +91,9 @@ const dropAbandoned = async (testUrl: string) => {
     const { rows } = await admin.query<{ datname: string }>('select datname from pg_database')
     for (const { datname } of rows) {
       const pid = Number(RUN_DATABASE.exec(datname)?.[1])
-      if (pid && pid !== process.pid && !isRunning(pid)) await admin.query(`drop database "${datname}" with (force)`)
+      // `if exists`: another run's sweep may drop the same one first.
+      if (pid && pid !== process.pid && !isRunning(pid))
+        await admin.query(`drop database if exists "${datname}" with (force)`)
     }
   } finally {
     await admin.end()

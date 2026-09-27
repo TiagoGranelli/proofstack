@@ -47,8 +47,8 @@ describe('emptyTestDatabase', () => {
   it("drops the databases of runs that are gone, and nobody else's", async () => {
     await emptyTestDatabase(named(running))
     await emptyTestDatabase(named(fixed))
+    // Created without a sweep. Another worker's sweep may drop it at any moment, which is what this checks.
     await admin((client) => client.query(`create database "${abandoned}"`))
-    expect(await existing([abandoned, running, fixed])).toEqual([abandoned, fixed, running].toSorted())
 
     await emptyTestDatabase(url)
     expect(await existing([abandoned, running, fixed])).toEqual([fixed, running].toSorted())
