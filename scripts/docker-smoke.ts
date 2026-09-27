@@ -22,11 +22,11 @@ const MIGRATIONS = (JSON.parse(readFileSync('drizzle/meta/_journal.json', 'utf8'
   .length
 /**
  * Below Docker's default stop timeout (10 s), after which a stop is a kill. srvx drains in-flight requests for up
- * to 5 s (SERVER_SHUTDOWN_TIMEOUT) and then exits even if a timer is still pending. One is, today: rendering a
- * form page on the server starts the connect loop of TanStack Form's devtools event client
- * (@tanstack/devtools-event-client, `startConnectLoop`), which outlives the shutdown, so the stop takes about 5 s
- * instead of 1 s after /login has been served. The client ships in production builds (TanStack/form#2132); once it
- * no longer does, lower this bound to about 2 s so a slower shutdown shows.
+ * to 5 s (SERVER_SHUTDOWN_TIMEOUT) and then exits even if a timer is still pending, so a timer that outlives the
+ * shutdown makes the stop take about 6 s. TanStack Form's devtools connect loop did after /login had been served,
+ * until vite.config.ts swapped its event client out of production builds (TanStack/form#2132,
+ * src/lib/no-devtools-event-client.ts); `docker compose stop` now takes about 2 s. Lower this to 4 s once CI's
+ * runners confirm that, so a pending timer fails the smoke test.
  */
 const MAX_STOP_MS = 8_000
 
