@@ -13,7 +13,7 @@ changes to the contract, database, auth, or UI flows.
 | `src/server/` | Server-only: Effect handlers (`api/`), Better Auth (`auth.ts`), Drizzle (`db/`), repositories, `env.ts`, shutdown `lifecycle.ts` | contract, sdk |
 | `src/sdk/` | Hey API client and TanStack Query options (generated) | nothing |
 | `src/lib/` | Shared plumbing: `api-client.ts` (isomorphic SDK client), `api-error.ts`, `utils.ts`. `*.functions.ts` are server functions (`createServerFn`): `session.functions.ts` (route guards), `auth.functions.ts` (every account action) | contract, sdk. The server adapters (`*.functions.ts`, `api-client.ts`) also import server and lib |
-| `src/components/` | Shared UI that knows no feature: `ui/` (shadcn primitives, Radix, style `radix-nova`), `errors/` (router error and not-found states, `ApiErrorAlert`), `layouts/` (site header, pending state) | lib, contract, sdk |
+| `src/components/` | Shared UI that knows no feature: `ui/` (shadcn primitives, Radix, style `radix-nova`), `errors/` (router error and not-found states, `SectionErrorBoundary`, `ApiErrorAlert`), `layouts/` (site header, pending state) | lib, contract, sdk |
 | `src/features/<name>/` | One feature each (`posts`, `auth`): `api/` (query options and mutation hooks), `components/`, `utils/` | components, lib, server adapters, contract, sdk. Never another feature |
 | `src/routes/`, `router.tsx`, `start.ts`, `styles/` | The app layer. Page routes define the route (loader, guards, head) and compose features. `api/$.ts` hands requests to the Effect API; `api/auth/$.ts` to Better Auth | Page routes: features, components, lib, server adapters, contract, sdk. `api/**` is a server adapter: server, contract, sdk, lib |
 
@@ -56,6 +56,10 @@ The UI follows [Bulletproof React](https://github.com/alan2207/bulletproof-react
     `layouts/`). shadcn primitives go in `components/ui/` through `pnpm exec shadcn add`.
   - Route files hold the route definition (loader, `beforeLoad`, `head`, `headers`, `validateSearch`) and a
     small page component that composes features. Forms, buttons with behavior and lists live in features.
+  - Errors: a route with a loader sets `errorComponent` to `RouteError` with its own `title` and `action`
+    (`/dashboard`, `/account`); the router's default covers the rest. Page sections that can fail on their
+    own (a list next to a form) are wrapped in `SectionErrorBoundary`, and a section that reads a suspense
+    query reads it inside the boundary (`MyPostList`), not in the page component.
 - Naming: files and folders are kebab-case (Oxlint `unicorn/filename-case`; folders by the `guards` gate
   in `scripts/check.ts`). TanStack route names keep their prefixes (`__root.tsx`, `_authed.tsx`, `$.ts`,
   `-private/`, `(group)/`). `src/sdk/` is generated and exempt.
