@@ -1,13 +1,14 @@
-// Boots the built app (.output) against a fresh, migrated test database with two author accounts.
-// Shared by scripts/verify-app.ts and scripts/lighthouse.ts. Server output goes to a log file.
+// Boots the built app (.output) against a fresh, migrated test database with two author accounts. Shared by the
+// test runners' global setups (startTestServers), the integration tests that need a server of their own, and
+// scripts/lighthouse.ts. Server output goes to a log file.
 // With `edge`, the app sits behind the reference edge (deploy/Caddyfile, scripts/edge.ts) as in production:
 // the returned url and APP_URL are the edge's, and the Node server trusts X-Forwarded-For only from the edge.
 import { type ChildProcess, spawn } from 'node:child_process'
 import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, statSync } from 'node:fs'
-import { connect, createServer, type Socket } from 'node:net'
+import { createServer } from 'node:net'
 import { dirname, join, resolve as resolvePath } from 'node:path'
 import { edgePeers, type RunningEdge, startEdge } from './edge.ts'
-import { resetTestDatabase } from './test-db.ts'
+import { dropTestDatabase, resetTestDatabase, testDatabaseUrl } from './test-db.ts'
 
 if (existsSync('.env')) process.loadEnvFile('.env')
 
@@ -92,7 +93,6 @@ const assertFreshBuild = () => {
 type StartAppOptions = {
   databaseUrl: string
   logFile: string
-  port?: string
   /**
    * TRUSTED_PROXIES for the server: trusting loopback lets each test suite pick its client IP (X-Forwarded-For).
    * Ignored with `edge`: the server then trusts only the edge (`edgePeers`, scripts/edge.ts).
@@ -193,7 +193,7 @@ const waitForServer = async (server: ChildProcess, directUrl: string, logFile: s
  */
 export const startApp = async (options: StartAppOptions): Promise<RunningApp> => {
   assertFreshBuild()
-  const appPort = options.port ?? (await freePort())
+  const appPort = await freePort()
   const directUrl = `http://localhost:${appPort}`
   const edgePort = options.edge ? await freePort() : undefined
   const url = edgePort ? `${options.edge?.tls ? 'https' : 'http'}://localhost:${edgePort}` : directUrl
@@ -246,67 +246,83 @@ export const assertChromium = async () => {
   return path
 }
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+/** Mailpit (`pnpm mail:up`): the open server sends account mail there, and the E2E tests read it back. */
+const mailpit = async () => {
+  // MAILPIT_HOST is for runners where Mailpit is another container (`pnpm ci:local`).
+  const host = process.env.MAILPIT_HOST || '127.0.0.1'
+  const api = `http://${host}:${process.env.MAILPIT_HTTP_PORT || '54380'}`
+  const ready = await fetch(`${api}/readyz`).catch(() => undefined)
+  if (!ready?.ok) throw new Error(`Mailpit is not reachable at ${api}/readyz. Start it with \`pnpm mail:up\`.`)
+  const smtp = `smtp://${host}:${process.env.MAILPIT_SMTP_PORT || '54325'}`
+  return { api, settings: { SMTP_URL: smtp, MAIL_FROM: 'App <no-reply@example.test>' } }
+}
 
-/** A raw HTTP/1.1 connection to the Node server, so a test controls when each byte of a request leaves. */
-const rawConnection = async (directUrl: string) => {
-  const socket: Socket = connect(Number(new URL(directUrl).port), '127.0.0.1')
-  await new Promise((resolve, reject) => socket.once('connect', resolve).once('error', reject))
-  let received = ''
-  socket.on('data', (chunk: Buffer) => (received += chunk.toString()))
-  const closed = new Promise<string>((resolve) => socket.once('close', () => resolve(received)))
-  socket.on('error', () => {})
-  return { socket, closed }
+/** What scripts/create-user.ts and in-process server modules need to act on the app's database. */
+const SERVER_SETTINGS = ['DATABASE_URL', 'APP_URL', 'BETTER_AUTH_SECRET', 'AUTH_SIGN_UP', 'SMTP_URL', 'MAIL_FROM']
+
+/** What a test runner gets from its global setup (Vitest: `inject('servers')`; Playwright: the environment). */
+export type TestServers = {
+  /** AUTH_SIGN_UP=open, mail to Mailpit, loopback trusted as a proxy: each suite picks its client IP. */
+  appUrl: string
+  /** The shipped defaults on the same database: closed sign-up, and the test process not a trusted proxy. */
+  closedAppUrl: string
+  mailpitUrl: string
+  databaseUrl: string
+  /** The open server's SERVER_SETTINGS. */
+  env: Record<string, string>
+  user: User
+  otherUser: User
 }
 
 /**
- * Stops the server with SIGTERM while two requests show what a drain must handle, and returns how it stopped
- * with the problems found:
- * - A load balancer's request that arrives on an open connection right at SIGTERM: `/api/ready` must answer 503
- *   with `Connection: close`, so the balancer stops routing here and does not reuse the connection.
- * - A sign-in whose client disconnects just before SIGTERM: srvx's drain does not wait for its handler, which
- *   still hashes the password and writes a session. It must finish, logged as 499, before the pool closes.
+ * The two servers a test runner tests, on a fresh `app_<runner>_<pid>_test` database with two verified authors.
+ * TEST_EDGE=1 puts the reference edge in front of the open server. `stop` ends both servers and drops the
+ * database (KEEP_TEST_DB=1 keeps it). A run killed before `stop` (Vitest skips its teardown on Ctrl-C) leaves
+ * the database behind, and the next run's sweep drops it (resetTestDatabase, scripts/test-db.ts).
  */
-export const stopWhileDraining = async (app: RunningApp) => {
-  const ready = await rawConnection(app.directUrl)
-  // Headers begun but not ended: the connection is busy, so the drain does not close it as idle.
-  ready.socket.write('GET /api/ready HTTP/1.1\r\nHost: localhost\r\n')
-  const abandoned = await rawConnection(app.directUrl)
-  const body = JSON.stringify({ email: app.user.email, password: app.user.password })
-  abandoned.socket.write(
-    [
-      'POST /api/auth/sign-in/email HTTP/1.1',
-      'Host: localhost',
-      `Origin: ${app.url}`,
-      'Content-Type: application/json',
-      `Content-Length: ${Buffer.byteLength(body)}`,
-      // Its own rate-limit bucket (the server trusts this process, or the edge, as a proxy).
-      'X-Forwarded-For: 198.51.100.99',
-      '',
-      body,
-    ].join('\r\n'),
-  )
-  await sleep(10)
-  abandoned.socket.destroy()
-  const stopping = app.stop()
-  // With an edge in front, stop() ends the edge first: wait until the server itself has the signal.
-  for (let i = 0; i < 1000 && !readFileSync(app.logFile, 'utf8').includes('"msg":"draining"'); i++) await sleep(10)
-  ready.socket.write('\r\n')
-  const [response, stopped] = await Promise.all([ready.closed, stopping])
-  const log = readFileSync(app.logFile, 'utf8').split('\n')
-  const complete = log.findIndex((line) => line.includes('"shutdown complete"'))
-  const signIn = log.findIndex((line) => line.includes('"/api/auth/sign-in/email"') && line.includes('"aborted":true'))
-  const problems = [
-    response.startsWith('HTTP/1.1 503 ')
-      ? ''
-      : `/api/ready during the drain answered ${JSON.stringify(response.split('\r\n', 1)[0])}, expected 503`,
-    /^connection: close\r$/im.test(response) ? '' : '/api/ready during the drain did not close its connection',
-    signIn !== -1 && signIn < complete
-      ? ''
-      : 'the abandoned sign-in was not logged (499, aborted) before "shutdown complete"',
-    ...log
-      .filter((line) => /Failed query|Cannot use a pool after calling end/.test(line))
-      .map((line) => `during shutdown: ${line.slice(0, 200)}`),
-  ].filter(Boolean)
-  return { stopped, problems }
+export const startTestServers = async (runner: 'integration' | 'e2e') => {
+  const mail = await mailpit()
+  const databaseUrl = testDatabaseUrl(runner)
+  const running: RunningApp[] = []
+  const stop = async () => {
+    await Promise.all(running.map((app) => app.stop()))
+    if (process.env.KEEP_TEST_DB !== '1') await dropTestDatabase(databaseUrl)
+  }
+  try {
+    const app = await startApp({
+      databaseUrl,
+      logFile: `test-results/app-server-${runner}.log`,
+      trustedProxies: LOOPBACK,
+      // Behind the edge the test process is a proxy in front of Caddy instead: Caddy believes its
+      // X-Forwarded-For (it connects from loopback) and hands the resolved client IP to the app.
+      ...(process.env.TEST_EDGE === '1'
+        ? { edge: { trustedProxies: 'private_ranges', logFile: `test-results/edge-${runner}.log` } }
+        : {}),
+      settings: { AUTH_SIGN_UP: 'open', ...mail.settings },
+    })
+    running.push(app)
+    const closed = await startApp({
+      databaseUrl,
+      logFile: `test-results/app-server-${runner}-closed.log`,
+      trustedProxies: '10.0.0.0/8',
+      settings: { AUTH_SIGN_UP: 'closed', ...mail.settings },
+      alongside: app,
+    })
+    running.push(closed)
+    const env = Object.fromEntries(SERVER_SETTINGS.map((name) => [name, app.env[name] ?? '']))
+    const { user, otherUser } = app
+    const servers: TestServers = {
+      appUrl: app.url,
+      closedAppUrl: closed.url,
+      mailpitUrl: mail.api,
+      databaseUrl,
+      env,
+      user,
+      otherUser,
+    }
+    return { servers, stop }
+  } catch (error) {
+    await stop()
+    throw error
+  }
 }

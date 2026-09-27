@@ -1,28 +1,22 @@
-// Shared by the integration tests. `pnpm verify:app` provides every variable read here (see global-setup.ts).
+// Shared by the integration tests: the servers global-setup.ts started for this run, and ways to talk to them.
 import { execFile } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
+import { inject } from 'vitest'
 import { createClient } from '#/sdk/client/index.ts'
 
-export const appUrl = process.env.APP_URL!
-/** A second server on the same database: AUTH_SIGN_UP=closed, and TRUSTED_PROXIES excludes the test process. */
-export const closedAppUrl = process.env.CLOSED_APP_URL!
+const servers = inject('servers')
 
-export const users = {
-  author: {
-    email: process.env.TEST_USER_EMAIL!,
-    password: process.env.TEST_USER_PASSWORD!,
-    name: process.env.TEST_USER_NAME!,
-  },
-  other: {
-    email: process.env.TEST_OTHER_USER_EMAIL!,
-    password: process.env.TEST_OTHER_USER_PASSWORD!,
-    name: process.env.TEST_OTHER_USER_NAME!,
-  },
-}
+export const appUrl = servers.appUrl
+/** A second server on the same database: AUTH_SIGN_UP=closed, and TRUSTED_PROXIES excludes the test process. */
+export const closedAppUrl = servers.closedAppUrl
+/** The database both servers use, for tests that read or arrange rows directly. */
+export const databaseUrl = servers.databaseUrl
+
+export const users = { author: servers.user, other: servers.otherUser }
 
 /**
- * Client IPs for one test file. verify:app starts the server with loopback in TRUSTED_PROXIES, so the
+ * Client IPs for one test file. The open server has loopback in TRUSTED_PROXIES, so the
  * X-Forwarded-For value the tests send is the client IP, and each value is its own sign-in rate-limit bucket
  * (3 per 10 s): give every file its own prefix and every group of sign-ins its own address, and no test ever
  * waits for another's bucket to drain. Requests without X-Forwarded-For come from the trusted proxy itself and
@@ -69,7 +63,7 @@ const CREATE_USER = fileURLToPath(new URL('../../scripts/create-user.ts', import
 
 /**
  * A throwaway verified account, created through scripts/create-user.ts (the operator path) with the app's
- * environment that verify:app passes to the tests, named after `label`. For tests that change or delete an
+ * environment (setup.ts), named after `label`. For tests that change or delete an
  * account, or write more than the shared `users` can absorb under the per-user write limit.
  */
 export const createUser = async (label: string) => {

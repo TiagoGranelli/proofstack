@@ -9,7 +9,6 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { type RunningApp, startApp } from '../../scripts/app-server.ts'
 import { dropTestDatabase, testDatabaseUrl } from '../../scripts/test-db.ts'
 
-const production = process.env.NODE_ENV === 'production'
 const LOG_FILE = 'test-results/app-server-db-failure.log'
 
 let app: RunningApp
@@ -33,7 +32,7 @@ const serverFunctionIds = () => {
   return [...ids]
 }
 
-describe.runIf(production)('database failure', () => {
+describe('database failure', () => {
   beforeAll(async () => {
     databaseUrl = testDatabaseUrl('dbfail')
     app = await startApp({ databaseUrl, logFile: LOG_FILE })

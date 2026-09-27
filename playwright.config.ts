@@ -1,5 +1,6 @@
 import { defineConfig, devices } from '@playwright/test'
 
+// tests/e2e/global-setup.ts starts the app and sets APP_URL before the workers load this file again.
 const baseURL = process.env.APP_URL ?? 'http://localhost:3000'
 
 // Every flow runs on every project. WebKit (and with it iPhone 15) needs Ubuntu's libraries and does not run
@@ -40,7 +41,9 @@ if (unknown.length)
 
 export default defineConfig({
   testDir: 'tests/e2e',
-  // Playwright empties its output directory on start; test-results/app-server.log (verify:app) lives next to it.
+  globalSetup: './tests/e2e/global-setup.ts',
+  // Playwright empties its output directory on start; the app servers' logs (test-results/app-server-e2e*.log) live
+  // next to it.
   outputDir: 'test-results/playwright',
   fullyParallel: false,
   forbidOnly: !!process.env.CI,

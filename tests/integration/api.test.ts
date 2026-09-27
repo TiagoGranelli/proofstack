@@ -1,5 +1,5 @@
 // Exercises the generated SDK against the running app and a real, freshly migrated Postgres.
-// Run through `pnpm verify:app`, which starts the server and provides APP_URL and two test authors.
+// global-setup.ts starts the server and creates two test authors.
 import { readFileSync } from 'node:fs'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { createClient } from '#/sdk/client/index.ts'

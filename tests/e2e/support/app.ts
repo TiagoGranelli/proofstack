@@ -32,14 +32,9 @@ const CREATE_USER = fileURLToPath(new URL('../../../scripts/create-user.ts', imp
 
 /**
  * A new account, created through scripts/create-user.ts. The script writes to the app's database, so it
- * needs the environment the app runs with (DATABASE_URL and the rest); verify:app passes it to Playwright.
+ * needs the environment the app runs with (DATABASE_URL and the rest), which ../global-setup.ts sets.
  */
 export const createAuthor = async (name: string): Promise<Author> => {
-  if (!process.env.DATABASE_URL)
-    throw new Error(
-      'E2E tests create their authors with scripts/create-user.ts, which needs the DATABASE_URL of the app under ' +
-        'test. Run them through `pnpm verify:app`, or set the app environment yourself.',
-    )
   const author = { email: `e2e-${crypto.randomUUID()}@example.test`, name, password: `pw-${crypto.randomUUID()}` }
   try {
     await promisify(execFile)(process.execPath, [CREATE_USER, author.email, author.name], {
@@ -54,7 +49,7 @@ export const createAuthor = async (name: string): Promise<Author> => {
   return author
 }
 
-// verify:app trusts X-Forwarded-For from loopback, so every browser and API context signs in from its own
+// The open server trusts X-Forwarded-For from loopback, so every browser and API context signs in from its own
 // client IP and never waits for another's sign-in rate limit (3 per 10 s per IP). The integration tests use
 // other ranges (tests/integration).
 let clientCount = 0

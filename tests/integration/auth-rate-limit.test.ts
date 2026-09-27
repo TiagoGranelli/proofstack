@@ -3,11 +3,10 @@
 // Production only.
 import { Pool } from 'pg'
 import { afterAll, describe, expect, it } from 'vitest'
-import { appUrl, clientIps, postSignIn, users } from './helpers.ts'
+import { appUrl, databaseUrl, clientIps, postSignIn, users } from './helpers.ts'
 
 const nextIp = clientIps('100.64.2')
-const production = process.env.NODE_ENV === 'production'
-const pool = new Pool({ connectionString: process.env.DATABASE_URL })
+const pool = new Pool({ connectionString: databaseUrl })
 afterAll(() => pool.end())
 
 const counters = async (ip: string) =>
@@ -18,7 +17,7 @@ const counters = async (ip: string) =>
     )
   ).rows
 
-describe.runIf(production)('auth rate limit', () => {
+describe('auth rate limit', () => {
   it('admits exactly the limit when attempts race (atomic increments in Postgres)', async () => {
     const ip = nextIp()
     const attempts = await Promise.all(

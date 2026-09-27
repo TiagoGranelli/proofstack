@@ -1,4 +1,4 @@
-// Throwaway *_test databases for verify:app, lighthouse and check:drift. Refuses to touch any other name.
+// Throwaway *_test databases for the test runners, lighthouse and check:drift. Refuses to touch any other name.
 // Each run gets its own database (`app_<purpose>_<pid>_test`) because a reset drops the database
 // WITH (FORCE): two runs sharing one name would kill each other's connections.
 import { existsSync } from 'node:fs'
@@ -70,7 +70,7 @@ export const dropTestDatabase = (testUrl: string) =>
   administer(testUrl, (name) => [`drop database if exists "${name}" with (force)`])
 
 /** A per-run database name (`testDatabaseUrl`) and the pid of the run that made it. */
-const RUN_DATABASE = /^app_[a-z]+_(\d+)_test$/
+const RUN_DATABASE = /^app_[a-z0-9]+_(\d+)_test$/
 
 /** Whether process `pid` still runs here: signal 0 only checks, and EPERM means it runs as another user. */
 const isRunning = (pid: number) => {
