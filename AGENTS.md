@@ -121,7 +121,7 @@ Postgres and Mailpit (`pnpm mail:up`, the local inbox for account emails), and a
 | `pnpm check:drift [contract\|migrations\|auth\|database]` | Checks that generated files match their sources and that the auth schema holds what Better Auth writes; `database` needs Postgres |
 | `pnpm build && pnpm verify:app [--no-e2e] [--no-integration] [--edge] [filter ...]` | Starts two built servers (open and closed sign-up) against a fresh per-run `proofstack_<purpose>_<pid>_test` database (dropped afterwards) and runs Vitest (`tests/integration`) and Playwright (`tests/e2e`, projects from `PW_PROJECTS`); app logs go to `test-results/app-server*.log`. A filter that matches no test is an error; a runner that no filter matches is skipped. Needs Mailpit (`pnpm mail:up`). `--edge` puts the Caddy edge in front of the open one. Refuses a stale `.output` |
 | `pnpm build && pnpm lighthouse [--runs=3] [--page=<name>] [--form-factor=mobile\|desktop] [--direct]` | Lighthouse gate on the built app behind the Caddy edge (needs Docker); see the policy below |
-| `pnpm deps:check` | Report only, always exit 0: `pnpm outdated` (the release quarantine applies) and, for the RC-channel packages `effect` and `@effect/vitest`, the pinned version against npm's `rc` dist-tag. Needs the npm registry |
+| `pnpm deps:check` | Report only, always exit 0: `pnpm outdated` (the release quarantine applies) and, for packages pinned from another dist-tag (`effect` and `@effect/vitest` on `rc`, `@hey-api/openapi-ts` on `next`), the pinned version against that tag. Needs the npm registry |
 | `pnpm ci:local [job ...]` | The CI jobs (`workflows static drift build verify lighthouse docker`, default all) as `pnpm ci:<job>` scripts in the Playwright Ubuntu container next to Postgres and Mailpit, all five browser projects included. Needs Docker. See [docs/operations.md](docs/operations.md#ci-and-local-ci) |
 
 `pnpm test` (Vitest project `integration`) and `pnpm test:e2e` expect an app that is already running at
@@ -248,7 +248,8 @@ Regenerate these files; never edit them by hand:
   (`minimumReleaseAge`). Each exception names an exact version in `pnpm-workspace.yaml`.
 - Pre-release packages, pinned exactly: `effect` and `@effect/vitest` (4.0.0 RCs from the `rc` dist-tag;
   npm `latest` is v3), `nitro` (its npm `latest` is a `-beta` build), `@tanstack/react-start` (npm `latest`
-  is a 1.x release, but Start's docs still call it a Release Candidate) and `oxfmt` (0.x, announced as beta).
+  is a 1.x release, but Start's docs still call it a Release Candidate), `oxfmt` (0.x, announced as beta) and
+  `@hey-api/openapi-ts` (a `next` snapshot, see "TypeScript" below).
   Upgrade each in its own PR, with `check`, `check:drift`, and `verify:app` passing. `pnpm deps:check`
   reports what is newer.
 - Skills are pinned to a commit (`skills-lock.json`). Docs shipped inside packages are pinned by the
