@@ -12,9 +12,10 @@ changes to the contract, database, auth, or UI flows.
 | `src/contract/` | Effect `HttpApi` contract: schemas, endpoints, tagged errors, middleware tags | `effect` and other `src/contract` modules only |
 | `src/server/` | Server-only: Effect handlers (`api/`), Better Auth (`auth.ts`), Drizzle (`db/`), repositories, `env.ts`, shutdown `lifecycle.ts` | contract, sdk |
 | `src/sdk/` | Hey API client and TanStack Query options (generated) | nothing |
-| `src/lib/` | Isomorphic helpers. `*.functions.ts` are server functions (`createServerFn`); `api-client.ts` is the isomorphic SDK client | contract, sdk. The server adapters (`*.functions.ts`, `api-client.ts`) also import server and lib |
-| `src/features/`, `src/components/` | UI. `components/ui/` holds shadcn primitives (Radix, style `radix-nova`) | contract, sdk, lib, server adapters |
-| `src/routes/` | File routes. `api/$.ts` hands requests to the Effect API; `api/auth/$.ts` hands them to Better Auth | Page routes: ui, lib, server adapters, contract, sdk. `api/**` is a server adapter: server, contract, sdk, lib |
+| `src/lib/` | Shared plumbing: `api-client.ts` (isomorphic SDK client), `api-error.ts`, `auth-client.ts`, `utils.ts`. `*.functions.ts` are server functions (`createServerFn`) | contract, sdk. The server adapters (`*.functions.ts`, `api-client.ts`) also import server and lib |
+| `src/components/` | Shared UI that knows no feature: `ui/` (shadcn primitives, Radix, style `radix-nova`), `errors/` (router error and not-found states, `ApiErrorAlert`), `layouts/` (site header, pending state) | lib, contract, sdk |
+| `src/features/<name>/` | One feature each (`posts`, `auth`): `api/` (query options and mutation hooks), `components/`, `utils/` | components, lib, server adapters, contract, sdk. Never another feature |
+| `src/routes/`, `router.tsx`, `start.ts`, `styles/` | The app layer. Page routes define the route (loader, guards, head) and compose features. `api/$.ts` hands requests to the Effect API; `api/auth/$.ts` to Better Auth | Page routes: features, components, lib, server adapters, contract, sdk. `api/**` is a server adapter: server, contract, sdk, lib |
 
 - Every module in `src/server/` starts with `import '@tanstack/react-start/server-only'`. The exceptions
   are `nitro/` plugins and `db/schema/`, which drizzle-kit and Better Auth's CLI load outside Start.
@@ -29,6 +30,32 @@ changes to the contract, database, auth, or UI flows.
 - Boundaries are enforced by Fallow zones in `.fallowrc.json` and by `no-restricted-imports` in
   `.oxlintrc.json`. A new top-level `src/` directory needs a zone before it can be used.
 - Imports use the `#/` alias (`package.json#imports`) with explicit `.ts` or `.tsx` extensions.
+
+### Frontend structure
+
+The UI follows [Bulletproof React](https://github.com/alan2207/bulletproof-react), with TanStack Start's
+`src/routes/` as the app layer.
+
+- Imports flow one way: `components` → `features` → app (`routes/`). A feature never imports another
+  feature, not even `import type` (Fallow `autoDiscover` makes each `src/features/<name>` its own zone).
+  When two features need the same code, move it down to `components/` or `lib/`; when a page needs two
+  features, compose them in the route.
+- Where new code goes:
+  - Data access for a feature: `features/<name>/api/<verb>-<noun>.ts`. Queries export
+    `get<Noun>QueryOptions()` bound to `client: apiClient()` over `#/sdk/@tanstack/react-query.gen.ts`.
+    Mutations export a `use<Verb><Noun>({ mutationConfig })` hook that owns cache updates and invalidation
+    and runs the caller's `onSuccess` before invalidating. Components never spread a generated
+    `*Mutation()` themselves. Cache helpers shared by a feature's hooks go in `api/<noun>-cache.ts`.
+  - Feature UI: `features/<name>/components/`; pure helpers: `features/<name>/utils/`.
+  - UI shared by several features and free of feature knowledge: `components/` (`ui/`, `errors/`,
+    `layouts/`). shadcn primitives go in `components/ui/` through `pnpm exec shadcn add`.
+  - Route files hold the route definition (loader, `beforeLoad`, `head`, `headers`, `validateSearch`) and a
+    small page component that composes features. Forms, buttons with behavior and lists live in features.
+- Naming: files and folders are kebab-case (Oxlint `unicorn/filename-case`; folders by the `guards` gate
+  in `scripts/check.ts`). TanStack route names keep their prefixes (`__root.tsx`, `_authed.tsx`, `$.ts`,
+  `-private/`, `(group)/`). `src/sdk/` is generated and exempt.
+- No barrel files (`index.ts` re-exporting a folder): import the file that defines the symbol (Oxlint
+  `oxc/no-barrel-file`). The only exception is `src/server/db/schema/index.ts`, Drizzle's schema entry.
 
 ## Workflows
 
@@ -49,7 +76,7 @@ changes to the contract, database, auth, or UI flows.
 4. `pnpm codegen`.
 5. Map every new error tag to a message in `src/lib/api-error.ts`. Its error union is derived from the
    generated SDK, so `pnpm typecheck` fails until the switch in `describeApiError` handles the new tag.
-6. UI in `src/features/` and routes in `src/routes/`.
+6. UI in `src/features/<name>/` (see [Frontend structure](#frontend-structure)) and routes in `src/routes/`.
 7. Integration tests in `tests/integration/` and E2E tests in `tests/e2e/` (see [Tests](#tests)).
 
 **Auth config change** (plugins, user fields). Run `pnpm auth:generate` to rewrite
@@ -66,7 +93,7 @@ Postgres, and applies migrations.
 
 | Command | Covers |
 | --- | --- |
-| `pnpm check` | `format:check`, `lint` (warnings are counted in the summary but do not fail), `typecheck`, `deadcode`, `unit` (Vitest project `unit`, `tests/unit`), the database-free drift checks (contract, migrations, auth) and repo guards. No database, no build, about 4 s. Run it before every hand-off. |
+| `pnpm check` | `format:check`, `lint` (warnings are counted in the summary but do not fail), `typecheck`, `deadcode`, `unit` (Vitest project `unit`, `tests/unit`), the database-free drift checks (contract, migrations, auth) and repo guards (including kebab-case folder names). No database, no build, about 4 s. Run it before every hand-off. |
 | `pnpm test:unit [filter ...]` | Unit tests only: pure functions, no app |
 | `pnpm format`, `pnpm lint:fix` | Autofixes |
 | `pnpm check:drift [contract\|migrations\|auth\|database]` | Checks that generated files match their sources; `database` needs Postgres |
