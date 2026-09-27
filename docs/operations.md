@@ -86,7 +86,45 @@ Deploy sequence:
 Migrations must stay backward compatible with the version still running during the rollout: add
 columns and tables first, and remove them in a later deploy. Drizzle runs them inside a transaction, so
 `CREATE INDEX` is not `CONCURRENTLY` and blocks writes to that table while the index builds; on a large
-table, create the index by hand with `CREATE INDEX CONCURRENTLY` before the deploy.
+table, create the index by hand with `CREATE INDEX CONCURRENTLY` before the deploy (see below).
+
+### Migration safety
+
+`pnpm check:migrations` (a gate of `pnpm check`, so of CI's `static` job) runs
+[squawk](https://squawkhq.com/docs/rules) 2.66.0 over `drizzle/*.sql` and fails on any finding: a
+non-concurrent index, a column type change that rewrites the table, a `NOT NULL` or constraint that scans
+it under an exclusive lock, and so on. The configuration is `.squawk.toml`: Postgres 18, every file assumed
+to run in a transaction (`scripts/migrate.ts`), and three rules off because `scripts/migrate.ts` already
+covers them (`prefer-robust-stmts`, `require-lock-timeout`, `require-statement-timeout`; the file says
+why). Migrations 0000 to 0004 were applied before the lint existed and are grandfathered in its
+`excluded_paths`; every later one is linted. squawk is the release binary for the platform, pinned by
+sha256 in `scripts/check-migrations.ts` and cached in `~/.cache/proofstack/` (the first run downloads it,
+later runs are offline). Each run first checks that squawk still flags a plain `CREATE INDEX`.
+
+When a finding is expected, waive that one statement with `-- squawk-ignore <rule>` directly under a
+comment that gives the reason; a waiver without one fails the check.
+
+An index on a large table (the usual case) is built by hand before the deploy, outside any transaction,
+and the migration only records it:
+
+1. In the migration (after `pnpm db:generate`, before it is applied anywhere), make the index statement
+   idempotent and waive it:
+   ```sql
+   -- Built by hand with CREATE INDEX CONCURRENTLY before the deploy (docs/operations.md, "Migration safety").
+   -- squawk-ignore require-concurrent-index-creation
+   CREATE INDEX IF NOT EXISTS "post_body_idx" ON "post" USING btree ("body");
+   ```
+   Development, CI and small databases build it in the migration as usual.
+2. Before the deploy, on production, run the same statement with `CONCURRENTLY` from `psql`:
+   `CREATE INDEX CONCURRENTLY IF NOT EXISTS "post_body_idx" ON "post" USING btree ("body");`. It waits for
+   running transactions and does not block writes.
+3. Check that it is valid: `select indisvalid from pg_index where indexrelid = 'post_body_idx'::regclass;`.
+   A failed concurrent build leaves an invalid index behind that `IF NOT EXISTS` would keep: drop it with
+   `DROP INDEX CONCURRENTLY "post_body_idx";` and repeat step 2.
+4. Deploy. The migration finds the index and does nothing.
+
+Dropping an index works the same way with `DROP INDEX CONCURRENTLY IF EXISTS` and
+`require-concurrent-index-deletion`.
 
 Create the first account with `pnpm user:create <email> <name>` from a checkout of the repository with
 its dependencies installed. The script loads the server's auth configuration, so `src/server/env.ts`
@@ -431,18 +469,20 @@ browsers, Postgres and (for `verify`) Mailpit, and moves artifacts. The logic li
 | Script | Job |
 | --- | --- |
 | `pnpm ci:workflows` | actionlint 1.7.12 and zizmor 1.30.1 (images pinned by digest, offline, read-only), and a check that `compose.yaml`, `ci.yml` and the `Dockerfile` pin the same images as `scripts/images.ts`. Needs Docker. |
-| `pnpm ci:static` | `pnpm check` without its drift gate |
+| `pnpm ci:secrets` | gitleaks 8.30.1 (image pinned by digest, offline, read-only) over every commit reachable from HEAD, with `.gitleaks.toml`. Needs Docker and a full clone (`fetch-depth: 0`). |
+| `pnpm ci:static` | `pnpm check` without its drift gate (so with the migration lint and the license gate) |
+| `pnpm ci:supply-chain` | `pnpm audit signatures` (registry signatures of every installed package) and `pnpm audit:check`. The frozen install before it already verified the lockfile against `minimumReleaseAge` and `trustPolicy`. Needs the npm registry. |
 | `pnpm ci:drift` | `pnpm check:drift`, all four checks (`DATABASE_URL`) |
 | `pnpm ci:build` | `pnpm build` with placeholder configuration (the same as the Dockerfile's) |
 | `pnpm ci:verify` | `verify:app` on all five Playwright projects (needs Mailpit: the `mailpit` service) |
 | `pnpm ci:lighthouse` | `pnpm lighthouse --runs=5`, through the edge. Exit 2 means inconclusive (see AGENTS.md) |
-| `pnpm ci:docker` | `scripts/docker-smoke.ts`: builds the image, migrates twice, serves it behind Caddy on a private network, checks pages through the edge, stops it gracefully. Brings its own Postgres. Needs Docker. |
+| `pnpm ci:docker` | `scripts/docker-smoke.ts`: builds the image, scans it with grype (see below), migrates twice, serves it behind Caddy on a private network, checks pages through the edge, stops it gracefully. Brings its own Postgres. Needs Docker. |
 
 `pnpm ci:local [job ...]` is the faithful local equivalent (default: every job, in CI order). It runs the
-container jobs (`static`, `drift`, `build`, `verify`, `lighthouse`) in the official Playwright image
+container jobs (`static`, `supply-chain`, `drift`, `build`, `verify`, `lighthouse`) in the official Playwright image
 for `@playwright/test` 1.63.0 (Ubuntu 24.04, all browsers including WebKit), with Node from
 `.node-version`, pnpm from `packageManager` and the pinned Caddy binary added, next to Postgres 18.6 and
-Mailpit (`MAILPIT_HOST=mailpit` for `verify:app`) on a private Docker network. The host jobs (`workflows`, `docker`) drive Docker and run on the host.
+Mailpit (`MAILPIT_HOST=mailpit` for `verify:app`) on a private Docker network. The host jobs (`workflows`, `secrets`, `docker`) drive Docker and run on the host.
 
 - The repository is mounted read-only. The container copies what a CI checkout would contain (tracked
   files and untracked files that are not ignored, as they are on disk) and installs its own
@@ -462,3 +502,33 @@ Mailpit (`MAILPIT_HOST=mailpit` for `verify:app`) on a private Docker network. T
 
 `act` still works as a smoke test of the YAML for the jobs without artifacts, but not as a CI
 replacement: `actions/upload-artifact` v7 fails under act (nektos/act#6022).
+The grype database volume (`<prefix>-grype-db`, about 200 MB) also stays between `ci:docker` runs.
+
+## Supply chain
+
+What guards the dependencies, the image and the repository, and where each gate runs:
+
+| Gate | Runs in | Fails on |
+| --- | --- | --- |
+| pnpm policies (`pnpm-workspace.yaml`) | every `pnpm install --frozen-lockfile` (CI setup, Dockerfile) | a lockfile entry younger than `minimumReleaseAge` (one day, strict) or published with weaker provenance than an earlier version (`trustPolicy: no-downgrade`, for versions under 30 days old); an unmet peer (`strictPeerDependencies`); a dependency build script not listed in `allowBuilds` |
+| `pnpm audit signatures` | CI `supply-chain` | a package whose registry signature does not verify |
+| `pnpm audit:check` | CI `supply-chain` | a high or critical advisory in any package, production or development, not in `security/audit-allowlist.json`; an expired or stale allowlist entry |
+| `pnpm licenses:check` | `pnpm check` | a production dependency whose license is not allowed (`scripts/licenses.ts`) |
+| `pnpm check:migrations` | `pnpm check` | a migration statement that locks or rewrites a busy table ([Migration safety](#migration-safety)) |
+| `pnpm ci:secrets` | CI `secrets`; the pre-commit hook when a `gitleaks` binary is installed | a secret anywhere in the history (`.gitleaks.toml`) |
+| grype in `pnpm ci:docker` | CI `docker` | a high or critical vulnerability with a released fix in the production image, not in `security/image-allowlist.json` |
+
+- **Allowlists.** Both files in `security/` take `{ <id>, package, reason, expires }`; the expiry is at most
+  180 days ahead. A finding goes there only when it cannot apply here (the reason says why); the usual fix is
+  an upgrade, an exact `overrides` entry in `pnpm-workspace.yaml` naming the advisory, or a newer base image.
+- **Dependabot** proposes npm and GitHub Actions updates after a 7-day cooldown. It does not raise security
+  alerts for this project: GitHub's dependency graph reads pnpm 12 lockfiles as empty
+  (dependabot/dependabot-core#15904), so `pnpm audit:check` is the vulnerability gate. It does not update
+  container images either (the docker ecosystems would change only some of the copies of a pin, see
+  `.github/dependabot.yml`): `pnpm images:check` reports newer tags and rebuilt digests, and after editing
+  `scripts/images.ts`, `pnpm images:sync` rewrites the copies. A grype failure in `ci:docker` is usually fixed
+  by a rebuilt base image digest.
+- **Runtime image.** Only `node`, `.output/` and `drizzle/`: the runtime stage deletes npm and npx, and the
+  process runs as the unprivileged `node` user.
+- **SBOM.** `pnpm sbom:release` writes CycloneDX documents for the production npm dependencies and for the
+  whole image (syft) into `sbom/`, to attach to a release.

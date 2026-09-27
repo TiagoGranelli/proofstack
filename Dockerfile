@@ -4,7 +4,7 @@
 # See docs/operations.md for environment variables, migrations and the deploy sequence.
 
 # Pinned by digest; the same reference as `node` in scripts/images.ts (`pnpm ci:workflows` checks the copy).
-ARG NODE_IMAGE=node:26.8.1-slim@sha256:c0753125a3789977aefe869cbebccf70e3cfd7ea84ca48547458f02e4f1d7146
+ARG NODE_IMAGE=node:26.10.0-slim@sha256:ec7758ee051e457b468b32bde57b0879010b325bb9862718e9615225ce4aaae1
 
 FROM ${NODE_IMAGE} AS build
 WORKDIR /app
@@ -32,6 +32,11 @@ RUN DATABASE_URL=postgres://build:build@127.0.0.1:1/build \
 FROM ${NODE_IMAGE} AS runtime
 ENV NODE_ENV=production \
     PORT=3000
+# The server needs only node. npm (and corepack or yarn, which newer base images no longer ship) would add a
+# package manager and its dependency tree to the attack surface and to every vulnerability scan.
+RUN rm -rf /usr/local/lib/node_modules /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
+      /usr/local/bin/yarn /usr/local/bin/yarnpkg /opt/yarn-* \
+ && node --version
 WORKDIR /app
 # Application files stay owned by root: the server process cannot modify its own code.
 COPY --from=build /app/.output ./.output

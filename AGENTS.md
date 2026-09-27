@@ -75,7 +75,9 @@ The UI follows [Bulletproof React](https://github.com/alan2207/bulletproof-react
 **Database change.** Edit `src/server/db/schema/*.ts`. Run `pnpm db:generate --name <slug>`, review the new
 SQL in `drizzle/` (a type change that must convert data gets its `USING` clause there, as in
 `0004_auth_timestamptz.sql`), apply it with `pnpm db:migrate` (after `pnpm db:up`), and run
-`pnpm check:drift migrations`.
+`pnpm check:drift migrations` and `pnpm check:migrations` (squawk: no statement that blocks a busy table; an
+index on a large table is built by hand `CONCURRENTLY`, see
+[docs/operations.md](docs/operations.md#migration-safety)).
 
 **Feature checklist.** A new feature usually touches every layer, in this order:
 
@@ -117,14 +119,17 @@ Postgres and Mailpit (`pnpm mail:up`, the local inbox for account emails), and a
 
 | Command | Covers |
 | --- | --- |
-| `pnpm check` | `format:check`, `lint` (type-aware Oxlint with the `pedantic` category and TanStack Query/Router rules; zero warnings: `--deny-warnings`, every rule is error or off), `typecheck`, `effect` (Effect language-service diagnostics, `effect-tsgo`), `deadcode` (Fallow with `--fail-on-issues`: unused files, exports, types and dependencies, zones), `complexity` (Fallow: cognitive 15, cyclomatic 20 per function), `dupes` (any clone group outside generated code and tests), `security` (new security-sink candidates in `src/` since `HEAD`), `tests` (`pnpm test:fast`: Vitest projects `unit`, `api` and `component` with the coverage gate, see [Tests](#tests)), the database-free drift checks (contract, migrations, auth) and `guards` (see [Gates](#gates-and-escape-hatches)). No database, no build, about 12 s. Needs Playwright's Chromium. Run it before every hand-off; the pre-commit hook runs it on what you commit. |
+| `pnpm check` | `format:check`, `lint` (type-aware Oxlint with the `pedantic` category and TanStack Query/Router rules; zero warnings: `--deny-warnings`, every rule is error or off), `typecheck`, `effect` (Effect language-service diagnostics, `effect-tsgo`), `deadcode` (Fallow with `--fail-on-issues`: unused files, exports, types and dependencies, zones), `complexity` (Fallow: cognitive 15, cyclomatic 20 per function), `dupes` (any clone group outside generated code and tests), `security` (new security-sink candidates in `src/` since `HEAD`), `tests` (`pnpm test:fast`: Vitest projects `unit`, `api` and `component` with the coverage gate, see [Tests](#tests)), the database-free drift checks (contract, migrations, auth), `migration-lint` (`pnpm check:migrations`: squawk over the migrations after 0004), `licenses` (`pnpm licenses:check`: every production dependency under an allowed license) and `guards` (see [Gates](#gates-and-escape-hatches)). No database, no build, about 12 s. Needs Playwright's Chromium, and the network once to download the pinned squawk binary into `~/.cache/proofstack`. Run it before every hand-off; the pre-commit hook runs it on what you commit. |
 | `pnpm test:unit\|test:api\|test:component [filter ...]` | One fast layer (see [Tests](#tests)); `pnpm test:fast` runs all three with coverage |
 | `pnpm format`, `pnpm lint:fix` | Autofixes |
 | `pnpm check:drift [contract\|migrations\|auth\|database]` | Checks that generated files match their sources and that the auth schema holds what Better Auth writes; `database` needs Postgres |
 | `pnpm build && pnpm verify:app [--no-e2e] [--no-integration] [--edge] [filter ...]` | Starts two built servers (open and closed sign-up) against a fresh per-run `proofstack_<purpose>_<pid>_test` database (dropped afterwards) and runs Vitest (`tests/integration`) and Playwright (`tests/e2e`, projects from `PW_PROJECTS`); app logs go to `test-results/app-server*.log`. A filter that matches no test is an error; a runner that no filter matches is skipped. Needs Mailpit (`pnpm mail:up`). `--edge` puts the Caddy edge in front of the open one. Refuses a stale `.output` |
 | `pnpm build && pnpm lighthouse [--runs=3] [--page=<name>] [--form-factor=mobile\|desktop] [--direct] [--edge-protocol=h2\|h1\|http]` | Lighthouse gate on the built app behind the Caddy edge over HTTPS and HTTP/2, as in production (needs Docker); see the policy below and [ADR 0011](docs/decisions/0011-lighthouse-over-https-http2.md) |
 | `pnpm deps:check` | Report only, always exit 0: `pnpm outdated` (the release quarantine applies) and, for packages pinned from another dist-tag (`effect` and `@effect/vitest` on `rc`, `@hey-api/openapi-ts` on `next`), the pinned version against that tag. Needs the npm registry |
-| `pnpm ci:local [job ...]` | The CI jobs (`workflows static drift build verify lighthouse docker`, default all) as `pnpm ci:<job>` scripts in the Playwright Ubuntu container next to Postgres and Mailpit, all five browser projects included. Needs Docker. See [docs/operations.md](docs/operations.md#ci-and-local-ci) |
+| `pnpm audit:check` | Vulnerability gate over production and development packages (`pnpm audit`): fails on a high or critical advisory unless `security/audit-allowlist.json` accepts it (reason, expiry), and on an expired or stale entry. Needs the npm registry; CI job `supply-chain` |
+| `pnpm images:check`, `pnpm images:sync` | Report only: newer tags and rebuilt digests for every image in `scripts/images.ts` (needs the registries). `images:sync` copies the pins from `scripts/images.ts` into compose.yaml, ci.yml and the Dockerfile |
+| `pnpm sbom:release [--image=<ref>] [--no-image]` | CycloneDX SBOMs in `sbom/` for a release: production npm dependencies, and the production image with syft (Docker). Not a gate |
+| `pnpm ci:local [job ...]` | The CI jobs (`workflows secrets static supply-chain drift build verify lighthouse docker`, default all) as `pnpm ci:<job>` scripts in the Playwright Ubuntu container next to Postgres and Mailpit, all five browser projects included. Needs Docker. See [docs/operations.md](docs/operations.md#ci-and-local-ci) |
 
 `pnpm test` (Vitest project `integration`) and `pnpm test:e2e` expect an app that is already running at
 `APP_URL`; both also need `CLOSED_APP_URL` and `MAILPIT_URL`, the integration tests `TEST_USER_*`, and E2E
@@ -155,6 +160,10 @@ exception is always a visible edit next to its reason, and `.github/CODEOWNERS` 
   without a session), `server-routes` (`SERVER_ROUTES`: the only Start server routes). `exact-versions`,
   `server-fn-validator` (Effect Schema only), `applied-migrations` (migrations in the journal at `HEAD` never
   change; on CI, at `HEAD^`) and `bare-disable` have no exception.
+- **migration-lint:** make the migration safe, or waive one statement with `-- squawk-ignore <rule>` under a
+  comment line giving the reason ([docs/operations.md](docs/operations.md#migration-safety)). **licenses:** an
+  acceptable license goes in `ALLOWED` in `scripts/licenses.ts`, one exact version in `EXCEPTIONS`, each with the
+  reason. **audit:check** and the image scan: `security/*-allowlist.json` entries need a reason and an expiry.
 
 **Lighthouse policy** (`POLICY` in `scripts/lighthouse.ts`): per page and form factor, accessibility, best
 practices and SEO must score 100 on every run; performance needs a median of at least 99, at most one run
@@ -278,7 +287,14 @@ Regenerate these files; never edit them by hand:
 
 - `package.json` uses exact versions (`savePrefix: ''`; the `exact-versions` guard checks), and `pnpm-lock.yaml` is
   committed with them. pnpm 12 blocks dependency build scripts (`allowBuilds`) and quarantines fresh releases
-  (`minimumReleaseAge`). Each exception names an exact version in `pnpm-workspace.yaml`.
+  (`minimumReleaseAge`, one day, strict: a younger version fails the install instead of being excluded
+  silently). Each exception names an exact version and its reason in `pnpm-workspace.yaml`.
+  `trustPolicy: no-downgrade` fails a version published with weaker provenance than an earlier one, and
+  `strictPeerDependencies` an unmet peer. Every frozen install checks the lockfile against these policies.
+- A vulnerable transitive package gets an exact `overrides` entry in `pnpm-workspace.yaml` naming the advisory
+  (and an `ignoreDependencyOverrides` entry in `.fallowrc.json`, since the overridden version is no longer in
+  the lockfile). What cannot be fixed goes in `security/audit-allowlist.json` with a reason and an expiry.
+  Dependabot security alerts do not work with pnpm 12 lockfiles; `pnpm audit:check` is the gate.
 - Pre-release packages, pinned exactly: `effect` and `@effect/vitest` (4.0.0 RCs from the `rc` dist-tag;
   npm `latest` is v3), `nitro` (its npm `latest` is a `-beta` build), `@tanstack/react-start` (npm `latest`
   is a 1.x release, but Start's docs still call it a Release Candidate), `oxfmt` (0.x, announced as beta) and

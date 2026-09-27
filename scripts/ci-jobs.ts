@@ -4,13 +4,16 @@
 //   workflows   actionlint + zizmor on .github, and image pins (compose.yaml, ci.yml, Dockerfile) consistent
 //               with scripts/images.ts (Docker)
 //   static      pnpm check without its drift gate (the drift job runs every drift check)
+//   supply-chain registry signatures of every installed package, and the vulnerability gate (scripts/audit.ts)
+//   secrets     gitleaks over every commit of HEAD's history (.gitleaks.toml; Docker, a full clone)
 //   drift       every drift check, including the database one (DATABASE_URL)
 //   build       the production build, with placeholder configuration
 //   verify      verify:app on all five Playwright projects (DATABASE_URL, the build)
 //   lighthouse  the Lighthouse gate through the edge, 5 runs (DATABASE_URL, the build, Docker or caddy)
 //   docker      the Docker image end to end (scripts/docker-smoke.ts; Docker)
 import { spawnSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { relative, resolve } from 'node:path'
+import { pinProblems } from './image-pins.ts'
 import { IMAGES } from './images.ts'
 
 const run = (command: string, args: string[], env: NodeJS.ProcessEnv = {}) => {
@@ -20,6 +23,17 @@ const run = (command: string, args: string[], env: NodeJS.ProcessEnv = {}) => {
 
 // GitHub Actions tests the build job's artifact: its file times say nothing about the checkout's.
 const downloadedBuild = process.env.GITHUB_ACTIONS === 'true' ? { ALLOW_STALE_BUILD: '1' } : {}
+
+/** Runs every step even after a failure, so one run shows every problem. */
+const sequence = (steps: [string, () => number][]) => {
+  const failed = steps.filter(([name, step]) => {
+    console.log(`\n▶ ${name}`)
+    const status = step()
+    console.log(status === 0 ? `ok    ${name}` : `FAIL  ${name}`)
+    return status !== 0
+  })
+  return failed.length ? 1 : 0
+}
 
 /** actionlint (with shellcheck) and zizmor from their pinned images, offline and read-only. */
 const workflows = () => {
@@ -43,38 +57,56 @@ const workflows = () => {
     ],
     ['image pins', imagePins],
   ]
-  const failed = steps.filter(([name, step]) => {
-    console.log(`\n▶ ${name}`)
-    const status = step()
-    console.log(status === 0 ? `ok    ${name}` : `FAIL  ${name}`)
-    return status !== 0
-  })
-  return failed.length ? 1 : 0
+  return sequence(steps)
 }
 
-/** Every reference to an image from scripts/images.ts in these files must be the same pinned reference. */
-const PINNED_COPIES = ['compose.yaml', '.github/workflows/ci.yml', 'Dockerfile']
-const imagePins = () => {
-  const problems: string[] = []
-  for (const file of PINNED_COPIES) {
-    const text = readFileSync(file, 'utf8')
-    for (const ref of Object.values(IMAGES)) {
-      const name = ref.slice(0, ref.lastIndexOf(':', ref.indexOf('@')))
-      const pattern = new RegExp(
-        `(?<![\\w./-])${name.replaceAll(/[.*+?^${}()|[\]\\/]/g, '\\$&')}:[\\w.-]+(@sha256:[0-9a-f]{64})?`,
-        'g',
-      )
-      for (const match of text.matchAll(pattern))
-        if (match[0] !== ref) problems.push(`${file}: ${match[0]} (scripts/images.ts has ${ref})`)
-    }
+/**
+ * gitleaks from its pinned image, offline and read-only, over every commit reachable from HEAD: a secret that
+ * was committed and removed later is still in the history. Default rules plus the project's (.gitleaks.toml).
+ * Findings are printed with the secret redacted.
+ */
+const git = (...gitArgs: string[]) => spawnSync('git', gitArgs, { encoding: 'utf8' }).stdout.trim()
+const secrets = (args: string[]) => {
+  if (git('rev-parse', '--is-shallow-repository') !== 'false') {
+    console.error('secrets: needs the full history (a clone that is not shallow; actions/checkout `fetch-depth: 0`)')
+    return 1
   }
+  const top = git('rev-parse', '--show-toplevel')
+  // In a linked worktree, .git points into the main repository's git directory: mount both at their own paths.
+  const common = resolve(git('rev-parse', '--git-common-dir'))
+  const dirs = relative(top, common).startsWith('..') ? [top, common] : [top]
+  const user = process.getuid ? ['--user', `${process.getuid()}:${process.getgid?.() ?? 0}`] : []
+  // git refuses a repository whose owner differs from the process's ("dubious ownership"), as it can in a
+  // container; the mount is read-only anyway.
+  const safeDirectory = ['GIT_CONFIG_COUNT=1', 'GIT_CONFIG_KEY_0=safe.directory', 'GIT_CONFIG_VALUE_0=*']
+  return run(
+    'docker',
+    ['run', '--rm', '--network', 'none', '--memory', '512m', ...user]
+      .concat(safeDirectory.flatMap((setting) => ['--env', setting]))
+      .concat(dirs.flatMap((dir) => ['--volume', `${dir}:${dir}:ro`]))
+      .concat(['--workdir', top, IMAGES.gitleaks, 'git', '--config', '.gitleaks.toml', '--log-opts=HEAD'])
+      .concat(['--redact', '--verbose', '--no-banner', ...args, '.']),
+  )
+}
+
+/** Every reference to an image from scripts/images.ts in compose.yaml, ci.yml and the Dockerfile is the same pin. */
+const imagePins = () => {
+  const problems = pinProblems()
   for (const problem of problems) console.error(problem)
+  if (problems.length) console.error('Run `pnpm images:sync` to copy the pins from scripts/images.ts.')
   return problems.length ? 1 : 0
 }
 
 const JOBS: Record<string, (args: string[]) => number> = {
   workflows,
   static: (args) => run('node', ['scripts/check.ts', '--skip=drift', ...args]),
+  // The install before it already verified the lockfile against minimumReleaseAge and trustPolicy.
+  'supply-chain': () =>
+    sequence([
+      ['registry signatures', () => run('pnpm', ['audit', 'signatures'])],
+      ['vulnerabilities', () => run('node', ['scripts/audit.ts'])],
+    ]),
+  secrets,
   drift: (args) => run('node', ['scripts/check-drift.ts', ...args]),
   // Nitro prerenders /about during the build, which loads the server configuration. The placeholders only
   // satisfy its validation (the same ones as the Dockerfile); nothing connects, nothing lands in .output.

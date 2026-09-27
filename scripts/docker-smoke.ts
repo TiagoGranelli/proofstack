@@ -1,12 +1,16 @@
-// The production path end to end, with Docker only: builds the image (prerender included), runs the bundled
-// migrator twice against a real Postgres (the second run must apply nothing), serves the app behind the
-// reference edge (deploy/Caddyfile) on a private network, checks it through the edge, and stops it
-// gracefully. Everything it starts is removed afterwards. CI's `docker` job and `pnpm ci:docker`.
+// The production path end to end, with Docker only: builds the image (prerender included), scans it with grype
+// (a fixable high or critical vulnerability fails, see scanImage), runs the bundled migrator twice against a
+// real Postgres (the second run must apply nothing), serves the app behind the reference edge
+// (deploy/Caddyfile) on a private network, checks it through the edge, and stops it gracefully. Everything it
+// starts is removed afterwards, except grype's database volume. CI's `docker` job and `pnpm ci:docker`.
 // Usage: node scripts/docker-smoke.ts   (env: PROOFSTACK_DOCKER_PREFIX, KEEP_SMOKE_IMAGE=1)
 import { spawnSync } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:net'
-import { resolve } from 'node:path'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
+import { readAllowlist } from './allowlist.ts'
 import { dockerPrefix, IMAGES, waitForPostgres } from './images.ts'
 
 const prefix = `${dockerPrefix()}-smoke-${process.pid}`
@@ -48,6 +52,73 @@ const freePort = () =>
     })
   })
 
+const IMAGE_ALLOWLIST = 'security/image-allowlist.json'
+/** grype's vulnerability database, kept between runs (about 200 MB; `docker volume rm` to reclaim). */
+const GRYPE_DB = `${dockerPrefix()}-grype-db`
+const BLOCKING = new Set(['High', 'Critical'])
+type GrypeMatch = {
+  vulnerability: { id: string; severity: string; fix?: { state?: string; versions?: string[] } }
+  artifact: { name: string; version: string; type: string }
+}
+
+/**
+ * grype over the built image (its final filesystem, from `docker save`): a high or critical vulnerability
+ * with a released fix fails, unless security/image-allowlist.json accepts it. Unfixed ones are counted, not
+ * failed: nothing can be done about them but wait. Returns the problems.
+ */
+const scanImage = () => {
+  const { entries, problems } = readAllowlist(
+    IMAGE_ALLOWLIST,
+    'vulnerabilities',
+    'vulnerability',
+    /^(CVE-\d{4}-\d{4,}|GHSA(-[23456789cfghjmpqrvwx]{4}){3})$/,
+  )
+  const dir = mkdtempSync(join(tmpdir(), 'proofstack-grype-'))
+  try {
+    docker(['save', '--output', join(dir, 'image.tar'), IMAGE], { quiet: true })
+    const ignore = entries.map((entry) => ({
+      vulnerability: entry.id,
+      package: { name: entry.name },
+      reason: IMAGE_ALLOWLIST,
+    }))
+    // JSON is YAML: grype reads it as its configuration file.
+    writeFileSync(join(dir, 'grype.yaml'), JSON.stringify({ ignore }))
+    const scan = spawnSync(
+      'docker',
+      ['run', '--rm', '--memory', '2g', '--volume', `${dir}:/scan`, '--volume', `${GRYPE_DB}:/grype-db`]
+        .concat(['--env', 'GRYPE_DB_CACHE_DIR=/grype-db', IMAGES.grype, 'docker-archive:/scan/image.tar'])
+        .concat(['--config', '/scan/grype.yaml', '--output', 'json', '--file', '/scan/report.json', '--quiet']),
+      { stdio: 'inherit' },
+    )
+    if (scan.status !== 0) return [...problems, `grype failed (exit ${scan.status ?? scan.signal})`]
+    const report = JSON.parse(readFileSync(join(dir, 'report.json'), 'utf8')) as {
+      matches: GrypeMatch[]
+      ignoredMatches?: GrypeMatch[]
+    }
+    const fixed = report.matches.filter((match) => match.vulnerability.fix?.state === 'fixed')
+    for (const { vulnerability, artifact } of fixed.filter((match) => BLOCKING.has(match.vulnerability.severity)))
+      problems.push(
+        `${vulnerability.severity} ${vulnerability.id} in ${artifact.name}@${artifact.version} (${artifact.type}), ` +
+          `fixed in ${vulnerability.fix?.versions?.join(', ') || '?'}`,
+      )
+    for (const entry of entries)
+      if (!report.ignoredMatches?.some((m) => m.vulnerability.id === entry.id && m.artifact.name === entry.name))
+        problems.push(`${IMAGE_ALLOWLIST}: ${entry.id} in ${entry.name} matches no finding anymore; remove the entry`)
+    const count = (matches: GrypeMatch[]) =>
+      ['Critical', 'High', 'Medium', 'Low', 'Negligible', 'Unknown']
+        .map((severity) => [severity, matches.filter((m) => m.vulnerability.severity === severity).length] as const)
+        .filter(([, n]) => n)
+        .map(([severity, n]) => `${n} ${severity.toLowerCase()}`)
+        .join(', ') || 'none'
+    console.log(`  with a fix: ${count(fixed)}`)
+    console.log(`  without a fix yet (not failed): ${count(report.matches.filter((m) => !fixed.includes(m)))}`)
+    console.log(`  allowlisted: ${report.ignoredMatches?.length ?? 0}`)
+    return problems
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+}
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 const running = (name: string) =>
   docker(['inspect', '--format', '{{.State.Running}}', name], { quiet: true }) === 'true'
@@ -63,12 +134,16 @@ process.once('SIGINT', () => {
 })
 
 let failed = false
+let scanProblems: string[] = []
 try {
   await step(`build ${IMAGE}`, () =>
     spawnSync('docker', ['build', '--tag', IMAGE, '.'], { stdio: 'inherit' }).status === 0
       ? undefined
       : Promise.reject(new Error('docker build failed')),
   )
+
+  // Reported now, failed at the end: the rest of the smoke test still runs.
+  scanProblems = await step('scan the image for vulnerabilities (grype)', scanImage)
 
   await step('start Postgres', async () => {
     docker(['network', 'create', NETWORK], { quiet: true })
@@ -159,6 +234,14 @@ try {
       console.log(`\n--- ${name} logs ---\n${`${logs.stdout}${logs.stderr}`.trim()}`)
   }
   cleanup()
+}
+if (scanProblems.length) {
+  failed = true
+  console.error(`\nFAIL image scan:\n${scanProblems.map((p) => `  - ${p}`).join('\n')}`)
+  console.error(
+    'Move to a base image digest with the fix (`pnpm images:check`, then scripts/images.ts and `pnpm images:sync`), ' +
+      `or add the finding to ${IMAGE_ALLOWLIST} with the reason and an expiry date.`,
+  )
 }
 console.log(failed ? '\ndocker smoke test failed' : '\ndocker smoke test passed')
 process.exitCode = failed ? 1 : 0

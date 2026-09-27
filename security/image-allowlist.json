@@ -1,0 +1,4 @@
+{
+  "$comment": "Image vulnerabilities the grype scan in `pnpm ci:docker` (scripts/docker-smoke.ts) accepts: `{ vulnerability (CVE or GHSA id, as grype reports it), package, reason, expires }`, with why it does not apply here and a date (at most 180 days ahead) after which it must be reviewed again. Only high and critical findings with a released fix fail the scan. An expired entry, or one that no longer matches a finding, fails it too. Usually the fix is a newer base image digest instead (`pnpm images:check`).",
+  "vulnerabilities": []
+}

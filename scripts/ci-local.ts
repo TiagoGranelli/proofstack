@@ -2,7 +2,8 @@
 // official Playwright Ubuntu image (all five browser projects work there, WebKit included), next to a
 // Postgres 18.6 container and Mailpit on a private Docker network, with CPU, memory and /dev/shm limits.
 // Usage: pnpm ci:local [job ...]   (default: every job, in CI order)
-//   Container jobs: static drift build verify lighthouse. Host jobs (they drive Docker): workflows docker.
+//   Container jobs: static supply-chain drift build verify lighthouse. Host jobs (they drive Docker): workflows
+//   secrets docker.
 //   verify and lighthouse need build, which is added when missing (CI's `needs: build`).
 // Env: CI_LOCAL_CPUS (default 4, a GitHub-hosted runner), CI_LOCAL_MEMORY (6g), CI_LOCAL_SHM (2g),
 //      PROOFSTACK_DOCKER_PREFIX (default proofstack-ci) names every container, network, image and volume.
@@ -18,9 +19,19 @@ import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { dockerPrefix, IMAGES, waitForPostgres } from './images.ts'
 
-const ORDER = ['workflows', 'static', 'drift', 'build', 'verify', 'lighthouse', 'docker'] as const
+const ORDER = [
+  'workflows',
+  'secrets',
+  'static',
+  'supply-chain',
+  'drift',
+  'build',
+  'verify',
+  'lighthouse',
+  'docker',
+] as const
 type Job = (typeof ORDER)[number]
-const HOST_JOBS = new Set<Job>(['workflows', 'docker'])
+const HOST_JOBS = new Set<Job>(['workflows', 'secrets', 'docker'])
 
 const requested = process.argv.slice(2)
 const unknown = requested.filter((job) => !ORDER.includes(job as Job))

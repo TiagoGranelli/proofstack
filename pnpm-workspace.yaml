@@ -1,4 +1,5 @@
-# pnpm 12 reads project settings from this file even without workspace packages.
+# pnpm 12 reads project settings from this file even without workspace packages. pnpm fails on a key it does
+# not know (ERR_PNPM_UNRECOGNIZED_WORKSPACE_SETTINGS), so a typo cannot silently drop a policy.
 # Dependency lifecycle scripts are blocked by default; every exception must be listed here.
 allowBuilds:
   # esbuild (via drizzle-kit/tsx) works without its postinstall binary check.
@@ -9,18 +10,48 @@ allowBuilds:
 engineStrict: true
 # `pnpm add` writes exact versions (package.json pins every dependency; the `guards` gate in scripts/check.ts checks).
 savePrefix: ''
-# pnpm's default minimumReleaseAge quarantines fresh releases; exceptions must name exact versions.
-minimumReleaseAgeExclude:
-  - '@tanstack/query-core@5.104.0'
-  - '@tanstack/react-query@5.104.0'
-  - '@types/node@26.6.3'
-  - '@fallow-cli/darwin-arm64@3.29.0'
-  - '@fallow-cli/darwin-x64@3.29.0'
-  - '@fallow-cli/linux-arm64-gnu@3.29.0'
-  - '@fallow-cli/linux-arm64-musl@3.29.0'
-  - '@fallow-cli/linux-x64-gnu@3.29.0'
-  - '@fallow-cli/linux-x64-musl@3.29.0'
-  - '@fallow-cli/win32-arm64-msvc@3.29.0'
-  - '@fallow-cli/win32-x64-msvc@3.29.0'
-  - fallow-type-aware@3.29.0
-  - fallow@3.29.0
+
+# Release quarantine: no version younger than one day is resolved. Set explicitly, which makes it strict: a
+# release inside the window fails the install (or prompts) instead of being appended silently to
+# minimumReleaseAgeExclude, as pnpm's implicit default does. One day, not Dependabot's 7-day cooldown: the
+# cooldown already keeps automated updates a week behind, and a 7-day cutoff here would reject 125 entries of
+# the current lockfile (the tree is kept current by hand). `pnpm install --frozen-lockfile` checks every
+# lockfile entry against this and trustPolicy (about 5 s; needs the registry).
+minimumReleaseAge: 1440
+minimumReleaseAgeStrict: true
+# `pnpm install`, `add`, `update` and `remove` drop exclude entries the lockfile no longer resolves.
+minimumReleaseAgeExcludePrune: true
+# Exceptions name one exact version and say why, for example a security fix needed before it is a day old:
+#   - 'some-package@1.2.3' # GHSA-xxxx-xxxx-xxxx fix; remove once older than a day (2026-10-01)
+minimumReleaseAgeExclude: []
+
+# Fails a version published with weaker provenance than an earlier one of the same package (a trusted
+# publisher replaced by a token, the usual sign of a takeover). Versions older than 30 days are not checked:
+# semver@6.3.1 and why-is-node-running@3.2.2, both years old, fail it only because later majors adopted trusted
+# publishing, and a takeover shows up as a new version, which is always checked.
+trustPolicy: no-downgrade
+trustPolicyIgnoreAfter: 43200
+
+# Transitive versions forced for a security fix; each names the advisory. Remove an entry once the parent ships
+# the fix (`pnpm why <package>`).
+overrides:
+  # GHSA-pm4m-ph32-ghv5 (high) and GHSA-724g-mxrg-4qvm (moderate): @hey-api/json-schema-ref-parser pins js-yaml
+  # 5.2.0 exactly. 5.2.2 is the first release with both fixes, a patch release of the same line.
+  'js-yaml@5.2.0': 5.2.2
+
+# better-call (Better Auth's router) has an optional peer on zod ^4. pnpm fills a missing optional peer from any
+# version in the graph and chose shadcn's zod 3.25.76, which gave @better-auth/core a second copy of better-call
+# next to better-auth's own (two APIError classes). zod 4.6.5 in package.json, the version better-auth already
+# depends on, is the provider instead; nothing imports it (ADR 0007).
+strictPeerDependencies: true
+
+# TypeScript is 7.0.2 only (ADR 0002). The TanStack ESLint plugins, which oxlint loads as JS plugins, bring
+# typescript-eslint 8, whose packages declare typescript <6.1. Their rules use no type information (no parser
+# services), so TypeScript's compiler API, which TS 7 no longer has, is never called. Remove these once
+# typescript-eslint accepts TS 7.
+peerDependencyRules:
+  allowedVersions:
+    '@typescript-eslint/project-service>typescript': 7.0.2
+    '@typescript-eslint/tsconfig-utils>typescript': 7.0.2
+    '@typescript-eslint/typescript-estree>typescript': 7.0.2
+    '@typescript-eslint/utils>typescript': 7.0.2

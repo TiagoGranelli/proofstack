@@ -5,10 +5,10 @@
   "description": "Full-stack web application template with a verifiable API contract.",
   "license": "MIT",
   "type": "module",
-  "packageManager": "pnpm@12.3.4",
+  "packageManager": "pnpm@12.6.0",
   "engines": {
     "node": ">=26.0.0 <27",
-    "pnpm": ">=12.3.4 <13"
+    "pnpm": ">=12.6.0 <13"
   },
   "imports": {
     "#/*": "./src/*"
@@ -46,11 +46,19 @@
     "test:e2e": "playwright test",
     "verify:app": "node scripts/verify-app.ts",
     "check:drift": "node scripts/check-drift.ts",
+    "check:migrations": "node scripts/check-migrations.ts",
     "deps:check": "node scripts/deps-check.ts",
+    "images:check": "node scripts/images-check.ts",
+    "images:sync": "node scripts/images-check.ts --sync",
+    "sbom:release": "node scripts/sbom.ts",
+    "audit:check": "node scripts/audit.ts",
+    "licenses:check": "node scripts/licenses.ts",
     "lighthouse": "node scripts/lighthouse.ts",
     "db:reset-test": "node --env-file-if-exists=.env scripts/test-db.ts",
     "ci:workflows": "node scripts/ci-jobs.ts workflows",
     "ci:static": "node scripts/ci-jobs.ts static",
+    "ci:supply-chain": "node scripts/ci-jobs.ts supply-chain",
+    "ci:secrets": "node scripts/ci-jobs.ts secrets",
     "ci:drift": "node scripts/ci-jobs.ts drift",
     "ci:build": "node scripts/ci-jobs.ts build",
     "ci:verify": "node scripts/ci-jobs.ts verify",
@@ -73,7 +81,8 @@
     "pg": "8.23.0",
     "radix-ui": "1.6.7",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "zod": "4.6.5"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.13.0",

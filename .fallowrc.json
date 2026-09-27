@@ -24,8 +24,13 @@
     // Invoked as a CLI (node_modules/.bin/effect-tsgo) by the `effect` gate in scripts/check.ts.
     "@effect/tsgo",
     // Invoked as a CLI (`pnpm exec lighthouse`) by scripts/lighthouse.ts.
-    "lighthouse"
+    "lighthouse",
+    // Not imported: listed only as the provider of better-call's optional zod peer (pnpm-workspace.yaml, ADR 0007).
+    "zod"
   ],
+  // The pnpm override replaces js-yaml@5.2.0 everywhere, so the lockfile no longer resolves its target: that is the
+  // override working, not an unused one (pnpm-workspace.yaml, `overrides`).
+  "ignoreDependencyOverrides": [{ "package": "js-yaml", "source": "pnpm-workspace.yaml" }],
   "rules": {
     // Blocking: structural facts that are always wrong.
     "unused-files": "error",

@@ -25,6 +25,12 @@ One schema language (Effect Schema) instead of two, and a contract usable from o
 Router search-param validation uses Effect Schema or plain functions; the TanStack skills' Zod examples
 need translating.
 
+`zod` 4.6.5 is still listed in `package.json` `dependencies`, and no module imports it. Better Auth's router,
+better-call, declares an optional peer on zod ^4. Without a zod of our own, pnpm filled that peer with
+shadcn's zod 3.25.76, which installed a second copy of better-call for `@better-auth/core`. Listing the zod
+that better-auth already depends on keeps a single copy and lets `strictPeerDependencies` stay on
+(`pnpm-workspace.yaml`). Fallow ignores the unused dependency (`.fallowrc.json`).
+
 ## Revisit when
 
 The app needs subscriptions or request batching that `HttpApi` cannot provide, or a dependency requires

@@ -1,0 +1,26 @@
+# squawk (`pnpm check:migrations`, scripts/check-migrations.ts): lints drizzle/*.sql for statements that lock
+# or rewrite busy tables. See docs/operations.md, "Migration safety", for waivers and CONCURRENTLY.
+
+# compose.yaml, CI and production run Postgres 18 (scripts/images.ts).
+pg_version = "18.6"
+# scripts/migrate.ts applies all pending migrations in one transaction (Drizzle's migrator).
+assume_in_transaction = true
+excluded_rules = [
+  # IF NOT EXISTS guards against a half-applied migration; the single transaction already rolls back all of it.
+  "prefer-robust-stmts",
+  # scripts/migrate.ts sets lock_timeout for the session (MIGRATE_DDL_LOCK_TIMEOUT, 5 s) and retries on a
+  # timeout, so a migration never queues behind a long query with other queries queued behind it.
+  "require-lock-timeout",
+  # Once its locks are taken, a statement has to finish: a timeout would only roll back a rewrite that is
+  # meant to run. Rewrites of busy tables are flagged by their own rules (changing-column-type, ...).
+  "require-statement-timeout",
+]
+# Grandfathered: applied everywhere before this lint existed, and never edited again. Their findings are
+# the concurrent-index and timestamp ones the lint exists for; every migration from 0005 on is linted.
+excluded_paths = [
+  "drizzle/0000_init.sql",
+  "drizzle/0001_post_author_created_idx.sql",
+  "drizzle/0002_post_keyset_pagination_idx.sql",
+  "drizzle/0003_auth_rate_limit.sql",
+  "drizzle/0004_auth_timestamptz.sql",
+]

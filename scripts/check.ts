@@ -435,6 +435,23 @@ const GATES: Gate[] = [
       'generated files with their source',
   },
   {
+    // squawk over the migrations after the grandfathered ones (.squawk.toml). The first run downloads the pinned
+    // binary into ~/.cache/proofstack; later runs are offline, about 0.1 s.
+    name: 'migration-lint',
+    run: script('check:migrations'),
+    fix:
+      'make the migration safe or waive the statement with `-- squawk-ignore <rule>` under a comment that says ' +
+      'why (docs/operations.md, "Migration safety")',
+  },
+  {
+    // Production dependencies only, read from node_modules (offline, about 0.2 s).
+    name: 'licenses',
+    run: script('licenses:check'),
+    fix:
+      'replace the dependency, or, if its license is acceptable, allow it in scripts/licenses.ts (ALLOWED for a ' +
+      'license, EXCEPTIONS for one exact version) with the reason',
+  },
+  {
     name: 'guards',
     run: guards,
     fix:
@@ -464,7 +481,7 @@ const results = selected.map((gate) => {
 
 console.log('')
 for (const { name, ok, seconds } of results)
-  console.log(`${ok ? 'ok  ' : 'FAIL'}  ${name.padEnd(12)} ${seconds.toFixed(1)}s`)
+  console.log(`${ok ? 'ok  ' : 'FAIL'}  ${name.padEnd(14)} ${seconds.toFixed(1)}s`)
 const failed = results.filter((result) => !result.ok)
 if (failed.length > 0) {
   console.error(`\n${failed.length} gate(s) failed:`)
