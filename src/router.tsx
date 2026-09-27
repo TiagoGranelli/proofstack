@@ -2,7 +2,9 @@ import { QueryClient } from '@tanstack/react-query'
 import { createRouter } from '@tanstack/react-router'
 import { setupRouterSsrQueryIntegration } from '@tanstack/react-router-ssr-query'
 import { createIsomorphicFn, getGlobalStartContext } from '@tanstack/react-start'
-import { RouteError, RouteNotFound, RoutePending } from '#/components/errors/route-error.tsx'
+import { RouteError } from '#/components/errors/route-error.tsx'
+import { RouteNotFound } from '#/components/errors/route-not-found.tsx'
+import { RoutePending } from '#/components/layouts/route-pending.tsx'
 import { routeTree } from './routeTree.gen.ts'
 
 // The CSP nonce created by the request middleware in src/start.ts. On the client the router reads it

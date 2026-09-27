@@ -33,28 +33,3 @@ export function RouteError({ error, reset }: ErrorComponentProps) {
     </main>
   )
 }
-
-/** Router `defaultPendingComponent`: shown only when a navigation takes longer than `defaultPendingMs`. */
-export function RoutePending() {
-  return (
-    <main className="mx-auto grid max-w-2xl gap-4 p-4" aria-busy="true">
-      <div aria-hidden="true" className="fixed inset-x-0 top-0 h-0.5 bg-primary motion-safe:animate-pulse" />
-      <output className="text-sm text-muted-foreground">Loading…</output>
-    </main>
-  )
-}
-
-/** Router `defaultNotFoundComponent`. */
-export function RouteNotFound() {
-  return (
-    <main className="mx-auto grid max-w-2xl gap-4 p-4">
-      <h1 className="text-2xl font-semibold">Page not found</h1>
-      <p className="text-muted-foreground">There is nothing at this address.</p>
-      <div>
-        <Button asChild variant="outline">
-          <Link to="/">Go to latest posts</Link>
-        </Button>
-      </div>
-    </main>
-  )
-}

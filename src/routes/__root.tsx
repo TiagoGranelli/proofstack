@@ -1,7 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query'
 import {
   Asset,
-  Link,
   Outlet,
   Scripts,
   createRootRouteWithContext,
@@ -9,6 +8,7 @@ import {
   useRouter,
   useTags,
 } from '@tanstack/react-router'
+import { SiteHeader } from '#/components/layouts/site-header.tsx'
 import '#/styles/app.css'
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
@@ -38,9 +38,6 @@ function Head() {
     .map((tag) => <Asset {...tag} key={`tsr-meta-${JSON.stringify(tag)}`} nonce={nonce} />)
 }
 
-const navLink =
-  'rounded-sm text-muted-foreground outline-offset-4 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring data-[status=active]:text-foreground'
-
 function RootDocument() {
   // Exposed for E2E tests: interactions before hydration are silently lost.
   const hydrated = useHydrated()
@@ -53,19 +50,7 @@ function RootDocument() {
         className="min-h-dvh bg-background text-foreground antialiased"
         data-hydrated={hydrated ? 'true' : undefined}
       >
-        <header className="border-b">
-          <nav aria-label="Main" className="mx-auto flex max-w-2xl gap-4 p-4 text-sm">
-            <Link to="/" className={`${navLink} font-semibold`}>
-              ProofStack
-            </Link>
-            <Link to="/about" className={navLink}>
-              About
-            </Link>
-            <Link to="/dashboard" className={`${navLink} ml-auto`}>
-              Dashboard
-            </Link>
-          </nav>
-        </header>
+        <SiteHeader />
         <Outlet />
         <Scripts />
       </body>
