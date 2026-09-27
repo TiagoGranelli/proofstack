@@ -1,6 +1,6 @@
 // The faithful local CI: the same `pnpm ci:<job>` scripts as .github/workflows/ci.yml. The container jobs run in
-// compose.ci.yaml (the Playwright image with Postgres and Mailpit, CPU, memory and /dev/shm limits), each in a fresh
-// `runner` container on one copy of the checkout; the host jobs drive Docker themselves and run here.
+// .github/compose.ci.yaml (the Playwright image with Postgres and Mailpit, CPU, memory and /dev/shm limits), each
+// in a fresh `runner` container on one copy of the checkout; the host jobs drive Docker themselves and run here.
 // Usage: pnpm ci:local [job ...]   (default: every job, in CI order)
 //   Container jobs: static supply-chain drift build verify lighthouse. Host jobs: workflows secrets docker.
 //   verify and lighthouse need build, which is added when missing (CI's `needs: build`).
@@ -35,7 +35,7 @@ const RESULTS = resolve('test-results/ci-local')
 const PROJECT = `${dockerPrefix()}-local-${process.pid}`
 /** `pnpm@<version>[+<hash>]` in package.json#packageManager. */
 const { packageManager } = JSON.parse(readFileSync('package.json', 'utf8')) as { packageManager: string }
-/** What compose.ci.yaml interpolates. */
+/** What .github/compose.ci.yaml interpolates. */
 const env = {
   ...process.env,
   CI_DOCKER_PREFIX: dockerPrefix(),
@@ -47,7 +47,7 @@ const env = {
 
 /** `docker compose` on this run's project; the exit code, with the terminal attached unless `input` is given. */
 const compose = (args: string[], input?: string) =>
-  spawnSync('docker', ['compose', '-p', PROJECT, '-f', 'compose.ci.yaml', ...args], {
+  spawnSync('docker', ['compose', '-p', PROJECT, '-f', '.github/compose.ci.yaml', ...args], {
     env,
     input,
     stdio: [input === undefined ? 'inherit' : 'pipe', 'inherit', 'inherit'],
@@ -55,7 +55,7 @@ const compose = (args: string[], input?: string) =>
 
 /**
  * One step in a fresh runner container: the command, then its peak memory and reports in RESULTS/<step>/
- * (compose.ci.yaml's entrypoint). `input` goes to the command's stdin.
+ * (.github/compose.ci.yaml's entrypoint). `input` goes to the command's stdin.
  */
 const inRunner = (step: string, command: string[], input?: string) => {
   const noTty = input === undefined ? [] : ['-T']

@@ -7,8 +7,8 @@
   "customManagers": [
     {
       "customType": "regex",
-      "description": "The image pins in scripts/images.ts, and the quoted build args of the ci:local runner in compose.ci.yaml. The same depName in compose files, ci.yml and the Dockerfiles lands in the same PR, so the copies stay equal (`pnpm ci:workflows` checks).",
-      "managerFilePatterns": ["/^scripts/images\\.ts$/", "/^compose\\.ci\\.yaml$/"],
+      "description": "The image pins in scripts/images.ts, and the quoted build args of the ci:local runner in .github/compose.ci.yaml. The same depName in compose files, ci.yml and the Dockerfiles lands in the same PR, so the copies stay equal (`pnpm ci:workflows` checks).",
+      "managerFilePatterns": ["/^scripts/images\\.ts$/", "/^\\.github/compose\\.ci\\.yaml$/"],
       "matchStrings": ["'(?<depName>[a-z0-9./-]+):(?<currentValue>[\\w.-]+)@(?<currentDigest>sha256:[a-f0-9]{64})'"],
       "datasourceTemplate": "docker"
     },

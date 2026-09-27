@@ -14,9 +14,9 @@ repository created from the template.
   `startTestServers` in `scripts/app-server.ts`), so they run directly, from `playwright test --ui` and from the
   editor extensions. `pnpm verify:app` runs the layers one after another and prints a summary; the drain check
   is `tests/integration/shutdown.test.ts`.
-- `pnpm ci:docker` runs `deploy/compose.production.yaml` itself, with `compose.smoke.yaml` on top, and scans the
+- `pnpm ci:docker` runs `deploy/compose.production.yaml` itself, with `deploy/compose.smoke.yaml` on top, and scans the
   image with `grype --only-fixed --fail-on high`.
-- `pnpm ci:local` runs its container jobs in `compose.ci.yaml`.
+- `pnpm ci:local` runs its container jobs in `.github/compose.ci.yaml`.
 - `CONTRIBUTING.md`, `SECURITY.md` and `CODE_OF_CONDUCT.md` live in `.github/`, where GitHub finds them first.
 - The Renovate configuration is `.github/renovate.json`, one of the locations Renovate searches.
 

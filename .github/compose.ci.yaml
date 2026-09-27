@@ -29,6 +29,7 @@ services:
 
   runner:
     build:
+      # The context is this file's directory, .github/; the inline Dockerfile copies nothing from it.
       # The pinned Caddy binary serves the edge for `lighthouse` (EDGE_RUNTIME=binary: no Docker in here).
       dockerfile_inline: |
         ARG PLAYWRIGHT_IMAGE

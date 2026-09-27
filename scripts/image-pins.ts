@@ -5,9 +5,9 @@ import { IMAGES } from './images.ts'
 
 const PINNED_COPIES = [
   'compose.yaml',
-  'compose.ci.yaml',
-  'compose.smoke.yaml',
+  'deploy/compose.smoke.yaml',
   'deploy/compose.production.yaml',
+  '.github/compose.ci.yaml',
   '.github/workflows/ci.yml',
   'Dockerfile',
   'evals/Dockerfile',

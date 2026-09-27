@@ -1,9 +1,9 @@
 // The production path end to end with Docker only, through the adopters' own recipe: deploy/compose.production.yaml
-// plus compose.smoke.yaml (PgBouncer in transaction mode, the image built here, ephemeral ports). It builds the image
-// (prerender included), scans it with grype, runs the bundled migrator three times at once through the pooler
-// (exactly one run applies the migrations) and once directly (it must apply nothing), creates the first account with
-// the bundled create-user, brings the stack up, checks it through the edge (pages, then signing in as that account)
-// and stops the app gracefully. `down -v` removes everything it started, except grype's database volume.
+// plus deploy/compose.smoke.yaml (PgBouncer in transaction mode, the image built here, ephemeral ports). It builds
+// the image (prerender included), scans it with grype, runs the bundled migrator three times at once through the
+// pooler (exactly one run applies the migrations) and once directly (it must apply nothing), creates the first
+// account with the bundled create-user, brings the stack up, checks it through the edge (pages, then signing in as
+// that account) and stops the app gracefully. `down -v` removes everything it started, except grype's database volume.
 // CI's `docker` job and `pnpm ci:docker`.
 // Usage: node scripts/docker-smoke.ts   (env: CI_DOCKER_PREFIX, KEEP_SMOKE_IMAGE=1)
 import { spawn, spawnSync } from 'node:child_process'
@@ -16,7 +16,7 @@ const PROJECT = `${dockerPrefix()}-smoke-${process.pid}`
 const IMAGE = `${PROJECT}-app:smoke`
 /** grype's vulnerability database, kept between runs (about 200 MB; `docker volume rm` to reclaim). */
 const GRYPE_DB = `${dockerPrefix()}-grype-db`
-/** APP_URL in compose.smoke.yaml: the origin the checks send, whatever port Docker published. */
+/** APP_URL in deploy/compose.smoke.yaml: the origin the checks send, whatever port Docker published. */
 const ORIGIN = 'http://localhost:8080'
 const MIGRATIONS = (JSON.parse(readFileSync('drizzle/meta/_journal.json', 'utf8')) as { entries: unknown[] }).entries
   .length
@@ -40,7 +40,7 @@ const env = {
   APP_DB_PASSWORD: secret(),
   BETTER_AUTH_SECRET: randomBytes(32).toString('base64'),
 }
-const COMPOSE = ['compose', '-p', PROJECT, '-f', 'deploy/compose.production.yaml', '-f', 'compose.smoke.yaml']
+const COMPOSE = ['compose', '-p', PROJECT, '-f', 'deploy/compose.production.yaml', '-f', 'deploy/compose.smoke.yaml']
 
 /** `docker compose <args>` on the smoke project; returns stdout, throws with stderr when it fails. */
 const compose = (args: string[], input?: string) => {

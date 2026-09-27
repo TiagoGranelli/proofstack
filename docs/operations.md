@@ -236,7 +236,7 @@ change both places if the host already routes that range). Logs: `docker compose
 back, set the previous tag and run step 3; migrations stay applied, which is why each must be compatible
 with the version before it ([Build and deploy](#build-and-deploy)).
 
-CI tests this file on every change: `pnpm ci:docker` runs it with the override `compose.smoke.yaml` (the image
+CI tests this file on every change: `pnpm ci:docker` runs it with the override `deploy/compose.smoke.yaml` (the image
 built from the checkout, PgBouncer in front of Postgres, plain HTTP on an ephemeral port, a subnet Docker
 picks) through steps 3 and 4 and a sign-in through Caddy.
 
@@ -780,10 +780,10 @@ browsers, Postgres and (for `verify`) Mailpit, and moves artifacts. The logic li
 | `pnpm ci:build` | `pnpm build` with placeholder configuration (the same as the Dockerfile's) |
 | `pnpm ci:verify` | `verify:app` on all five Playwright projects (needs Mailpit: the `mailpit` service) |
 | `pnpm ci:lighthouse` | `pnpm lighthouse --runs=5`, through the edge. Exit 2 means inconclusive (see docs/agents/gates.md) |
-| `pnpm ci:docker` | `scripts/docker-smoke.ts` on the adopters' recipe itself: `deploy/compose.production.yaml` plus `compose.smoke.yaml` (PgBouncer in transaction mode in front of Postgres, the image built from this checkout, the edge on an ephemeral loopback port). Builds the image, scans it with grype (see below), migrates with three runs at once through the pooler and once directly, creates the first account with the bundled `create-user`, brings the stack up, checks pages and a sign-in through the edge, stops the app gracefully, and `down -v` removes everything. Needs Docker. |
+| `pnpm ci:docker` | `scripts/docker-smoke.ts` on the adopters' recipe itself: `deploy/compose.production.yaml` plus `deploy/compose.smoke.yaml` (PgBouncer in transaction mode in front of Postgres, the image built from this checkout, the edge on an ephemeral loopback port). Builds the image, scans it with grype (see below), migrates with three runs at once through the pooler and once directly, creates the first account with the bundled `create-user`, brings the stack up, checks pages and a sign-in through the edge, stops the app gracefully, and `down -v` removes everything. Needs Docker. |
 
 `pnpm ci:local [job ...]` is the faithful local equivalent (default: every job, in CI order). The container jobs
-(`static`, `supply-chain`, `drift`, `build`, `verify`, `lighthouse`) run in `compose.ci.yaml`: a `runner` built
+(`static`, `supply-chain`, `drift`, `build`, `verify`, `lighthouse`) run in `.github/compose.ci.yaml`: a `runner` built
 from the official Playwright image for `@playwright/test` 1.63.0 (Ubuntu 24.04, all browsers including WebKit)
 with pnpm from `packageManager` and the pinned Caddy binary, next to Postgres 18.6 and Mailpit
 (`MAILPIT_HOST=mailpit`). pnpm installs the Node of `devEngines.runtime` there as it does everywhere. The host

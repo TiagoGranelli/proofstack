@@ -1,5 +1,5 @@
 # Override for deploy/compose.production.yaml in the Docker smoke test (scripts/docker-smoke.ts, `pnpm ci:docker`),
-# so CI tests the adopters' recipe itself. Relative paths resolve from deploy/, the first file's directory.
+# so CI tests the adopters' recipe itself. Relative paths resolve from the first file's directory, this one.
 # What changes, and why:
 # - A connection pooler in transaction mode between the app and Postgres, as Neon and Supabase put there
 #   (docs/operations.md, "Connection poolers"): the migrations and the app go through it.

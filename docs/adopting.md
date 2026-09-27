@@ -145,7 +145,8 @@ security settings. `deploy/` holds three recipes that put it together:
 (`compose.production.yaml`, `Caddyfile`, `postgres-init.sh` and `deploy.env.example`: Postgres, the migrations,
 the app and Caddy with automatic HTTPS), [Fly.io](operations.md#deploy-on-flyio) (`fly.toml`) and
 [Kubernetes](operations.md#deploy-on-kubernetes) (`kubernetes.yaml`). Each names the image and the app as
-`app` or `your-app`; replace those with your own.
+`app` or `your-app`; replace those with your own. `compose.smoke.yaml` there is the override CI tests the Compose
+recipe with (`pnpm ci:docker`), not a recipe.
 
 Before the first deploy, decide:
 
