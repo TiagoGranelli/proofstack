@@ -1,5 +1,5 @@
-// Hidden check of the eval task fix-post-length-check. The harness copies it to tests/component/ after the
-// agent has finished (scripts/agent-eval.ts); it never sits in the agent's checkout.
+// Hidden check of the eval task fix-post-length-check. evals/grade.sh copies it to tests/component/ after the
+// agent has finished; it is never in the agent's checkout.
 import { HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
 import { page } from 'vitest/browser'

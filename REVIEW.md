@@ -11,7 +11,7 @@ For AI reviewers of pull requests (Claude Code Review reads this file; other too
   Important.
 - What CI already enforces: formatting, lint, types, Effect diagnostics, dead code, complexity, duplication,
   licenses, route accessibility coverage, and the guards in `scripts/check.ts`.
-- The hidden eval checks in `evals/checks/`, whose imports resolve only after `scripts/agent-eval.ts` copies them.
+- The hidden eval checks in `evals/tasks/*/tests/`, whose imports resolve only after `evals/grade.sh` copies them.
 
 ## What Important means here
 

@@ -1,57 +1,50 @@
 # Agent evals
 
-A change to `AGENTS.md`, a skill or a hook changes how coding agents work in this repository. `pnpm agent-eval`
-measures that: it gives an agent CLI a realistic task in a throwaway checkout and grades the result with the
-same gates a human change must pass, plus hidden checks the agent never sees. Run it before and after a change
-to the agent instructions and compare the results.
+A change to `AGENTS.md`, a skill or a hook changes how coding agents work in this repository. The tasks in
+`evals/tasks/` measure that: an agent gets a realistic task in a fresh container and is graded by the same gates a
+human change must pass, plus hidden checks it never sees. Run them before and after a change to the agent
+instructions and compare the rewards.
 
-It runs a paid agent, so it is not part of `pnpm check` or CI.
+The tasks use the [Harbor](https://docs.harborframework.com/) task format (the harness behind Terminal-Bench), and
+Harbor runs them: it builds the container, installs and runs the agent (Claude Code, Codex and others are built
+in), uploads the hidden checks after the agent finishes, runs the verifier and records rewards, timings and
+trajectories. It runs a paid agent, so it is not part of `pnpm check` or CI.
 
 ## Running
 
+Needs Docker and Harbor (`uv tool install harbor`). Build the base image from the commit you want to test (it
+copies the working tree, so commit or stash first), then run the tasks:
+
 ```sh
-EVAL_AGENT_CMD='claude -p --permission-mode bypassPermissions "$(cat "$EVAL_PROMPT_FILE")"' pnpm agent-eval
-EVAL_AGENT_CMD='codex exec --sandbox workspace-write - < "$EVAL_PROMPT_FILE"' pnpm agent-eval add-post-title
-pnpm agent-eval --list          # the tasks
-pnpm agent-eval --self-test     # the harness itself, with stub agents (no paid agent, about 3 minutes)
+docker build -f evals/Dockerfile -t proofstack-eval .
+harbor run -p evals/tasks -a claude-code -m anthropic/<model>
+harbor run -p evals/tasks/add-post-title -a codex -m openai/<model>
+harbor view jobs
 ```
 
-Options: `--agent='<command>'` instead of `EVAL_AGENT_CMD`, `--ref=<git ref>` to test another commit (default
-`HEAD`; uncommitted changes are not part of the checkout), `--keep` to keep the checkout for inspection.
+The agent reads its API key from your environment (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`); nothing in the
+repository holds keys. Results go to `jobs/` (ignored by git). Check the tasks themselves without a paid agent:
+`-a oracle` applies the reference solution where a task has one (reward 1), and `-a nop` does nothing (reward 0,
+because the hidden checks fail on the baseline).
 
-The agent command runs with `sh -c` in the checkout, with these variables set:
+## How a task is built
 
-| Variable | Value |
-| --- | --- |
-| `EVAL_PROMPT_FILE` | The task's prompt (the Markdown after its frontmatter), in a file next to the checkout |
-| `EVAL_TASK` | The task id |
-| `EVAL_WORKDIR` | The checkout |
-| `EVAL_SOURCE` | This repository (the stub agents of the self-test read their patches from it) |
-
-The agent CLI reads its credentials from its own environment or login; the harness never handles keys and
-redacts `key=`, `token=`, `secret=` and `password=` values from the command it records. Keep the agent's
-project instructions on: `claude --bare` skips `CLAUDE.md`, skills and hooks, which is what the eval measures.
-An agent run in bypass mode acts without asking, which is why the checkout is a throwaway copy outside this
-repository.
-
-## What one run does
-
-1. **Checkout.** `git archive <ref>` without `evals/`, unpacked into a new directory under
-   `EVAL_WORKDIR_ROOT` (default `~/.cache/proofstack/evals`, on disk because `pnpm install` hard-links from the
-   store). The task's `setup` patch is applied (the planted bug), then `git init` and one commit, "Baseline".
-   It is a new repository rather than a `git worktree`, so the agent cannot find the hidden checks, the reference
-   solutions or the bug's origin in this repository's refs or history. `pnpm install --frozen-lockfile --offline`
-   installs the dependencies and, through `prepare`, the pre-commit hook.
-2. **Agent.** The command runs until it exits or the task's `timeout_minutes` passes.
-3. **Diff.** Files, insertions and deletions against the baseline, with generated files (`src/sdk`,
-   `openapi.json`, the route tree, `drizzle/meta`) counted apart.
-4. **Gates.** `pnpm check` and `pnpm check:drift contract migrations auth` in the checkout.
-5. **Hidden checks.** Each file `evals/checks/<task>/<layer>.test.ts[x]` is copied to
-   `tests/<layer>/eval-<task>.test.ts[x]` and run with `pnpm test:<layer> eval-<task>`.
-6. **Result.** The task passes when the gates and the hidden checks all pass. The record goes to
-   `evals/results/<time>-<label>-<task>.json` (pass, each gate with its time, agent time and exit, diff size),
-   the logs to the directory of the same name. `evals/results/` is ignored by git. The checkout is deleted unless
-   `--keep`.
+- `evals/Dockerfile`: the base image. Playwright's Ubuntu image with Node and pnpm, the repository at `/app`
+  without `evals/`, installed, as one fresh commit "Baseline" with the pre-commit hook active. The agent sees
+  neither the hidden checks nor this repository's history.
+- `evals/tasks/<id>/`:
+  - `instruction.md`: the prompt, with acceptance criteria that name every file, export and label the hidden
+    checks rely on.
+  - `task.toml`: timeouts and resources (4 CPUs, 6 GB).
+  - `environment/Dockerfile`: `FROM proofstack-eval`, plus the planted bug for a bug-fix task, folded into the
+    baseline commit.
+  - `tests/test.sh` runs `evals/grade.sh` (in the image at `/opt/eval/grade.sh`); the other files in `tests/` are
+    the hidden checks, named `<layer>.test.ts[x]`.
+  - `solution/solve.sh` (optional): the reference solution for Harbor's oracle agent.
+- `evals/grade.sh`, after the agent: measures the diff against the baseline, runs `pnpm check` and
+  `pnpm check:drift contract migrations auth`, copies each hidden check to `tests/<layer>/eval-hidden.test.ts[x]`
+  and runs it with `pnpm test:<layer>`. It writes `/logs/verifier/reward.json`: `reward` (1 when all three pass),
+  `check`, `drift`, `hidden`, `files_changed`, `insertions` and `deletions`.
 
 ## Tasks
 
@@ -60,32 +53,21 @@ repository.
 | `add-post-title` | A field end to end: migration, contract, handler, SDK, UI | api: create, list, update and remove a title; 400 for empty, untrimmed and 81-character titles; the field in `openapi.json`; a migration adding the column |
 | `bulk-delete-posts` | An endpoint with a new typed error | api: deletes and counts; all-or-nothing `PostsNotFound` with the offending ids in order; 400 for 0 or 51 ids; 401 without a session; the operation in `openapi.json`; the tag in `api-error.ts` |
 | `add-profile-page` | A page with a form, through a Better Auth server function | component: the form's field, trimmed save, disabled blank save, failure alert; unit: the route file, the endpoint allowlist, the server function and its test stub, the a11y and keyboard suites |
-| `fix-post-length-check` | A planted bug (`setup/fix-post-length-check.patch`) | component: a body at the limit with surrounding whitespace is not flagged, in the composer and the editor; one over still is |
+| `fix-post-length-check` | A planted bug | component: a body at the limit with surrounding whitespace is not flagged, in the composer and the editor; one over still is |
 
-The setup of `fix-post-length-check` also weakens the component test that would have caught the bug, so
-`pnpm check` passes on the buggy baseline and only the hidden checks tell a fix from no fix.
+The planted bug also weakens the component test that would have caught it, so `pnpm check` passes on the buggy
+baseline and only the hidden checks tell a fix from no fix. Only `fix-post-length-check` has a reference solution;
+the first real agent run that passes another task can become its `solution/`.
+
+Checked on 2026-09-27 with Harbor 0.23.0: `-a oracle` on `fix-post-length-check` scored reward 1 (check, drift
+and hidden 1; one file, +2 −2), and `-a nop` on all four tasks scored reward 0 with check and drift 1 and hidden 0.
 
 ## Adding a task
 
-1. `evals/tasks/<id>.md`: frontmatter (`title`, `kind`, `timeout_minutes`, and for a planted bug `setup` and
-   `solution`, paths relative to `evals/`), then the prompt with its acceptance criteria. Name every file,
-   export and label the hidden checks rely on in the criteria: the checks may only test what the prompt promises.
-2. `evals/checks/<id>/<layer>.test.ts[x]` for `unit`, `api` or `component`. They import the layer's helpers by
-   the path they will have in `tests/<layer>/` (`./harness.ts`, `./api-mocks.ts`), so Oxlint, Fallow and
-   `tsc` skip `evals/`. Prefer HTTP through `webHandler` over the typed client, so a check does not depend on how
-   the agent typed the contract.
-3. Prove the checks: they must fail on the baseline (run with `--agent=true`) and pass on a correct solution
-   (`--agent='git apply "$EVAL_SOURCE/evals/solutions/<id>.patch"'` when you commit one).
-
-## Self-test
-
-`pnpm agent-eval --self-test` runs `fix-post-length-check` three times with stub agents and expects:
-
-| Stub | Command | Expected |
-| --- | --- | --- |
-| good patch | `git apply evals/solutions/fix-post-length-check.patch` | pass |
-| no-op | `true` | fail: the hidden checks fail, while `pnpm check` passes |
-| bad patch | `git apply evals/stubs/bad-fix-post-length-check.patch` (a fudged limit and a hand edit of `openapi.json`) | fail: `pnpm check`, drift and the hidden checks fail |
-
-Only `fix-post-length-check` has a committed reference solution. The hidden checks of the other tasks are proven
-to fail on the baseline; the first real agent run that passes one is the reference for it.
+1. Create `evals/tasks/<id>/` with `instruction.md`, `task.toml`, `environment/Dockerfile` and `tests/test.sh`
+   (copy them from a task of the same kind).
+2. Write the hidden checks as `tests/<layer>.test.ts[x]` for `unit`, `api` or `component`. They import the
+   layer's helpers by the path they will have in `tests/<layer>/` (`./harness.ts`, `./api-mocks.ts`), so Oxlint,
+   Fallow and `tsc` skip `evals/`. Prefer HTTP through `webHandler` over the typed client, so a check does not
+   depend on how the agent typed the contract.
+3. Prove them: `harbor run -p evals/tasks/<id> -a nop` must score 0, and `-a oracle` 1 when you add a solution.

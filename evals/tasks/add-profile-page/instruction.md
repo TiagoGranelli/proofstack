@@ -1,9 +1,3 @@
----
-title: Add a profile page with a form to change the display name
-kind: new page with a form
-timeout_minutes: 45
----
-
 Signed-in users want to change the name other people see on their posts. Add a profile page with a form for it.
 The name is Better Auth's `user.name`, changed through its `POST /update-user` endpoint.
 

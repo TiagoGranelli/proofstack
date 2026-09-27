@@ -1,3 +1,5 @@
+# Build context of evals/Dockerfile: the repository as git has it, without dependencies, output or secrets.
+.git/
 node_modules/
 .output/
 .nitro/
@@ -7,13 +9,13 @@ dist/
 coverage/
 test-results/
 playwright-report/
-.lighthouseci/
 lighthouse-report/
 sbom/
+repos/
+jobs/
 *.log
 .env
 .env.*
 !.env.example
-.DS_Store
 .claude/worktrees/
-jobs/
+.claude/settings.local.json

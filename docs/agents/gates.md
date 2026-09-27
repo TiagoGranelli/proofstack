@@ -44,7 +44,7 @@ routes the gate files to review:
   without a session), `server-routes` (`SERVER_ROUTES`: the only Start server routes). `exact-versions`,
   `server-fn-validator` (Effect Schema only), `applied-migrations` (migrations in the journal at `HEAD` never
   change; on CI, at `HEAD^`), `bare-disable`, `tailwind-source`, `folder-name` and `agent-docs` (the size
-  budget of the `AGENTS.md` files and the shape of the project skills) have no exception.
+  budget of the `AGENTS.md` files) have no exception.
 - **migration-lint:** make the migration safe, or waive one statement with `-- squawk-ignore <rule>` under a
   comment line giving the reason ([docs/operations.md](../operations.md#migration-safety)). **licenses:** an
   acceptable license goes in `ALLOWED` in `scripts/licenses.ts`, one exact version in `EXCEPTIONS`, each with the
@@ -52,24 +52,40 @@ routes the gate files to review:
 
 ## Claude Code hooks and permissions
 
-`.claude/settings.json` (committed) enforces in configuration what `AGENTS.md` asks for. The hooks run
-`scripts/agent-hook.ts`, which reads the hook input as JSON on stdin, runs only local tools and never touches more
-than the one file named in the input:
+`.claude/settings.json` (committed) enforces in configuration what `AGENTS.md` asks for.
 
-| Hook | Does |
-| --- | --- |
-| `PostToolUse` on `Edit\|Write\|MultiEdit` (`post-edit`) | Formats the edited file with oxfmt and lints that one file with oxlint (without `--type-aware`; `pnpm check` adds the type-aware rules). Problems go back to the agent as `{"decision": "block", "reason": ...}`, which Claude Code adds next to the tool result. Markdown, generated files and anything under `node_modules`, `repos/` or `.output` are skipped. About 0.1 to 0.9 s per edit |
-| `PreToolUse` on `Edit\|Write\|MultiEdit` (`pre-edit`) | Exit 2 refuses an edit to a migration that is in the journal at `HEAD` (the `applied-migrations` guard, earlier) |
-| `PreToolUse` on `Bash` (`pre-bash`) | Exit 2 refuses `git commit --no-verify` (or `-n`, or `-c core.hooksPath=...`), linters and formatters this repo does not use (eslint, prettier, biome, dprint, standard), and oxlint or oxfmt with `--no-ignore`, `-c`/`--config` or `--ignore-path` |
+**Hook.** `PostToolUse` on `Edit|Write|MultiEdit` runs `scripts/format-edited-file.ts`: it reads the hook input on
+stdin, formats the edited file with oxfmt and lints that one file with oxlint (without `--type-aware`; `pnpm check`
+adds those rules). A problem goes back to Claude as `{"decision": "block", "reason": ...}`, which Claude Code adds
+next to the tool result. Files the Oxc configs ignore (generated code, Markdown, `node_modules`) and files outside
+the checkout are skipped. About 0.1 to 1 s per edit. Try it:
+`echo '{"tool_input":{"file_path":"'"$PWD"'/src/lib/utils.ts"}}' | node scripts/format-edited-file.ts`.
 
-Permissions: `deny` covers the generated files (`src/sdk/**`, `openapi.json`, `src/routeTree.gen.ts`,
-`drizzle/meta/**`); an `Edit(...)` rule also applies to Write, as the permissions docs say. `allow` covers the
-everyday gates (`pnpm check*`, `pnpm test*`, `pnpm typecheck`, `pnpm lint*`, `pnpm format*`, `pnpm codegen`,
-`pnpm db:generate *`) and `git status`, `git diff` and `git log`. Claude Code applies project `allow` rules only
-after you accept the workspace trust dialog. Personal additions go in `.claude/settings.local.json`.
+**Deny rules.**
 
-Test a hook by hand: `echo '{"tool_input":{"file_path":"'"$PWD"'/src/lib/utils.ts"}}' | node scripts/agent-hook.ts post-edit`.
-`tests/unit/agent-hook.test.ts` covers which files and commands each hook acts on.
+- Generated files: `Edit(/src/sdk/**)`, `Edit(/openapi.json)`, `Edit(/src/routeTree.gen.ts)`,
+  `Edit(/drizzle/meta/**)`. An `Edit(...)` rule also covers Write. Committed migrations are protected by the
+  `applied-migrations` guard and the pre-commit hook instead, because a new migration may still be adjusted
+  before its first commit.
+- Skipping the pre-commit hook: `git commit --no-verify` and `git commit -n` (as the first or a later option),
+  `git -c core.hooksPath...`, `pnpm hooks:uninstall`.
+- Linters and formatters this repo does not use, whose default scope includes `node_modules` and `repos/`:
+  `eslint`, `prettier` and `biome`, directly, through `npx` or through `pnpm dlx`.
+- Oxc runs without the ignore lists: any command with `--no-ignore` or `--ignore-path`, and oxlint or oxfmt with
+  `-c` or `--config`.
+
+Claude Code matches deny rules against every subcommand of a compound command (`&&`, `||`, `;`, `|`, newlines,
+subshells, command substitution), past leading `VAR=value` assignments and past wrappers such as `timeout`. They
+match the command text Claude writes, so they are a guard rail, not a security boundary
+([permissions docs](https://code.claude.com/docs/en/permissions#what-a-bash-rule-doesn-t-match)). Not covered: a
+program called by path (`node_modules/.bin/eslint`) or through `sh -c`, `git -C . commit --no-verify`, a
+clustered `-an`, `pnpm exec eslint`, and other tools. A rule can also refuse a harmless command, such as
+`rg --no-ignore` or a commit message containing ` -n`. CI runs every gate regardless.
+
+**Allow rules** cover the everyday gates (`pnpm check*`, `pnpm test*`, `pnpm typecheck`, `pnpm lint*`,
+`pnpm format*`, `pnpm codegen`, `pnpm db:generate *`) and `git status`, `git diff` and `git log`. Claude Code
+applies project `allow` rules only after you accept the workspace trust dialog. Personal additions go in
+`.claude/settings.local.json`.
 
 ## Lighthouse policy
 
@@ -93,4 +109,4 @@ production (needs Docker); see [ADR 0011](../decisions/0011-lighthouse-over-http
 | `pnpm images:check`, `pnpm images:sync` | Report only: newer tags and rebuilt digests for every image in `scripts/images.ts` (needs the registries). `images:sync` copies the pins from `scripts/images.ts` into compose.yaml, the workflows and the Dockerfile |
 | `pnpm sbom:release [--image=<ref>] [--no-image]` | CycloneDX SBOMs in `sbom/` for a release: production npm dependencies, and the production image with syft (Docker). Not a gate |
 | `pnpm ci:local [job ...]` | The CI jobs (`workflows secrets static supply-chain drift build verify lighthouse docker`, default all) as `pnpm ci:<job>` scripts in the Playwright Ubuntu container next to Postgres and Mailpit, all five browser projects included. Needs Docker. See [docs/operations.md](../operations.md#ci-and-local-ci) |
-| `pnpm agent-eval [task ...]`, `pnpm agent-eval --self-test` | The agent eval ([evals.md](evals.md)): an agent CLI solves a task in a throwaway checkout, graded by `pnpm check`, drift and hidden checks. Runs a paid agent (the self-test does not); not a gate |
+| `harbor run -p evals/tasks -a <agent> -m <model>` | The agent eval ([evals.md](evals.md)): an agent solves each task in a container, graded by `pnpm check`, drift and hidden checks. Needs Docker and Harbor, and runs a paid agent; not a gate |

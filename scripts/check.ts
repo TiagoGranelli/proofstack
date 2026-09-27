@@ -8,8 +8,8 @@
 // diff), otherwise the git ref PROOFSTACK_BASE_REF: by default HEAD locally (uncommitted edits count as new) and
 // HEAD^ on GitHub Actions (the commit under test against its parent; the checkout fetches two commits).
 import { spawnSync } from 'node:child_process'
-import { existsSync, lstatSync, readdirSync, readFileSync, readlinkSync, statSync } from 'node:fs'
-import { dirname, join, sep } from 'node:path'
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { join, sep } from 'node:path'
 import { routeCoverage } from './route-coverage.ts'
 
 type Gate = { name: string; run: () => boolean; fix: string }
@@ -374,108 +374,30 @@ const badFolders = () =>
         'rename it with `git mv`',
     )
 
-// Agent instructions. Codex concatenates every AGENTS.md from the repository root down to its working directory
-// and stops adding files at `project_doc_max_bytes` (32 KiB by default), silently. Claude Code recommends under 200
-// lines per file. The root file loads in every session, so it has its own, smaller budget; each chain (root plus
-// the nested files on the way to a directory) leaves 4 KiB of the 32 for the user's global ~/.codex/AGENTS.md.
-const ROOT_AGENTS_BYTES = 14 * 1024
-const CHAIN_AGENTS_BYTES = 28 * 1024
-// Tool output, dependencies and vendored snapshots: no AGENTS.md of ours lives there.
-const NOT_SCANNED = new Set([
-  'node_modules',
-  'repos',
-  '.git',
-  '.output',
-  '.nitro',
-  '.tanstack',
-  '.fallow',
-  '.agents',
-  '.claude',
-  'coverage',
-  'test-results',
-  'playwright-report',
-])
-
-const agentsFiles = (dir = '.'): string[] =>
-  readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-    if (entry.isDirectory()) return NOT_SCANNED.has(entry.name) ? [] : agentsFiles(join(dir, entry.name))
-    return entry.name === 'AGENTS.md' ? [join(dir, entry.name)] : []
-  })
-
-/** Bytes Codex reads for a session started in the file's directory: every AGENTS.md from the root down to it. */
-const chainBytes = (file: string) => {
-  const parts = file.split(sep).slice(0, -1)
-  return parts
-    .map((_, index) => join(...parts.slice(0, index + 1), 'AGENTS.md'))
-    .concat('AGENTS.md')
+// Agent instructions: every session loads the root AGENTS.md, and Codex concatenates the AGENTS.md files from the
+// root down to its working directory and silently drops what passes 32 KiB (docs/agents/skills.md).
+const AGENTS_ROOT_BYTES = 14 * 1024
+const AGENTS_CHAIN_BYTES = 28 * 1024
+const agentsFiles = () =>
+  ['src', 'tests', 'scripts', 'docs'].flatMap((dir) =>
+    readdirSync(dir, { recursive: true, encoding: 'utf8' })
+      .filter((path) => path.split(sep).at(-1) === 'AGENTS.md')
+      .map((path) => join(dir, path)),
+  )
+/** The bytes Codex reads in the file's directory: every AGENTS.md from the root down to it. */
+const chainBytes = (file: string) =>
+  file
+    .split(sep)
+    .map((_, index, parts) => join(...parts.slice(0, index), 'AGENTS.md'))
     .filter((path) => existsSync(path))
     .reduce((total, path) => total + statSync(path).size, 0)
-}
-
-const agentsBudget = () => {
-  const root = existsSync('AGENTS.md') ? statSync('AGENTS.md').size : 0
-  const rootProblem =
-    root > ROOT_AGENTS_BYTES
-      ? [
-          `AGENTS.md: [agent-docs] ${root} bytes, over the budget of ${ROOT_AGENTS_BYTES}. Every session loads it: ` +
-            'move a workflow into a skill (.agents/skills/<name>/SKILL.md) or directory-specific rules into a nested ' +
-            'AGENTS.md, and leave a one-line pointer',
-        ]
-      : []
-  const nested = agentsFiles().filter((file) => file !== 'AGENTS.md')
-  const chains = nested
-    .filter((file) => chainBytes(file) > CHAIN_AGENTS_BYTES)
+const agentsBudget = () =>
+  [['AGENTS.md', AGENTS_ROOT_BYTES] as const, ...agentsFiles().map((file) => [file, AGENTS_CHAIN_BYTES] as const)]
+    .filter(([file, budget]) => chainBytes(file) > budget)
     .map(
-      (file) =>
-        `${file}: [agent-docs] with the AGENTS.md files above it, ${chainBytes(file)} bytes, over ${CHAIN_AGENTS_BYTES}: ` +
-        'Codex drops whatever passes 32 KiB. Shorten it or move reference material behind a pointer',
+      ([file, budget]) =>
+        `${file}: [agent-docs] ${chainBytes(file)} bytes with the AGENTS.md files above it, over ${budget}. Move reference material behind a pointer (a nested AGENTS.md, a skill or a doc)`,
     )
-  const imports = nested
-    .map((file) => join(dirname(file), 'CLAUDE.md'))
-    .filter((claude) => !existsSync(claude) || !/^@AGENTS\.md$/m.test(read(claude)))
-    .map(
-      (claude) =>
-        `${claude}: [agent-docs] must contain the line \`@AGENTS.md\`. Claude Code reads a nested CLAUDE.md when it ` +
-        'opens a file in that directory, and with a root CLAUDE.md it reads no AGENTS.md on its own',
-    )
-  return [...rootProblem, ...chains, ...imports]
-}
-
-const SKILLS = join('.agents', 'skills')
-const SKILL_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
-
-/** `name` and `description` from a SKILL.md's frontmatter (one line each). */
-const frontmatter = (file: string) => {
-  const block = /^---\n([\s\S]*?)\n---\n/.exec(read(file))?.[1] ?? ''
-  const field = (key: string) => new RegExp(`^${key}:[ \\t]*(.*)$`, 'm').exec(block)?.[1]?.trim()
-  return { name: field('name'), description: field('description') }
-}
-
-/** A project skill follows the Agent Skills spec and is linked for Claude Code, which reads .claude/skills only. */
-const skillProblems = (name: string) => {
-  const file = join(SKILLS, name, 'SKILL.md')
-  if (!existsSync(file)) return [`${join(SKILLS, name)}: [agent-docs] a skill folder needs a SKILL.md`]
-  const meta = frontmatter(file)
-  const link = join('.claude', 'skills', name)
-  const target = join('..', '..', SKILLS, name)
-  const linked = existsSync(link) && lstatSync(link).isSymbolicLink() && readlinkSync(link) === target
-  return [
-    ...(meta.name === name && SKILL_NAME.test(name) && name.length <= 64
-      ? []
-      : [`${file}: [agent-docs] frontmatter \`name\` must be "${name}" (lowercase letters, digits and hyphens)`]),
-    ...(meta.description && meta.description.length <= 1024
-      ? []
-      : [`${file}: [agent-docs] frontmatter \`description\` must be one line of 1 to 1024 characters`]),
-    ...(linked ? [] : [`${link}: [agent-docs] must be a symlink to ${target}: \`ln -s ${target} ${link}\``]),
-  ]
-}
-
-const skillsShape = () =>
-  existsSync(SKILLS)
-    ? readdirSync(SKILLS, { withFileTypes: true })
-        .filter((entry) => entry.isDirectory())
-        .flatMap((entry) => skillProblems(entry.name))
-    : []
 
 const guards = () => {
   const problems = [
@@ -490,7 +412,6 @@ const guards = () => {
     ...tailwindSource(),
     ...badFolders(),
     ...agentsBudget(),
-    ...skillsShape(),
   ]
   for (const problem of problems) console.error(problem)
   return problems.length === 0

@@ -21,7 +21,7 @@ description, then load the whole file.
 | `add-page` | A page, form or UI state is added, with its axe, landmark, tab-order and Lighthouse obligations |
 | `upgrade-prerelease-deps` | Any dependency bump, above all the pinned pre-release packages; holds the version policy |
 
-Rules for editing them, checked by the `agent-docs` guard of `pnpm check`:
+Rules for editing them:
 
 - `name` equals the folder name (lowercase letters, digits and hyphens, at most 64 characters) and
   `description` is one line of at most 1,024 characters (the [Agent Skills spec](https://agentskills.io/specification);
@@ -31,9 +31,9 @@ Rules for editing them, checked by the `agent-docs` guard of `pnpm check`:
 - Keep each `SKILL.md` well under 500 lines; link to docs for reference material instead of copying it.
 - `skills-lock.json` tracks only vendored skills; project skills are not in it.
 
-The same guard keeps the instruction files small. The root `AGENTS.md` stays under 14 KiB, because every session
-loads it. Nested `AGENTS.md` files (`tests/`, `src/server/`, `src/features/`) hold rules for one directory; each
-has a `CLAUDE.md` next to it containing `@AGENTS.md`, because Claude Code loads a subdirectory's `CLAUDE.md` when
+The `agent-docs` guard of `pnpm check` keeps the instruction files small. The root `AGENTS.md` stays under
+14 KiB, because every session loads it. Nested `AGENTS.md` files (`tests/`, `src/server/`, `src/features/`) hold
+rules for one directory; give each a `CLAUDE.md` next to it containing `@AGENTS.md`, because Claude Code loads a subdirectory's `CLAUDE.md` when
 it reads a file there and, with a root `CLAUDE.md` present, does not read `AGENTS.md` files on its own. Codex reads
 nested files only for a session started inside that directory, concatenating every `AGENTS.md` from the root down
 and stopping at 32 KiB (`project_doc_max_bytes`), so the root file points to each nested one and every

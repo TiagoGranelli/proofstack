@@ -1,11 +1,3 @@
----
-title: Fix a post at the length limit flagged as too long
-kind: planted bug
-setup: setup/fix-post-length-check.patch
-solution: solutions/fix-post-length-check.patch
-timeout_minutes: 20
----
-
 A user reports:
 
 > I pasted a post of exactly 280 characters into the composer on the dashboard. The counter says 280/280, but the

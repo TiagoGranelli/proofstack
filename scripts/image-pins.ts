@@ -8,6 +8,7 @@ const PINNED_COPIES = [
   '.github/workflows/ci.yml',
   '.github/workflows/copilot-setup-steps.yml',
   'Dockerfile',
+  'evals/Dockerfile',
 ]
 
 /** Each pinned reference with a pattern for `<name>:<tag>[@sha256:...]` of the same image. */

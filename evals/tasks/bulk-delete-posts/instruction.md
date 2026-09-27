@@ -1,9 +1,3 @@
----
-title: Add a bulk delete endpoint with a typed error
-kind: new endpoint and typed error
-timeout_minutes: 45
----
-
 Authors want to delete several of their posts at once. Add an endpoint for it to the API contract, with a new
 typed error, and wire it through the server, the generated SDK and the tests. No UI is needed.
 

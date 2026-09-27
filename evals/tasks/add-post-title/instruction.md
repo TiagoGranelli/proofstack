@@ -1,9 +1,3 @@
----
-title: Add an optional title to posts, end to end
-kind: feature across database, API and UI
-timeout_minutes: 45
----
-
 Authors want to give a post an optional title. Add it end to end: database, API contract, server, generated
 SDK, UI and tests.
 

@@ -10,7 +10,7 @@
     // Target of components.json `aliases.utils`; the shadcn CLI resolves it when adding components.
     "src/lib/utils.ts"
   ],
-  // evals/: the hidden eval checks resolve their imports only once scripts/agent-eval.ts copies them into tests/.
+  // evals/: the hidden eval checks resolve their imports only once evals/grade.sh copies them into tests/.
   "ignorePatterns": [
     "node_modules/**",
     ".output/**",
