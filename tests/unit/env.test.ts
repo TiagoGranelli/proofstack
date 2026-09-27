@@ -1,6 +1,7 @@
 // src/server/env.ts validates the environment once, at import, and stops the process with a message naming
 // the variable. Each test imports a fresh copy of the module under its own environment.
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import { stubEnvironment } from './process-fakes.ts'
 
 /** Valid values for every required variable; each test overrides what it checks. */
 const BASE = {
@@ -18,14 +19,10 @@ const BASE = {
 }
 
 const load = async (overrides: Partial<Record<keyof typeof BASE, string | undefined>> = {}) => {
-  for (const [name, value] of Object.entries({ ...BASE, ...overrides })) vi.stubEnv(name, value)
+  stubEnvironment({ ...BASE, ...overrides })
   vi.resetModules()
   return (await import('#/server/env.ts')).env
 }
-
-afterEach(() => {
-  vi.unstubAllEnvs()
-})
 
 describe('env', () => {
   it('reads a minimal environment with its defaults', async () => {
