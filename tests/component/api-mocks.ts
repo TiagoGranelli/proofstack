@@ -107,6 +107,18 @@ export const authFunction = <T = null>(name: AuthFunctionName, answer: AuthAnswe
     return HttpResponse.json(answer as JsonBodyType)
   })
 
+/**
+ * Records the `data` of every call to server function `name` (in `data`) and lets the call through to the
+ * handler that answers it: `worker.use(calls.handler, authFunction(name, answer))`, recorder first.
+ */
+export const authCalls = (name: AuthFunctionName) => {
+  const data: unknown[] = []
+  const handler = http.post(`*${authFunctionPath(name)}`, async ({ request }) => {
+    data.push(await request.clone().json())
+  })
+  return { handler, data }
+}
+
 /** The sign-in and sign-out server functions, with the answers the tests use most. */
 export const auth = {
   signIn: (outcome: 'ok' | 'invalid' | 'network' | { wait: () => Promise<void> }) =>
