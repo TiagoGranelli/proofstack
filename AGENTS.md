@@ -157,13 +157,15 @@ Test each behavior in the cheapest layer that can observe it:
   `Request`s. The project sets dummy env values (`vitest.config.ts`) because `src/server/env.ts` validates
   at import; nothing connects to them.
 - **component.** Render with `renderInApp(ui, { url })` from `tests/component/test-utils.tsx` (memory
-  router with the app's paths, fresh `QueryClient`; returns `router` and `queryClient`). Mock the network
-  per test with `worker.use(...)` from `tests/component/api-mocks.ts`: `api.<operation>({ body })` (handlers
-  generated from `openapi.json` by Hey API's `msw` plugin into `src/sdk/msw.gen.ts`), `apiError(operation,
-  status, body)` (only statuses and bodies the operation declares), `apiFailure` (network error or non-JSON
-  body), `held()` (a response that waits, for pending states), and `authFunction(name, answer)` with the
-  shortcuts `auth.signIn`/`auth.signOut` for the account server functions (outside the contract; `answer`
-  is their typed `AuthOutcome`, `'network'`, `'thrown'` or `held()`). A request to `/api` or `/_serverFn`
+  router with the app's paths, fresh `QueryClient`; returns `router` and `queryClient`); `route: { path,
+  route }` mounts a real `src/routes` file route there (search validation, loader, component). Mock the
+  network per test with `worker.use(...)` from `tests/component/api-mocks.ts`: `api.<operation>({ body })`
+  (handlers generated from `openapi.json` by Hey API's `msw` plugin into `src/sdk/msw.gen.ts`),
+  `apiError(operation, status, body)` (only statuses and bodies the operation declares), `apiFailure`
+  (network error or non-JSON body), `held()` (a response that waits, for pending states), and
+  `authFunction(name, answer)` with the shortcuts `auth.signIn`/`auth.signOut` for the account server
+  functions (outside the contract; `answer` is their typed `AuthOutcome`, `'network'`, `'thrown'` or
+  `held()`); `authCalls(name)` records the `data` each call sends. A request to `/api` or `/_serverFn`
   without a handler fails the test. `#/lib/api-client.ts` is aliased to its browser branch
   (`tests/component/stubs/api-client.ts`), and `#/lib/auth.functions.ts` to a stub that posts each call to
   `/_serverFn/auth/<name>` (`tests/component/stubs/auth-functions.ts`).
@@ -258,9 +260,9 @@ Regenerate these files; never edit them by hand:
   `src/contract`, `src/server/api`, and `scripts/openapi.ts`; when upgrading, rewrite them there, run
   `pnpm codegen`, and review the `openapi.json` diff. Core `effect` is also imported by `src/server/posts`
   and `src/server/db/client.ts`.
-- **TypeScript.** `tsc` is TS 7 (`@typescript/native`). The package named `typescript` is the
-  `@typescript/typescript6@6.0.2` shim, which loads `typescript@6.0.3`, because Hey API 0.99 crashes on
-  TS 7 ([ADR 0002](docs/decisions/0002-typescript-7-with-typescript-6-alias.md)).
+- **TypeScript.** The project has one TypeScript, 7.0.2 (no JS compiler API). Hey API is pinned to the
+  `next` snapshot `0.0.0-next-20260824173136` because the stable 0.99.0 needs that API and crashes on TS 7.
+  Do not "upgrade" it to 0.99.0; Dependabot ignores it ([ADR 0002](docs/decisions/0002-typescript-7.md)).
   `scripts/*.ts` run through Node's type stripping, so use erasable syntax only (no enums, namespaces,
   or constructor parameter properties).
 - **Prerender.** Static routes go in `nitro({ prerender: { routes } })` in `vite.config.ts`: Nitro, the
