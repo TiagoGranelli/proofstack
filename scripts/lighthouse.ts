@@ -1,9 +1,11 @@
 // Lighthouse gate. Boots the built app against a fresh database with seeded posts and a signed-in author,
-// puts the reference edge in front of it (deploy/Caddyfile: compression, as in production), runs Lighthouse
-// several times per page and form factor with Playwright's Chromium, and applies POLICY. Writes
-// lighthouse-report/summary.{json,md} plus every raw report.
+// puts the reference edge in front of it (deploy/Caddyfile: HTTPS, HTTP/2, compression, as in production),
+// runs Lighthouse several times per page and form factor with Playwright's Chromium, and applies POLICY.
+// Writes lighthouse-report/summary.{json,md} plus every raw report.
 // Usage: pnpm build && pnpm lighthouse [--runs=3] [--page=home] [--form-factor=mobile] [--direct]
+//                                      [--edge-protocol=h2|h1|http]
 //   --direct: measure the Node server without the edge (to tell app regressions from edge ones).
+//   --edge-protocol: h2 (default, production), or HTTP/1.1 over HTTPS (h1) or plain HTTP (http) to compare.
 // Exit codes: 0 pass, 1 fail, 2 inconclusive (the machine measured as too slow for the performance score).
 // Lighthouse runs one at a time; run nothing else heavy meanwhile, it shifts the simulated timings.
 // Env: LIGHTHOUSE_DATABASE_URL overrides the database (default: proofstack_lighthouse_<pid>_test next to
@@ -81,6 +83,15 @@ const runs = Number(option('runs') ?? 3)
 const formFactors = (option('form-factor') ? [option('form-factor')] : ['mobile', 'desktop']) as FormFactor[]
 const pages = PAGES.filter((p) => !option('page') || p.name === option('page'))
 const direct = process.argv.includes('--direct')
+/**
+ * How Chrome reaches the edge. h2 (default) is production: HTTPS, where Chrome negotiates HTTP/2 and
+ * shares one connection for the page. h1 forces HTTP/1.1 over the same HTTPS edge, http is plain HTTP/1.1;
+ * both only to compare.
+ */
+const PROTOCOLS = ['h2', 'h1', 'http'] as const
+const protocol = (option('edge-protocol') ?? 'h2') as (typeof PROTOCOLS)[number]
+if (!PROTOCOLS.includes(protocol)) throw new Error(`--edge-protocol must be one of ${PROTOCOLS.join(', ')}`)
+const tls = !direct && protocol !== 'http'
 const OUT = 'lighthouse-report'
 
 const median = (values: number[]) => {
@@ -207,9 +218,15 @@ const databaseUrl = testDatabaseUrl('lighthouse', process.env.LIGHTHOUSE_DATABAS
 const app = await startApp({
   databaseUrl,
   logFile: join(OUT, 'app-server.log'),
-  ...(direct ? {} : { edge: { logFile: join(OUT, 'edge.log') } }),
+  ...(direct ? {} : { edge: { logFile: join(OUT, 'edge.log'), tls } }),
 })
-console.log(`measuring ${app.url}${direct ? ' (Node server, no edge)' : ` (edge in front of ${app.directUrl})`}`)
+// Chrome trusts exactly the key of the edge's local certificate (not every certificate error), so the page
+// is a secure https origin as in production, and best-practices audits see what users would see.
+if (app.edgeCertificateSpki) chromeFlags.push(`--ignore-certificate-errors-spki-list=${app.edgeCertificateSpki}`)
+if (protocol === 'h1') chromeFlags.push('--disable-http2', '--disable-quic')
+console.log(
+  `measuring ${app.url}${direct ? ' (Node server, no edge)' : ` (edge in front of ${app.directUrl}, ${protocol})`}`,
+)
 const results = []
 try {
   await seedPosts(databaseUrl, app.user.email)
@@ -343,7 +360,7 @@ const fmtScore = (s: { median: number; min: number; max: number } | null, gated:
 const indexes = results.flatMap((r) => r.perRun.map((p) => p.benchmarkIndex))
 const table = [
   `Lighthouse ${JSON.parse(readFileSync('node_modules/lighthouse/package.json', 'utf8')).version}, median of ${runs} runs, ` +
-    `${direct ? 'Node server without the edge' : 'through the Caddy edge'}. benchmarkIndex ${Math.min(...indexes)}–${Math.max(...indexes)}. ` +
+    `${direct ? 'Node server without the edge' : `through the Caddy edge (${protocol})`}. benchmarkIndex ${Math.min(...indexes)}–${Math.max(...indexes)}. ` +
     '* = reported, not gated. Diagnose with `<page>-<form factor>-median.report.html` (Lighthouse median run).',
   '',
   '| Page | Form factor | Perf | A11y | Best pr. | SEO | Agentic | FCP | LCP | TBT | CLS | Bytes | Result |',
@@ -358,7 +375,7 @@ const table = [
 
 writeFileSync(
   join(OUT, 'summary.json'),
-  `${JSON.stringify({ policy: POLICY, edge: !direct, shmBytes, results }, null, 2)}\n`,
+  `${JSON.stringify({ policy: POLICY, edge: direct ? false : protocol, shmBytes, results }, null, 2)}\n`,
 )
 writeFileSync(join(OUT, 'summary.md'), `${table}\n`)
 if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `## Lighthouse\n\n${table}\n`)

@@ -13,7 +13,7 @@ observed only in a throwaway project.
 | Drift | `pnpm check:drift` | contract (openapi.json + SDK regenerate byte-identical), migrations (no pending `db:generate`), auth (Better Auth schema = `auth.ts`), database (migrations on a fresh DB = schema). |
 | Build | `pnpm build` | OK in about 3 s (peak about 1.9 GB measured earlier). Fails if prerendering fails. |
 | App | `pnpm verify:app` | 127 integration tests in 14 files (generated SDK against the built servers, open and closed sign-up, on a fresh migrated database: contract equality, CRUD, author isolation, validation bodies, CSRF, auth surface, both sign-up policies, client IPs, rate limits, CSP, caching, assets, database failure, API write limits) and 145 Playwright tests (the seed, then 72 per browser on chromium and firefox: flows, account lifecycle through Mailpit, pagination, axe on every page state, keyboard and focus, CSP violations). Graceful shutdown checked (about 1.0 s). About 50 s. `pnpm ci:local verify` runs all five browser projects. |
-| Lighthouse | `pnpm lighthouse --runs=3` | **Being fixed; no current result.** The numbers measured before the edge proxy, stock `HeadContent` and the account pages no longer apply, and the run through the Caddy edge is being reworked. This row gets the new medians when that lands. |
+| Lighthouse | `pnpm lighthouse --runs=5` | Through the Caddy edge over HTTPS and HTTP/2 ([ADR 0011](decisions/0011-lighthouse-over-https-http2.md)). Every page, mobile and desktop: performance, accessibility, best practices and SEO (where gated) medians 100; mobile FCP = LCP 1.50 s (desktop 0.32–0.37 s), TBT 0, CLS 0, 132–146 KiB. 39 of 40 mobile runs at 100 on a quiet machine; the 1.50 s sit one simulated round trip below 99, so a busy machine yields 99s (ADR 0011). Over plain HTTP/1.1 the same build scores 98 (dashboard 97). |
 | CI config | actionlint | 0 findings; all actions pinned by commit SHA. The workflow has not run on GitHub (no remote). |
 
 Mutation testing: 29 mutants in the first round, 8 survived (including three author-isolation bugs, because
@@ -41,7 +41,7 @@ Closed = decided and proven in repo. Hypothesis = chosen, needs more evidence. O
 | Persistence | Postgres 18.6, Drizzle ORM 0.45.3 + drizzle-kit 0.31.11, `pg` 8.23; `scripts/migrate.ts` with advisory lock and bounded DDL lock timeout | Drizzle 1.0 is RC; its Effect integration targets Effect v3. | Low | Closed ([ADR 0005](decisions/0005-drizzle-0-45-stable.md)) |
 | SDK | Hey API `next` snapshot (fetch client, TanStack Query and MSW plugins), committed in `src/sdk` | Deterministic; new error tags break typecheck until the UI maps them. | Low | Closed |
 | Lint / format / architecture | Oxlint 1.85 + tsgolint (no ESLint), `@shadcn/lint` via `jsPlugins`, Oxfmt 0.70 (0.x, announced as beta), Fallow 3.29 zones | All in `pnpm check`, with zero warnings allowed (every rule is error or off). A config that stopped ignoring `node_modules` once made tsgolint reach 17 GB; ignores now include it and tools are run with explicit scope. | Low | Closed |
-| Lighthouse | Gate in `scripts/lighthouse.ts` through the Caddy edge, 5 runs in CI | Being re-measured (see the verification log). GitHub runners are slower; watch the first CI run before tightening. | Medium | Hypothesis (being fixed) |
+| Lighthouse | Gate in `scripts/lighthouse.ts` through the Caddy edge over HTTPS and HTTP/2, 5 runs in CI | Mobile 100 with little margin: Lantern simulates the preloaded scripts as blocking the first paint (GoogleChrome/lighthouse#16539), and CPU noise on a busy machine moves single runs to 99. GitHub runners are slower; watch the first CI run before tightening. | Medium | Measured ([ADR 0011](decisions/0011-lighthouse-over-https-http2.md)) |
 | Skills / sources | shadcn skill pinned by commit; TanStack/Effect/Fallow/Playwright docs shipped in packages (pinned by lockfile); on-demand snapshots via `scripts/vendor-source.ts`, no subtree | Subtree needs a first commit, pulls 100–160 MB upstreams and cannot filter paths. Better Auth skills repo has no license. | Low | Closed ([ADR 0008](decisions/0008-agent-skills-and-dependency-sources.md)) |
 | Operations | Dockerfile (non-root, healthcheck, SIGTERM), readiness/liveness, sanitized JSON logs, body limits, CSP with per-request nonce, no-store on private responses | See [operations.md](operations.md). Rate-limit counters live in Postgres, so instances share them. | Medium | Closed |
 
@@ -60,7 +60,7 @@ integration gates to catch breakage.
 - Owner decisions: dropping the Geist font, and whether to allow shell execution in the shadcn skill
   (`npx shadcn@latest` inside `SKILL.md`; `AGENTS.md` tells agents to use the pinned CLI). Sign-up is decided
   ([ADR 0003](decisions/0003-sign-up-policy.md)); `inlineCss` was dropped.
-- Lighthouse through the edge: being fixed, then the verification log gets its numbers.
+- Lighthouse: TanStack/router#8520 (transitive route preloads) to take when released ([ADR 0011](decisions/0011-lighthouse-over-https-http2.md)).
 - Upstream releases the code waits for: [plan.md, "Waiting on upstream"](plan.md#waiting-on-upstream).
 - First GitHub Actions run (Lighthouse on slower runners, Dependabot with pnpm 12 lockfiles).
 - Name: "ProofStack" is used by other products (for example proofstack.build); revisit before publishing.

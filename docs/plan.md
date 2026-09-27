@@ -35,7 +35,7 @@ upstream release, listed under [Waiting on upstream](#waiting-on-upstream).
 | Global `console` patch for log sanitization | Global function middleware that logs server-function errors through `log()`; Nitro `error` hook for process errors; DB-failure test for leaks | Done [334d28b]. Start has no logger hook |
 | Unknown server-function 404 by matching Start's error message | Removed; Start's own answer until upstream (ADR 0009) | Done [cbd7314]. Waiting on TanStack/router#8246 |
 | `beforeLoad` freshness trick on `/` | Writes await `invalidatePosts` (`refetchType: 'all'`) | Done [6896619] |
-| Custom `Head` without modulepreload + experimental `inlineCss` | Stock `HeadContent`, external CSS, compression at the edge | Done [536471e, 12b1d91]. Lighthouse through the edge: see stack-review |
+| Custom `Head` without modulepreload + experimental `inlineCss` | Stock `HeadContent`, external CSS, compression at the edge, Lighthouse over HTTPS and HTTP/2 (ADR 0011) | Done [536471e, 12b1d91, 868546e]. Upstream: TanStack/router#8520 (ours, fixes #8511); commented on #6749 and #8212 |
 | Shutdown registry on `globalThis` | Nitro `close` hook through `useNitroHooks()` | Done [a2e8e6a] |
 | Custom client-IP header + trust of all private peers | Better Auth `advanced.ipAddress.trustedProxies` (`TRUSTED_PROXIES`); the peer is appended to `X-Forwarded-For`; resolver unit-tested; spoof test | Done [dc1ca01]. Nitro's srvx options passthrough is merged (nitrojs/nitro#4620, #4654) but not in the installed 3.0.260903-beta |
 | Auth allowlist in the route handler | Local Better Auth plugin (`onRequest` → 404) | Done [5ef8fdb]. Waiting on better-auth#11078 (`enabledPaths`) to drop the plugin |
@@ -57,8 +57,9 @@ Caddy is the reference edge with compression [12b1d91]; Lighthouse runs through 
 warnings, 100 on accessibility, best practices and SEO, performance by median and budgets, inconclusive on a
 slow machine [c9b664d]. The Better Auth client left the bundle when every account action became a server
 function [8ae8443]; `no-restricted-imports` in `.oxlintrc.json` keeps `better-auth` (client included) out of UI
-code. The current Lighthouse result is
-being re-measured (see stack-review).
+code. The edge serves HTTPS with HTTP/2 to Lighthouse as in production; over plain HTTP/1.1 the simulation
+opened a connection per preloaded script, and mobile scored 98 (ADR 0011) [868546e]. Mobile and desktop now
+score 100 on every page (see stack-review).
 
 ## 5. Tests (done)
 
@@ -87,3 +88,5 @@ the same scripts in the Playwright Ubuntu image next to Postgres [f1b26a9]. `act
 | A Nitro release with nitrojs/nitro#4620 and #4654 | Drop the `bodyLimit` middleware for `maxRequestBodySize`; pass `trustProxy` |
 | A stable Hey API release with the TypeScript-free printer | Leave the `next` snapshot (ADR 0002) |
 | TanStack/router#7473 | Revisit ADR 0004 |
+| TanStack/router#8520 (ours, fixes #8511) | Upgrade; `/` and `/dashboard` then preload `useBaseQuery-*.js`; re-run `pnpm lighthouse` (ADR 0011) |
+| GoogleChrome/lighthouse#16539 | Lantern stops simulating preloaded scripts as blocking the first paint; mobile FCP should drop well below 1.5 s (ADR 0011) |
