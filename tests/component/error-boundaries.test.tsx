@@ -22,7 +22,7 @@ describe('route errorComponent', () => {
       .element(page.getByRole('alert'))
       .toHaveTextContent('Could not load your posts. Check your connection and try again.')
     await expect.element(tryAgain()).toBeEnabled()
-    await expect.element(page.getByRole('link', { name: 'Go to latest posts' })).toHaveAttribute('href', '/')
+    await expect.element(page.getByRole('link', { name: 'Go to the home page' })).toHaveAttribute('href', '/')
   })
 
   it('offers to sign in when the dashboard hit an ended session', async () => {

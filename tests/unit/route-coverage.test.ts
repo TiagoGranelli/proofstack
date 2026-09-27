@@ -24,9 +24,8 @@ describe('pagePath', () => {
 
 describe('reachedPaths', () => {
   it('reads visited paths without their query, and the helpers that reach a page', () => {
-    const block = `visit(page, '/verify-email?token=x'); visit(page, '/about')
-      await dashboardWithMyPost(page, author)
-      await navigateWithApiResponse(page, '/api/posts', { json: lastPage() })`
+    const block = `visit(page, '/verify-email?token=x'); visit(page, '/about'); visit(page, '/')
+      await navigateWithApiResponse(page, '/api/me', { status: 503, json: {} })`
     expect([...reachedPaths(block)].toSorted()).toEqual(['/', '/about', '/dashboard', '/verify-email'])
   })
 })

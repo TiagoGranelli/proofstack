@@ -1,10 +1,10 @@
-import { QueryClient } from '@tanstack/react-query'
 import { createRouter } from '@tanstack/react-router'
 import { setupRouterSsrQueryIntegration } from '@tanstack/react-router-ssr-query'
 import { createIsomorphicFn } from '@tanstack/react-start'
 import { RouteError } from '#/components/errors/route-error.tsx'
 import { RouteNotFound } from '#/components/errors/route-not-found.tsx'
 import { RoutePending } from '#/components/layouts/route-pending.tsx'
+import { createQueryClient } from '#/lib/query-client.ts'
 import { routeTree } from './routeTree.gen.ts'
 
 // A fresh CSP nonce per request (Start's documented pattern, TanStack/router e2e/react-start/csp). The router
@@ -17,16 +17,16 @@ const getSsrOptions = createIsomorphicFn().server(() => {
 })
 
 // Called once per request on the server, so every request gets its own QueryClient and no cached
-// query (such as another user's posts) can leak between requests.
+// query (such as another user's data) can leak between requests.
 export function getRouter() {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 30_000 } } })
+  const queryClient = createQueryClient({ defaultOptions: { queries: { staleTime: 30_000 } } })
   const router = createRouter({
     routeTree,
     context: { queryClient },
     // Navigation is stale-while-revalidate (the router default): a revisited route renders its cached data
-    // at once and refetches in the background. Data this tab changed is already fresh by then: every post
-    // write refetches the lists it changed before it finishes (invalidatePosts in
-    // src/features/posts/api/posts-cache.ts), so no global blocking reload is needed.
+    // at once and refetches in the background. Data this tab changed is already fresh by then: each mutation
+    // declares the queries it changed in `meta.invalidates`, which src/lib/query-client.ts refetches before the
+    // mutation finishes, so no global blocking reload is needed.
     defaultPreload: 'intent',
     defaultErrorComponent: RouteError,
     defaultPendingComponent: RoutePending,

@@ -126,7 +126,7 @@ const seedDatabase = async (databaseUrl: string, env: NodeJS.ProcessEnv, users: 
   await resetTestDatabase(databaseUrl)
   await Promise.all(
     users.map((u) =>
-      runQuiet('node', ['scripts/create-user.ts', u.email, u.name], { ...env, PROOFSTACK_USER_PASSWORD: u.password }),
+      runQuiet('node', ['scripts/create-user.ts', u.email, u.name], { ...env, CREATE_USER_PASSWORD: u.password }),
     ),
   )
 }

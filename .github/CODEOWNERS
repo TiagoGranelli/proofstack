@@ -1,37 +1,38 @@
 # The quality gates decide what "done" means for every change, agent-written ones included. A pull request that
 # loosens them (a rule turned off, a threshold raised, a module dropped from COVERAGE_GATE, an allowlist entry in
-# scripts/check.ts) needs a review from the owners below. Replace @proofstack/maintainers with the real team or
+# scripts/check.ts) needs a review from the owners below. Replace @your-org/maintainers with the real team or
 # user, and require code-owner review in the branch protection of main; until then this file only suggests
 # reviewers. The last matching pattern wins, so later lines narrow earlier ones.
 
 # Lint, types, dead code, complexity, duplication, formatting.
-/.oxlintrc.json      @proofstack/maintainers
-/.oxfmtrc.json       @proofstack/maintainers
-/.fallowrc.json      @proofstack/maintainers
-/tsconfig.json       @proofstack/maintainers
+/.oxlintrc.json      @your-org/maintainers
+/.oxfmtrc.json       @your-org/maintainers
+/.fallowrc.json      @your-org/maintainers
+/tsconfig.json       @your-org/maintainers
 
 # Test gates: COVERAGE_GATE and the projects live in vitest.config.ts.
-/vitest.config.ts    @proofstack/maintainers
-/playwright.config.ts @proofstack/maintainers
+/vitest.config.ts    @your-org/maintainers
+/playwright.config.ts @your-org/maintainers
 
 # The gate runner, its guards and allowlists, the drift checks, the pre-commit hook.
-/scripts/check.ts       @proofstack/maintainers
-/scripts/check-drift.ts @proofstack/maintainers
-/scripts/ci-jobs.ts     @proofstack/maintainers
-/.githooks/             @proofstack/maintainers
+/scripts/check.ts       @your-org/maintainers
+/scripts/check-drift.ts @your-org/maintainers
+/scripts/ci-jobs.ts     @your-org/maintainers
+/.githooks/             @your-org/maintainers
 
 # Supply chain: exact versions, build-script, release-age and trust exceptions, overrides, vulnerability and
 # license exceptions, secret-scan and migration-lint exceptions.
-/package.json                 @proofstack/maintainers
-/pnpm-workspace.yaml          @proofstack/maintainers
-/security/                    @proofstack/maintainers
-/scripts/licenses.ts          @proofstack/maintainers
-/scripts/allowlist.ts         @proofstack/maintainers
-/scripts/check-migrations.ts  @proofstack/maintainers
-/scripts/images.ts            @proofstack/maintainers
-/.gitleaks.toml               @proofstack/maintainers
-/.squawk.toml                 @proofstack/maintainers
+/package.json                 @your-org/maintainers
+/pnpm-workspace.yaml          @your-org/maintainers
+/security/                    @your-org/maintainers
+/scripts/licenses.ts          @your-org/maintainers
+/scripts/allowlist.ts         @your-org/maintainers
+/scripts/check-migrations.ts  @your-org/maintainers
+/scripts/images.ts            @your-org/maintainers
+/.gitleaks.toml               @your-org/maintainers
+/.gitleaksignore              @your-org/maintainers
+/.squawk.toml                 @your-org/maintainers
 
 # CI workflows, actions, Renovate and this file.
-/.github/            @proofstack/maintainers
-/renovate.json       @proofstack/maintainers
+/.github/            @your-org/maintainers
+/renovate.json       @your-org/maintainers

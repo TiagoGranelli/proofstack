@@ -5,7 +5,7 @@
 import { describe, expect, it, onTestFinished } from '@effect/vitest'
 import { HttpApi } from 'effect/unstable/httpapi'
 import { Api } from '#/contract/api.ts'
-import { webHandler } from './harness.ts'
+import { authors, webHandler } from './harness.ts'
 
 const APP = 'http://localhost:3000'
 const MISSING_ID = '00000000-0000-4000-8000-000000000000'
@@ -26,10 +26,15 @@ HttpApi.reflect(Api, {
     }),
 })
 
-/** What each operation answers while every repository call fails. Liveness never touches the database. */
+/**
+ * What each operation answers while every repository call fails. Liveness never touches the database, and
+ * neither does `me.get` here, where the session check is faked (the real one reads the session from Postgres:
+ * tests/integration/db-failure.test.ts).
+ */
 const EXPECTED: Record<string, { status: number; body: unknown }> = {
   'system.health': { status: 200, body: { status: 'ok' } },
   'system.ready': { status: 503, body: { _tag: 'ServiceUnavailable', message: 'Database unavailable' } },
+  'me.get': { status: 200, body: authors.alice },
   'publicPosts.list': { status: 500, body: '' },
   'myPosts.list': { status: 500, body: '' },
   'myPosts.create': { status: 500, body: '' },

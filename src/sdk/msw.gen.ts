@@ -2,7 +2,7 @@
 
 import { http, type HttpHandler, HttpResponse, type HttpResponseResolver, type RequestHandlerOptions as RequestHandlerOptions2 } from 'msw';
 
-import type { ClientOptions, MyPostsCreateData, MyPostsCreateResponses, MyPostsListResponses, MyPostsRemoveResponses, MyPostsUpdateData, MyPostsUpdateResponses, PublicPostsListResponses, SystemHealthResponses, SystemReadyResponses } from './types.gen';
+import type { ClientOptions, MeGetResponses, MyPostsCreateData, MyPostsCreateResponses, MyPostsListResponses, MyPostsRemoveResponses, MyPostsUpdateData, MyPostsUpdateResponses, PublicPostsListResponses, SystemHealthResponses, SystemReadyResponses } from './types.gen';
 
 export type RequestHandlerOptions = RequestHandlerOptions2 & {
   baseUrl?: ClientOptions['baseUrl'];
@@ -46,6 +46,33 @@ export type HandleSystemReadyResponse = {
  */
 export function handleSystemReady(response?: HandleSystemReadyResponse | HttpResponseResolver<never, never>, options?: RequestHandlerOptions): HttpHandler {
   return http.get<never, never>(`${options?.baseUrl ?? '*'}/api/ready`, info => {
+    if (typeof response === 'function') {
+      return response(info);
+    }
+    const body = response?.body;
+    if (body !== undefined) {
+      return HttpResponse.json(body, { status: response?.status ?? 200 });
+    }
+    if (options?.responseFallback === 'passthrough') {
+      return;
+    }
+    return new Response('Not Implemented', {
+      status: 501,
+      statusText: 'Not Implemented'
+    });
+  }, options);
+}
+
+export type HandleMeGetResponse = {
+  body: MeGetResponses[200];
+  status?: 200;
+};
+
+/**
+ * Handler for the `GET /api/me` operation.
+ */
+export function handleMeGet(response?: HandleMeGetResponse | HttpResponseResolver<never, never>, options?: RequestHandlerOptions): HttpHandler {
+  return http.get<never, never>(`${options?.baseUrl ?? '*'}/api/me`, info => {
     if (typeof response === 'function') {
       return response(info);
     }
@@ -216,6 +243,10 @@ export type MswHandlerFactories = {
    */
   systemReady: typeof handleSystemReady;
   /**
+   * Handler for the `GET /api/me` operation.
+   */
+  meGet: typeof handleMeGet;
+  /**
    * Handler for the `GET /api/posts` operation.
    */
   publicPostsList: typeof handlePublicPostsList;
@@ -254,6 +285,7 @@ export function createMswHandlers(config: RequestHandlerOptions = {}): CreateMsw
   const pick: CreateMswHandlersResult['pick'] = {
     systemHealth: wrap(handleSystemHealth),
     systemReady: wrap(handleSystemReady),
+    meGet: wrap(handleMeGet),
     publicPostsList: wrap(handlePublicPostsList),
     myPostsList: wrap(handleMyPostsList),
     myPostsCreate: wrap(handleMyPostsCreate),
@@ -276,6 +308,7 @@ export function createMswHandlers(config: RequestHandlerOptions = {}): CreateMsw
       invoke(pick.myPostsCreate, overrides.myPostsCreate),
       invoke(pick.systemHealth, overrides.systemHealth),
       invoke(pick.systemReady, overrides.systemReady),
+      invoke(pick.meGet, overrides.meGet),
       invoke(pick.publicPostsList, overrides.publicPostsList)
     ];
   };

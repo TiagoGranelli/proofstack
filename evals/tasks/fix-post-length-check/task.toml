@@ -1,7 +1,7 @@
 schema_version = "1.3"
 
 [task]
-name = "proofstack/fix-post-length-check"
+name = "app/fix-post-length-check"
 
 [metadata]
 category = "bugfix"

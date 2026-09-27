@@ -3,7 +3,7 @@
 // share its bucket; deletes of a post that does not exist count without changing any data.
 import { Pool } from 'pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { POST_WRITE_WINDOW_SECONDS, POST_WRITES_PER_WINDOW } from '#/contract/limits.ts'
+import { WRITE_WINDOW_SECONDS, WRITES_PER_WINDOW } from '#/contract/limits.ts'
 import { appUrl, clientIps, createUser, signIn } from './helpers.ts'
 
 const nextIp = clientIps('100.64.6')
@@ -23,10 +23,10 @@ const deleteMissing = () =>
 
 describe('write rate limit', () => {
   it('admits exactly the limit when writes race, then answers 429 with the wait', async () => {
-    const responses = await Promise.all(Array.from({ length: POST_WRITES_PER_WINDOW + 10 }, deleteMissing))
+    const responses = await Promise.all(Array.from({ length: WRITES_PER_WINDOW + 10 }, deleteMissing))
     const statuses = responses.map((res) => res.status).toSorted((a, b) => a - b)
     expect(statuses).toEqual([
-      ...Array.from({ length: POST_WRITES_PER_WINDOW }, () => 404),
+      ...Array.from({ length: WRITES_PER_WINDOW }, () => 404),
       ...Array.from({ length: 10 }, () => 429),
     ])
 
@@ -42,11 +42,11 @@ describe('write rate limit', () => {
     const after = Date.now()
     expect(refused.status).toBe(429)
     const body = (await refused.json()) as { _tag: string; retryAfter: number }
-    expect(body).toMatchObject({ _tag: 'RateLimited', message: 'Too many changes to your posts' })
-    const windowEnd = Number(lastRequest) + POST_WRITE_WINDOW_SECONDS * 1000
+    expect(body).toMatchObject({ _tag: 'RateLimited', message: 'Too many changes in a short time' })
+    const windowEnd = Number(lastRequest) + WRITE_WINDOW_SECONDS * 1000
     expect(body.retryAfter).toBeGreaterThanOrEqual(Math.ceil((windowEnd - after) / 1000))
     expect(body.retryAfter).toBeLessThanOrEqual(Math.ceil((windowEnd - before) / 1000))
-    expect(body.retryAfter).toBeLessThan(POST_WRITE_WINDOW_SECONDS - 20)
+    expect(body.retryAfter).toBeLessThan(WRITE_WINDOW_SECONDS - 20)
 
     // Creating and editing share the bucket: refused the same way, before the body is read, and counted.
     for (const [method, path] of [
@@ -59,7 +59,7 @@ describe('write rate limit', () => {
         body: JSON.stringify({ body: 'over the limit' }),
       })
       expect(res.status, method).toBe(429)
-      expect(await res.json()).toMatchObject({ _tag: 'RateLimited', message: 'Too many changes to your posts' })
+      expect(await res.json()).toMatchObject({ _tag: 'RateLimited', message: 'Too many changes in a short time' })
     }
 
     // One row per user, next to Better Auth's `<ip>|<path>` rows; reads are not counted.
@@ -68,6 +68,6 @@ describe('write rate limit', () => {
       'select key, count from rate_limit where key like $1',
       [`api-write|${userId}`],
     )
-    expect(rows).toEqual([{ key, count: POST_WRITES_PER_WINDOW + 13 }])
+    expect(rows).toEqual([{ key, count: WRITES_PER_WINDOW + 13 }])
   })
 })

@@ -4,7 +4,7 @@
 // line that gives the reason (docs/operations.md, "Migration safety"); a bare squawk-ignore fails here.
 // Every run first lints a known-bad statement and fails unless squawk flags it, so a broken binary or config
 // cannot pass silently.
-// squawk is a pinned release binary, verified by sha256 and cached in ~/.cache/proofstack (XDG_CACHE_HOME):
+// squawk is a pinned release binary, verified by sha256 and cached in ~/.cache/squawk (XDG_CACHE_HOME):
 // the first run downloads it from GitHub, later runs are offline (about 0.1 s).
 // Usage: pnpm check:migrations   (a gate of `pnpm check`)
 import { spawnSync } from 'node:child_process'
@@ -60,7 +60,7 @@ const digest = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex
 const squawk = async () => {
   const asset = ASSETS[platform()]
   if (!asset) throw new Error(`no pinned squawk ${VERSION} binary for ${platform()}`)
-  const dir = join(process.env.XDG_CACHE_HOME || join(homedir(), '.cache'), 'proofstack', `squawk-${VERSION}`)
+  const dir = join(process.env.XDG_CACHE_HOME || join(homedir(), '.cache'), 'squawk', VERSION)
   const binary = join(dir, asset.file)
   if (existsSync(binary) && digest(readFileSync(binary)) === asset.sha256) return binary
   const url = `https://github.com/sbdchd/squawk/releases/download/v${VERSION}/${asset.file}`

@@ -8,7 +8,7 @@ const { email, password } = users.author
 // CSP, the static-file headers and rate limiting are production-only.
 const production = process.env.NODE_ENV === 'production'
 
-const me = (cookie: string) => fetch(`${appUrl}/api/me/posts`, { headers: { cookie } })
+const me = (cookie: string) => fetch(`${appUrl}/api/me`, { headers: { cookie } })
 
 let cookie: string
 
@@ -138,30 +138,27 @@ const postTo = (path: string, body: BodyInit) =>
   } as RequestInit)
 
 describe('requests', () => {
+  // Checked before routing, so any path shows it.
   it('rejects bodies over 64 KiB and bodies without a length', async () => {
-    expect((await postTo('/api/posts', JSON.stringify({ body: 'x'.repeat(70_000) }))).status).toBe(413)
+    expect((await postTo('/api/me', JSON.stringify({ body: 'x'.repeat(70_000) }))).status).toBe(413)
     const stream = new ReadableStream({
       start(controller) {
         controller.enqueue(new TextEncoder().encode('{"body":"x"}'))
         controller.close()
       },
     })
-    expect((await postTo('/api/posts', stream)).status).toBe(411)
+    expect((await postTo('/api/me', stream)).status).toBe(411)
   })
 
   it('does not leak internals in error responses', async () => {
-    const res = await fetch(`${appUrl}/api/me/posts`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', origin: appUrl, cookie },
-      body: '{',
-    })
-    expect(res.status).toBe(400)
+    const forged = await fetch(`${appUrl}/api/me`, { headers: { cookie: 'better-auth.session_token=forged.value' } })
+    expect(forged.status).toBe(401)
     const unknownFn = await fetch(`${appUrl}/_serverFn/does-not-exist`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', origin: appUrl },
       body: '{}',
     })
-    for (const text of [await res.text(), await unknownFn.text()]) {
+    for (const text of [await forged.text(), await unknownFn.text()]) {
       expect(text).not.toMatch(/\bat .+:\d+:\d+|node_modules|\.mjs|select |postgres/i)
     }
   })

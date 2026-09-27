@@ -15,7 +15,7 @@ accounts are created.
 - `AUTH_SIGN_UP` chooses the policy: `closed` (the default) or `open`. Anything else stops the server at
   startup.
   - `closed`: accounts come from `pnpm user:create <email> <name>` (password from stdin or
-    `PROOFSTACK_USER_PASSWORD`, never argv). The script writes through Better Auth's internal adapter
+    `CREATE_USER_PASSWORD`, never argv). The script writes through Better Auth's internal adapter
     (`createUser` and `linkAccount` with Better Auth's password hash) and marks the address verified,
     because the operator vouches for it; no confirmation mail is sent. Over HTTP, `/sign-up/email` is in
     `disabledPaths` (404 before rate limiting) and outside the endpoint allowlist; the `/sign-up` page answers

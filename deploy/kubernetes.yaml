@@ -1,21 +1,21 @@
 # Kubernetes: the app as a Deployment behind a Service, with the migrations in an init container.
 # docs/operations.md, "Kubernetes", has the procedure. Replace the image and APP_URL; create the Secret first:
-#   kubectl create secret generic proofstack --from-literal=DATABASE_URL=... --from-literal=BETTER_AUTH_SECRET=...
+#   kubectl create secret generic app --from-literal=DATABASE_URL=... --from-literal=BETTER_AUTH_SECRET=...
 # Validated with kubeconform (`pnpm ci:workflows`). Needs Kubernetes 1.30 or later (the preStop sleep action).
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: proofstack
-  labels: { app.kubernetes.io/name: proofstack }
+  name: app
+  labels: { app.kubernetes.io/name: app }
 spec:
   replicas: 2
   selector:
-    matchLabels: { app.kubernetes.io/name: proofstack }
+    matchLabels: { app.kubernetes.io/name: app }
   strategy:
     rollingUpdate: { maxUnavailable: 0, maxSurge: 1 }
   template:
     metadata:
-      labels: { app.kubernetes.io/name: proofstack }
+      labels: { app.kubernetes.io/name: app }
     spec:
       # preStop (5 s) + the drain (SERVER_SHUTDOWN_TIMEOUT, 5 s) + the shutdown steps (mail sends up to 20 s).
       terminationGracePeriodSeconds: 35
@@ -27,9 +27,9 @@ spec:
         # Every new pod runs the migrator first. Several at once are safe: they queue on an advisory lock, and
         # the later ones find nothing to apply. With a pooler, point MIGRATION_DATABASE_URL at a direct URL.
         - name: migrate
-          image: registry.example.com/proofstack:2026-09-27
+          image: registry.example.com/app:2026-09-27
           command: [node, .output/migrate.mjs]
-          envFrom: [{ secretRef: { name: proofstack } }]
+          envFrom: [{ secretRef: { name: app } }]
           securityContext: &container-security
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -39,9 +39,9 @@ spec:
             limits: { memory: 256Mi }
       containers:
         - name: app
-          image: registry.example.com/proofstack:2026-09-27
+          image: registry.example.com/app:2026-09-27
           ports: [{ name: http, containerPort: 3000 }]
-          envFrom: [{ secretRef: { name: proofstack } }]
+          envFrom: [{ secretRef: { name: app } }]
           env:
             - { name: APP_URL, value: https://app.example.com }
             # The ingress controller's pods: replace with your cluster's pod CIDR, or the controller's addresses.
@@ -74,17 +74,17 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: proofstack
-  labels: { app.kubernetes.io/name: proofstack }
+  name: app
+  labels: { app.kubernetes.io/name: app }
 spec:
-  selector: { app.kubernetes.io/name: proofstack }
+  selector: { app.kubernetes.io/name: app }
   ports: [{ name: http, port: 80, targetPort: http }]
 ---
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  name: proofstack
+  name: app
 spec:
   minAvailable: 1
   selector:
-    matchLabels: { app.kubernetes.io/name: proofstack }
+    matchLabels: { app.kubernetes.io/name: app }

@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# Production image: `docker build -t proofstack .`
+# Production image: `docker build -t app .`
 # Runtime needs only .output/ (server bundle, public assets, the migrate.mjs and create-user.mjs commands) and
 # drizzle/ (SQL migrations).
 # See docs/operations.md for environment variables, migrations and the deploy sequence.
@@ -17,7 +17,7 @@ RUN npm install --global --no-fund --no-audit \
       "$(node -p "require('./package.json').packageManager.split('+')[0]")" \
  && npm cache clean --force \
  && pnpm --version
-RUN --mount=type=cache,id=proofstack-pnpm-store,target=/pnpm-store \
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm-store \
     pnpm install --frozen-lockfile --store-dir /pnpm-store
 COPY . .
 # Nitro prerenders /about during the build, which loads the server config. These placeholders only

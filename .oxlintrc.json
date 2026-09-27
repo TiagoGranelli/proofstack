@@ -20,7 +20,13 @@
     "evals/**"
   ],
   "plugins": ["typescript", "unicorn", "oxc", "import", "react", "jsx-a11y", "promise"],
-  "jsPlugins": ["@shadcn/lint", "@tanstack/eslint-plugin-query", "@tanstack/eslint-plugin-router"],
+  "jsPlugins": [
+    "@shadcn/lint",
+    "@tanstack/eslint-plugin-query",
+    "@tanstack/eslint-plugin-router",
+    // ESLint's core rules that oxlint has no native port of (no-restricted-syntax).
+    { "name": "eslint-js", "specifier": "oxlint-plugin-eslint" }
+  ],
   // Every rule is "error" or "off" (`pnpm lint` runs with --deny-warnings). `pedantic` is on as a whole; each rule
   // turned off below was measured on this code base and says why. An escape hatch for one line is an
   // `oxlint-disable-next-line <rule>` directly under a comment giving the reason (the `guards` gate in
@@ -40,6 +46,15 @@
     "reportUnusedDisableDirectives": "error"
   },
   "rules": {
+    // On Windows pnpm, npm and node_modules/.bin tools are `.cmd` shims, which Node refuses to start without a shell
+    // (CVE-2024-27980); tinyexec resolves them and escapes their arguments for cmd.exe.
+    "eslint-js/no-restricted-syntax": [
+      "error",
+      {
+        "selector": "CallExpression:matches([callee.name=/^(spawn|spawnSync|execFile|execFileSync)$/], [callee.property.name=/^(spawn|spawnSync|execFile|execFileSync)$/])[arguments.0.value=/^(pnpm|npm|npx|yarn)$|^node_modules/]",
+        "message": "Start pnpm, npm or a node_modules/.bin tool with `xSync` or `x` from tinyexec, not node:child_process: on Windows it is a `.cmd` shim, which Node refuses to start without a shell (CVE-2024-27980)."
+      }
+    ],
     "react/react-in-jsx-scope": "off",
     "unicorn/filename-case": ["error", { "case": "kebabCase" }],
     "oxc/no-barrel-file": ["error", { "threshold": 0 }],
@@ -276,8 +291,8 @@
           {
             "patterns": [
               {
-                "group": ["*", "!effect", "!effect/**", "!./*", "!\\#/contract/*"],
-                "message": "src/contract is the pure API contract: it may import only `effect` and other src/contract modules."
+                "group": ["*", "!effect", "!effect/**", "!./*", "!\\#/contract/*", "!\\#/config/*"],
+                "message": "src/contract is the pure API contract: it may import only `effect`, other src/contract modules and src/config."
               }
             ]
           }

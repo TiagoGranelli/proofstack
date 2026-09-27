@@ -9,7 +9,7 @@ export function RouteNotFound() {
       <p className="text-muted-foreground">There is nothing at this address.</p>
       <div>
         <Button asChild variant="outline">
-          <Link to="/">Go to latest posts</Link>
+          <Link to="/">Go to the home page</Link>
         </Button>
       </div>
     </main>

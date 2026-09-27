@@ -4,6 +4,7 @@
 // renovate.json) and every copy in the same PR. By hand, `docker buildx imagetools inspect <name>:<tag>` prints the
 // index digest.
 import { spawnSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
 
 export const IMAGES = {
   /** Same version as @playwright/test in package.json (browsers match the installed library). */
@@ -34,12 +35,14 @@ export const IMAGES = {
   gitleaks: 'ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f',
 } as const
 
+/** The package name (package.json), which names the app's Docker artifacts. */
+export const packageName = () => (JSON.parse(readFileSync('package.json', 'utf8')) as { name: string }).name
+
 /**
  * Prefix for every container, network and volume the scripts create, so they are easy to find and never
- * collide with another checkout's (`docker ps --filter name=proofstack-ci`). Override with
- * PROOFSTACK_DOCKER_PREFIX.
+ * collide with another project's (`docker ps --filter name=<package name>-ci`). Override with CI_DOCKER_PREFIX.
  */
-export const dockerPrefix = () => process.env.PROOFSTACK_DOCKER_PREFIX || 'proofstack-ci'
+export const dockerPrefix = () => process.env.CI_DOCKER_PREFIX || `${packageName()}-ci`
 
 /**
  * Waits up to 30 s for the Postgres container `container` (IMAGES.postgres) to accept connections. -h forces
@@ -47,7 +50,7 @@ export const dockerPrefix = () => process.env.PROOFSTACK_DOCKER_PREFIX || 'proof
  */
 export const waitForPostgres = async (container: string) => {
   for (let i = 0; i < 60; i++) {
-    const ready = spawnSync('docker', ['exec', container, 'pg_isready', '-h', '127.0.0.1', '-U', 'proofstack'], {
+    const ready = spawnSync('docker', ['exec', container, 'pg_isready', '-h', '127.0.0.1', '-U', 'app'], {
       stdio: 'ignore',
     })
     if (ready.status === 0) return

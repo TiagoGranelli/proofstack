@@ -1,7 +1,11 @@
 // Shared by the `db` project: statement counting for query budgets, and throwaway authors.
+import { drizzle } from 'drizzle-orm/node-postgres'
+import { Effect, Layer } from 'effect'
 import { Client } from 'pg'
 import { expect, vi } from 'vitest'
 import { auth } from '#/server/auth.ts'
+import { Database, pool } from '#/server/db/client.ts'
+import * as schema from '#/server/db/schema/index.ts'
 
 const textOf = (query: unknown) =>
   typeof query === 'string' ? query : String((query as { text?: unknown } | null)?.text ?? query)
@@ -27,6 +31,20 @@ export const expectBudget = (what: string, statements: string[], budget: number)
     statements,
     `${what} issued ${statements.length} SQL statements, its budget is ${budget}:\n${statements.join('\n')}`,
   ).toHaveLength(budget)
+}
+
+const logged: string[] = []
+/** The app's pool behind a Drizzle client that records every statement it sends. */
+export const recordingDb = drizzle({ client: pool, schema, logger: { logQuery: (query) => void logged.push(query) } })
+/** `recordingDb` as the `Database` service, for building repositories whose statements `withBudget` counts. */
+export const recordingDatabase = Layer.succeed(Database, recordingDb)
+
+/** Runs `effect`, built on `recordingDatabase`, and checks it sent exactly `budget` statements. */
+export const withBudget = async <A, E>(what: string, budget: number, effect: Effect.Effect<A, E>) => {
+  logged.length = 0
+  const result = await Effect.runPromise(effect)
+  expectBudget(what, [...logged], budget)
+  return result
 }
 
 /** A verified account with a password, created the way `pnpm user:create` does it. */

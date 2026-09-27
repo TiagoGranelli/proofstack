@@ -5,7 +5,7 @@
 #   docker compose -f compose.production.yaml --env-file deploy.env up -d
 # Every service restarts with the host (restart: always). The migrations run before the app starts, on every
 # `up` that changes the image. Image pins are checked against scripts/images.ts by `pnpm ci:workflows`.
-name: proofstack
+name: app
 
 services:
   db:
@@ -16,14 +16,14 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy.env}
-      POSTGRES_DB: proofstack
+      POSTGRES_DB: app
       APP_DB_PASSWORD: ${APP_DB_PASSWORD:?set APP_DB_PASSWORD in deploy.env}
     volumes:
       - db-data:/var/lib/postgresql
       # Runs once, when db-data is created: the app's own role, its timeouts, pg_stat_statements.
       - ./postgres-init.sh:/docker-entrypoint-initdb.d/postgres-init.sh:ro
     healthcheck:
-      test: [CMD-SHELL, pg_isready -U postgres -d proofstack]
+      test: [CMD-SHELL, pg_isready -U postgres -d app]
       interval: 5s
       timeout: 3s
       retries: 30
@@ -35,7 +35,7 @@ services:
     command: [node, .output/migrate.mjs]
     restart: 'no'
     environment: &database
-      DATABASE_URL: postgres://app:${APP_DB_PASSWORD}@db:5432/proofstack
+      DATABASE_URL: postgres://app:${APP_DB_PASSWORD}@db:5432/app
     depends_on:
       db:
         condition: service_healthy

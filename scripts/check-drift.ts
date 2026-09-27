@@ -6,23 +6,23 @@
 //   database   drizzle/*.sql applied to an empty database == the Drizzle schema (`drizzle-kit push` changes nothing)
 // Usage: pnpm check:drift [contract] [migrations] [auth] [database]   (default: all; database needs Postgres)
 // `pnpm check` runs the first three. The database check uses DRIFT_DATABASE_URL if set, otherwise a
-// throwaway proofstack_drift_<pid>_test next to DATABASE_URL.
+// throwaway app_drift_<pid>_test next to DATABASE_URL.
 import { createHash } from 'node:crypto'
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { createClient } from '@hey-api/openapi-ts'
 import { Client } from 'pg'
+import { xSync } from 'tinyexec'
 import heyApiConfig from '../openapi-ts.config.ts'
 import { renderOpenApi } from './openapi.ts'
-import { pnpmInvocation, runSync } from './spawn.ts'
 import { dropTestDatabase, resetTestDatabase, testDatabaseUrl } from './test-db.ts'
 
 if (existsSync('.env')) process.loadEnvFile('.env')
 
 // One directory per process, outside the repository (the pre-commit hook runs this in a copy of the index
 // whose node_modules links to the real one): concurrent runs never touch each other's files.
-const SCRATCH = mkdtempSync(join(tmpdir(), 'proofstack-drift-'))
+const SCRATCH = mkdtempSync(join(tmpdir(), 'check-drift-'))
 const SCHEMA = './src/server/db/schema/index.ts'
 const MIGRATIONS = 'drizzle'
 
@@ -50,19 +50,13 @@ const diffTrees = (committed: string, generated: string): string[] => {
 }
 
 /** `pnpm <args>` with its output captured; throws with the output when it fails. */
-const pnpm = (args: string[], env: NodeJS.ProcessEnv = process.env) => {
-  const result = runSync(pnpmInvocation(args), {
-    encoding: 'utf8',
-    env,
-    stdio: ['ignore', 'pipe', 'pipe'],
-    timeout: 120_000,
-  })
-  // Node types these as strings, but a stream that is not piped, or a command that did not start, gives null.
-  const { stdout, stderr } = result as { stdout: string | null; stderr: string | null }
-  const output = `${stdout ?? ''}${stderr ?? ''}`
-  // A drizzle-kit rename prompt cannot be answered without a TTY; it ends here as a failure or a timeout.
-  if (result.status !== 0)
-    throw new Error(`pnpm ${args.join(' ')} failed (${result.status ?? result.signal})\n${output}`)
+const pnpm = (args: string[]) => {
+  // A drizzle-kit rename prompt cannot be answered without a TTY; it ends here as a failure or a timeout
+  // (tinyexec throws ETIMEDOUT).
+  const result = xSync('pnpm', args, { timeout: 120_000, nodeOptions: { stdio: ['ignore', 'pipe', 'pipe'] } })
+  const output = `${result.stdout}${result.stderr}`
+  if (result.exitCode !== 0)
+    throw new Error(`pnpm ${args.join(' ')} failed (${result.exitCode ?? result.signalCode})\n${output}`)
   return output
 }
 
@@ -106,21 +100,19 @@ const checks = {
     // Better Auth's own check: every table, column, nullability and default the configuration writes exists in
     // the Drizzle schema (src/server/db/schema/auth.ts is application code, not generated). It only loads the
     // config, so placeholders let it run without a local .env.
-    const result = runSync(pnpmInvocation(['exec', 'auth', 'check', 'schema', '--config', 'src/server/auth.ts']), {
-      encoding: 'utf8',
-      env: {
-        ...process.env,
-        DATABASE_URL: process.env.DATABASE_URL || 'postgres://unused@127.0.0.1:1/unused',
-        APP_URL: process.env.APP_URL || 'http://localhost:3000',
-        BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET || 'check-drift-placeholder-secret-0123456789',
-      },
-      stdio: ['ignore', 'pipe', 'pipe'],
+    const result = xSync('pnpm', ['exec', 'auth', 'check', 'schema', '--config', 'src/server/auth.ts'], {
       timeout: 120_000,
+      nodeOptions: {
+        env: {
+          DATABASE_URL: process.env.DATABASE_URL || 'postgres://unused@127.0.0.1:1/unused',
+          APP_URL: process.env.APP_URL || 'http://localhost:3000',
+          BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET || 'check-drift-placeholder-secret-0123456789',
+        },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
     })
-    if (result.status === 0) return []
-    // Node types these as strings, but a stream that is not piped, or a command that did not start, gives null.
-    const { stdout, stderr } = result as { stdout: string | null; stderr: string | null }
-    const report = `${stdout ?? ''}${stderr ?? ''}`.trim()
+    if (result.exitCode === 0) return []
+    const report = `${result.stdout}${result.stderr}`.trim()
     return [`src/server/db/schema/auth.ts does not hold what src/server/auth.ts writes:\n${report}`]
   },
 
@@ -161,6 +153,9 @@ const fingerprint = async (url: string) => {
          where connamespace = 'public'::regnamespace order by 1, 2`,
       `select tablename, indexname, indexdef from pg_indexes where schemaname = 'public' order by 1, 2`,
       `select t.typname, e.enumlabel from pg_enum e join pg_type t on t.oid = e.enumtypid order by 1, e.enumsortorder`,
+      // Drizzle cannot declare UNLOGGED (rate_limit, drizzle/0006): a push that re-creates the table would lose it.
+      `select relname, relpersistence from pg_class where relnamespace = 'public'::regnamespace and relkind = 'r'
+         order by 1`,
     ]
     const results = []
     for (const query of queries) results.push((await client.query({ text: query, rowMode: 'array' })).rows)

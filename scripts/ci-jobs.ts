@@ -13,13 +13,18 @@
 //   docker      the Docker image end to end (scripts/docker-smoke.ts; Docker)
 import { spawnSync } from 'node:child_process'
 import { relative, resolve } from 'node:path'
+import { xSync } from 'tinyexec'
 import { pinProblems } from './image-pins.ts'
 import { IMAGES } from './images.ts'
-import { type Invocation, pnpmInvocation, runSync } from './spawn.ts'
 
-const run = (command: string | Invocation, args: string[] = [], env: NodeJS.ProcessEnv = {}) => {
-  const invocation = typeof command === 'string' ? { command, args, shell: false } : command
-  return runSync(invocation, { stdio: 'inherit', env: { ...process.env, ...env } }).status ?? 1
+/** Exit code of `command` with `env` on top of this process's; 1 when it cannot start (for example, no Docker). */
+const run = (command: string, args: string[] = [], env: NodeJS.ProcessEnv = {}) => {
+  try {
+    return xSync(command, args, { nodeOptions: { stdio: 'inherit', env } }).exitCode ?? 1
+  } catch (error) {
+    console.error(`${command} did not start: ${error instanceof Error ? error.message : String(error)}`)
+    return 1
+  }
 }
 
 // GitHub Actions tests the build job's artifact: its file times say nothing about the checkout's.
@@ -140,15 +145,15 @@ const JOBS: Record<string, (args: string[]) => number> = {
   // The install before it already verified the lockfile against minimumReleaseAge and trustPolicy.
   'supply-chain': () =>
     sequence([
-      ['registry signatures', () => run(pnpmInvocation(['audit', 'signatures']))],
-      ['vulnerabilities', () => run(pnpmInvocation(['audit:check']))],
+      ['registry signatures', () => run('pnpm', ['audit', 'signatures'])],
+      ['vulnerabilities', () => run('pnpm', ['audit:check'])],
     ]),
   secrets,
   drift: (args) => run('node', ['scripts/check-drift.ts', ...args]),
   // Nitro prerenders /about during the build, which loads the server configuration. The placeholders only
   // satisfy its validation (the same ones as the Dockerfile); nothing connects, nothing lands in .output.
   build: (args) =>
-    run(pnpmInvocation(['build', ...args]), [], {
+    run('pnpm', ['build', ...args], {
       DATABASE_URL: 'postgres://build:build@127.0.0.1:1/build',
       APP_URL: 'http://localhost:3000',
       BETTER_AUTH_SECRET: 'ci-build-placeholder-secret-not-used-at-runtime',

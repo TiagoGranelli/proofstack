@@ -5,7 +5,7 @@
 // pooler and behind the reference edge (deploy/Caddyfile) on a private network, checks it through the edge
 // (pages, then signing in as that account), and stops it gracefully. Everything it starts is removed
 // afterwards, except grype's database volume. CI's `docker` job and `pnpm ci:docker`.
-// Usage: node scripts/docker-smoke.ts   (env: PROOFSTACK_DOCKER_PREFIX, KEEP_SMOKE_IMAGE=1)
+// Usage: node scripts/docker-smoke.ts   (env: CI_DOCKER_PREFIX, KEEP_SMOKE_IMAGE=1)
 import { spawn, spawnSync } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -24,9 +24,9 @@ const [DB, POOLER, APP, EDGE] = ['db', 'pooler', 'app', 'edge'].map((role) => `$
   string,
   string,
 ]
-const DIRECT_URL = 'postgres://proofstack:proofstack-smoke@db:5432/proofstack'
+const DIRECT_URL = 'postgres://app:app-smoke@db:5432/app'
 /** PgBouncer in transaction mode, as Neon and Supabase pool connections (docs/operations.md, "Connection poolers"). */
-const POOLED_URL = 'postgres://proofstack:proofstack-smoke@pooler:5432/proofstack'
+const POOLED_URL = 'postgres://app:app-smoke@pooler:5432/app'
 const MIGRATIONS = (JSON.parse(readFileSync('drizzle/meta/_journal.json', 'utf8')) as { entries: unknown[] }).entries
   .length
 /** srvx drains in-flight requests for up to 5 s (SERVER_SHUTDOWN_TIMEOUT); an idle server stops at once. */
@@ -116,7 +116,7 @@ const scanImage = () => {
     'vulnerability',
     /^(CVE-\d{4}-\d{4,}|GHSA(-[23456789cfghjmpqrvwx]{4}){3})$/,
   )
-  const dir = mkdtempSync(join(tmpdir(), 'proofstack-grype-'))
+  const dir = mkdtempSync(join(tmpdir(), 'grype-'))
   try {
     docker(['save', '--output', join(dir, 'image.tar'), IMAGE], { quiet: true })
     const ignore = entries.map((entry) => ({
@@ -192,24 +192,21 @@ try {
     docker(['network', 'create', NETWORK], { quiet: true })
     docker(
       ['run', '--detach', '--name', DB, '--network', NETWORK, '--network-alias', 'db', '--memory', '512m']
-        .concat(['--env', 'POSTGRES_USER=proofstack', '--env', 'POSTGRES_PASSWORD=proofstack-smoke'])
-        .concat(['--env', 'POSTGRES_DB=proofstack', IMAGES.postgres]),
+        .concat(['--env', 'POSTGRES_USER=app', '--env', 'POSTGRES_PASSWORD=app-smoke'])
+        .concat(['--env', 'POSTGRES_DB=app', IMAGES.postgres]),
       { quiet: true },
     )
     await waitForPostgres(DB)
     // Behind a pooler the app sends no timeouts; the role carries them (docs/operations.md, "Connection poolers").
     const role = ['statement_timeout = 15000', 'idle_in_transaction_session_timeout = 30000']
-    docker(
-      ['exec', DB, 'psql', '-U', 'proofstack', '-c', role.map((s) => `alter role proofstack set ${s};`).join(' ')],
-      {
-        quiet: true,
-      },
-    )
+    docker(['exec', DB, 'psql', '-U', 'app', '-c', role.map((s) => `alter role app set ${s};`).join(' ')], {
+      quiet: true,
+    })
     // Two server connections for every client: runs and requests share them, as on a managed pooler.
     docker(
       ['run', '--detach', '--name', POOLER, '--network', NETWORK, '--network-alias', 'pooler', '--memory', '64m']
-        .concat(['--env', 'DB_HOST=db', '--env', 'DB_USER=proofstack', '--env', 'DB_PASSWORD=proofstack-smoke'])
-        .concat(['--env', 'DB_NAME=proofstack', '--env', 'AUTH_TYPE=scram-sha-256', '--env', 'POOL_MODE=transaction'])
+        .concat(['--env', 'DB_HOST=db', '--env', 'DB_USER=app', '--env', 'DB_PASSWORD=app-smoke'])
+        .concat(['--env', 'DB_NAME=app', '--env', 'AUTH_TYPE=scram-sha-256', '--env', 'POOL_MODE=transaction'])
         .concat(['--env', 'DEFAULT_POOL_SIZE=2', IMAGES.pgbouncer]),
       { quiet: true },
     )
@@ -227,7 +224,7 @@ try {
     console.log(`  direct: ${direct}`)
     if (appliedBy(direct) !== 0) throw new Error('the direct run applied something')
     const locks = docker(
-      ['exec', DB, 'psql', '-U', 'proofstack', '-Atc', "select count(*) from pg_locks where locktype = 'advisory'"],
+      ['exec', DB, 'psql', '-U', 'app', '-Atc', "select count(*) from pg_locks where locktype = 'advisory'"],
       { quiet: true },
     )
     if (locks !== '0') throw new Error(`${locks} advisory lock(s) left behind on the pooler's server connections`)

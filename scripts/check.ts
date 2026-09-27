@@ -4,24 +4,26 @@
 // Usage: pnpm check [--only=gate,...] [--skip=gate,...]   (CI runs the gates as separate steps)
 //
 // Gates that compare with what is already there (`security`, the `applied-migrations` guard) use a baseline:
-// PROOFSTACK_BASE_DIR / PROOFSTACK_DIFF_FILE when the pre-commit hook sets them (HEAD's drizzle/ and the staged
-// diff), otherwise the git ref PROOFSTACK_BASE_REF: by default HEAD locally (uncommitted edits count as new) and
+// CHECK_BASE_DIR / CHECK_DIFF_FILE when the pre-commit hook sets them (HEAD's drizzle/ and the staged
+// diff), otherwise the git ref CHECK_BASE_REF: by default HEAD locally (uncommitted edits count as new) and
 // HEAD^ on GitHub Actions (the commit under test against its parent; the checkout fetches two commits).
 import { spawnSync } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, sep } from 'node:path'
+import { xSync } from 'tinyexec'
 import { routeCoverage } from './route-coverage.ts'
-import { binInvocation, pnpmInvocation, runSync } from './spawn.ts'
 
 type Gate = { name: string; run: () => boolean; fix: string }
 
+// tinyexec puts node_modules/.bin first on PATH and, on Windows, resolves `.cmd` shims and escapes their
+// arguments for cmd.exe, so tools and pnpm start the same way on every platform.
 const script = (name: string) => () =>
-  runSync(pnpmInvocation(['run', '--silent', name]), { stdio: 'inherit' }).status === 0
+  xSync('pnpm', ['run', '--silent', name], { nodeOptions: { stdio: 'inherit' } }).exitCode === 0
 const tool = (name: string, args: string[]) => () =>
-  runSync(binInvocation(name, args), { stdio: 'inherit' }).status === 0
+  xSync(name, args, { nodeOptions: { stdio: 'inherit' } }).exitCode === 0
 
 const ON_CI = process.env.GITHUB_ACTIONS === 'true'
-const BASE_REF = process.env.PROOFSTACK_BASE_REF ?? (ON_CI ? 'HEAD^' : 'HEAD')
+const BASE_REF = process.env.CHECK_BASE_REF ?? (ON_CI ? 'HEAD^' : 'HEAD')
 const git = (args: string[]) => spawnSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
 let baseRefExists: boolean | undefined
 const hasBaseRef = () =>
@@ -36,16 +38,12 @@ const NO_BASE = ON_CI
  * with the JSDoc tag or `@effect-diagnostics` comment its message names, with the reason next to it.
  */
 const effect = () => {
-  const result = runSync(
-    binInvocation('effect-tsgo', ['diagnostics', '--project', 'tsconfig.json', '--format', 'text']),
-    {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'inherit'],
-    },
-  )
+  const result = xSync('effect-tsgo', ['diagnostics', '--project', 'tsconfig.json', '--format', 'text'], {
+    nodeOptions: { stdio: ['ignore', 'pipe', 'inherit'] },
+  })
   const output = result.stdout
   const counts = /(\d+) errors?, (\d+) warnings? and (\d+) messages?/.exec(output)
-  const clean = result.status === 0 && counts?.slice(1).every((count) => count === '0') === true
+  const clean = result.exitCode === 0 && counts?.slice(1).every((count) => count === '0') === true
   process.stdout.write(clean ? `${counts[0]}\n` : output)
   return clean
 }
@@ -81,17 +79,16 @@ const changesSinceBase = () => {
 
 /** New security-sink candidates (fallow's catalogue: XSS, injection, SSRF, open redirect, …) in src/ lines changed since the baseline. */
 const security = () => {
-  const diffFile = process.env.PROOFSTACK_DIFF_FILE
+  const diffFile = process.env.CHECK_DIFF_FILE
   const diff = diffFile ? readFileSync(diffFile, 'utf8') : hasBaseRef() ? changesSinceBase() : undefined
   if (diff === undefined) {
     console.log(NO_BASE ?? 'security: skipped, no git history to compare with')
     return NO_BASE === undefined
   }
-  const result = runSync(binInvocation('fallow', ['security', '--gate', 'new', '--diff-stdin', 'src']), {
-    input: handWrittenSrc(diff),
-    stdio: ['pipe', 'inherit', 'inherit'],
+  const result = xSync('fallow', ['security', '--gate', 'new', '--diff-stdin', 'src'], {
+    nodeOptions: { input: handWrittenSrc(diff), stdio: ['pipe', 'inherit', 'inherit'] },
   })
-  return result.status === 0
+  return result.exitCode === 0
 }
 
 /**
@@ -99,10 +96,8 @@ const security = () => {
  * duplication percentage, which a new 20-line copy in a growing code base would never reach.
  */
 const dupes = () => {
-  const result = runSync(binInvocation('fallow', ['dupes', '--format', 'json', '--no-fragments']), {
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'inherit'],
-    maxBuffer: 64 * 1024 * 1024,
+  const result = xSync('fallow', ['dupes', '--format', 'json', '--no-fragments'], {
+    nodeOptions: { stdio: ['ignore', 'pipe', 'inherit'], maxBuffer: 64 * 1024 * 1024 },
   })
   let groups = Number.NaN
   try {
@@ -110,7 +105,7 @@ const dupes = () => {
   } catch {
     // Not a report (the tool failed): the human run below shows why.
   }
-  if (result.status === 0 && groups === 0) {
+  if (result.exitCode === 0 && groups === 0) {
     console.log('No clone groups outside the ignored files.')
     return true
   }
@@ -324,7 +319,7 @@ type JournalEntry = { idx: number; tag: string }
 
 /** A file as it is in the baseline; undefined when the baseline does not have it. */
 const baselineFile = (path: string) => {
-  const dir = process.env.PROOFSTACK_BASE_DIR
+  const dir = process.env.CHECK_BASE_DIR
   if (dir) return existsSync(join(dir, path)) ? read(join(dir, path)) : undefined
   const result = git(['show', `${BASE_REF}:${path}`])
   return result.status === 0 ? result.stdout : undefined
@@ -347,7 +342,7 @@ const changedMigration = (entry: JournalEntry, current: JournalEntry | undefined
 
 /** Migrations already in the baseline's journal must be unchanged (drizzle/*.sql and their journal entries). */
 const appliedMigrations = () => {
-  if (!process.env.PROOFSTACK_BASE_DIR && !hasBaseRef()) return NO_BASE ? [`[applied-migrations] ${NO_BASE}`] : []
+  if (!process.env.CHECK_BASE_DIR && !hasBaseRef()) return NO_BASE ? [`[applied-migrations] ${NO_BASE}`] : []
   const current = existsSync(JOURNAL) ? entriesOf(read(JOURNAL)) : []
   return entriesOf(baselineFile(JOURNAL)).flatMap((entry, index) => changedMigration(entry, current[index]))
 }
@@ -500,7 +495,7 @@ const GATES: Gate[] = [
   },
   {
     // squawk over the migrations after the grandfathered ones (.squawk.toml). The first run downloads the pinned
-    // binary into ~/.cache/proofstack; later runs are offline, about 0.1 s.
+    // binary into ~/.cache/squawk; later runs are offline, about 0.1 s.
     name: 'migration-lint',
     run: script('check:migrations'),
     fix:
@@ -545,9 +540,19 @@ if (unknown.length) {
 }
 const selected = GATES.filter((gate) => (!only || only.includes(gate.name)) && !skip?.includes(gate.name))
 
+/** A gate that throws (a tool that cannot start: tinyexec throws ENOENT) fails, and the others still run. */
+const passes = (gate: Gate) => {
+  try {
+    return gate.run()
+  } catch (error) {
+    console.error(`${gate.name}: ${error instanceof Error ? error.message : String(error)}`)
+    return false
+  }
+}
+
 const results = selected.map((gate) => {
   const started = performance.now()
-  const ok = gate.run()
+  const ok = passes(gate)
   return { name: gate.name, fix: gate.fix, ok, seconds: (performance.now() - started) / 1000 }
 })
 

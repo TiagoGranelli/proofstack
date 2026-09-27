@@ -8,7 +8,7 @@ import { serverFunctionErrors } from '#/lib/server-function-errors.ts'
 // docs/operations.md, Caching).
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
-/** Largest accepted request body. Posts are 280 characters; auth payloads are a few hundred bytes. */
+/** Largest accepted request body. API and auth payloads are a few hundred bytes. */
 const MAX_BODY_BYTES = 64 * 1024
 
 // Every state-changing request (server functions, /api/*, /api/auth/*) must come from our own origin:

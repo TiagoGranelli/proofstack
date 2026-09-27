@@ -2,6 +2,7 @@
 // of each page as an ARIA snapshot. To cover a new page or state, add one entry to STATES: a name and the
 // steps that reach it (helpers in ./support/app.ts).
 import type { APIRequestContext, Page } from '@playwright/test'
+import { APP_NAME } from '#/config/app.ts'
 import { expectAccessible, SITE_HEADER } from './support/a11y.ts'
 import {
   dashboardWithMyPost,
@@ -34,7 +35,7 @@ const STATES: Record<string, (fixtures: Fixtures) => Promise<unknown>> = {
     // The pending screen replaces a navigation that takes longer than a second.
     await visit(page, '/about')
     await page.route('**/api/posts', () => {})
-    await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'ProofStack' }).click()
+    await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: APP_NAME }).click()
     await expect(page.getByText('Loading…')).toBeVisible()
   },
   about: ({ page }) => visit(page, '/about'),
@@ -65,7 +66,7 @@ const STATES: Record<string, (fixtures: Fixtures) => Promise<unknown>> = {
     await visit(page, '/dashboard')
     await page.getByLabel('New post').fill(overTheLimit)
     await page.getByRole('button', { name: 'Publish' }).click()
-    await expect(page.getByRole('alert')).toContainText('Could not publish the post')
+    await expect(page.getByRole('alert')).toContainText('Use at most 280 characters')
   },
   'dashboard, editing a post': async ({ page, author }) => {
     const { edit } = await dashboardWithMyPost(page, author)
@@ -77,7 +78,7 @@ const STATES: Record<string, (fixtures: Fixtures) => Promise<unknown>> = {
     await edit.click()
     await page.getByLabel('Edit post').fill(overTheLimit)
     await page.getByRole('button', { name: 'Save' }).click()
-    await expect(page.getByRole('alert')).toContainText('Could not save the post')
+    await expect(page.getByRole('alert')).toContainText('Use at most 280 characters')
   },
   'dashboard, sign-out failed': async ({ page, author }) => {
     await signIn(page, author)
@@ -260,16 +261,17 @@ test.describe('landmarks', () => {
     await expect(page.locator('body')).toMatchAriaSnapshot(`${SITE_HEADER}
 - main:
   - heading "Page not found" [level=1]
-  - link "Go to latest posts"`)
+  - link "Go to the home page"`)
   })
 
-  test('error page', async ({ page }) => {
+  test('error page', async ({ page, author }) => {
+    await signIn(page, author)
     await navigateWithApiResponse(page, '/api/posts', { status: 503, json: {} })
     await expect(page.locator('body')).toMatchAriaSnapshot(`${SITE_HEADER}
 - main:
-  - heading "This page could not be loaded" [level=1]
+  - heading [level=1]
   - alert
   - button "Try again"
-  - link "Go to latest posts"`)
+  - link "Go to the home page"`)
   })
 })

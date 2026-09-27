@@ -43,12 +43,29 @@ describe('SignUpForm', () => {
     await expect.element(formOf('Create account')).toHaveAttribute('method', 'post')
   })
 
-  it('does not send a password shorter than 12 characters', async () => {
+  it('does not send a password shorter than 12 characters: says why next to it and moves focus there', async () => {
     const calls = authCalls('signUp')
     worker.use(calls.handler)
     await renderInApp(<SignUpForm />, { url: '/sign-up' })
     await signUp('too short')
     await expect.element(password()).toBeInvalid()
+    await expect.element(password()).toHaveFocus()
+    await expect.element(password()).toHaveAccessibleDescription('At least 12 characters. Use at least 12 characters.')
+    // Checked again as the password is fixed.
+    await password().fill('a long enough password')
+    await expect.element(password()).not.toHaveAttribute('aria-invalid')
+    expect(calls.data).toEqual([])
+  })
+
+  it('flags every empty field at once, and focuses the first', async () => {
+    const calls = authCalls('signUp')
+    worker.use(calls.handler)
+    await renderInApp(<SignUpForm />, { url: '/sign-up' })
+    await button('Create account').click()
+    await expect.element(page.getByLabelText('Name')).toHaveFocus()
+    await expect.element(page.getByLabelText('Name')).toHaveAccessibleDescription('Enter your name.')
+    await expect.element(email()).toHaveAccessibleDescription('Enter your email address.')
+    await expect.element(password()).toHaveAccessibleDescription('At least 12 characters. Use at least 12 characters.')
     expect(calls.data).toEqual([])
   })
 
@@ -151,7 +168,7 @@ describe('/reset-password', () => {
     const calls = authCalls('resetPassword')
     worker.use(calls.handler, authFunction('resetPassword', response))
     const { queryClient } = await renderReset('/reset-password?token=abc123')
-    queryClient.setQueryData(['my posts'], ['private'])
+    queryClient.setQueryData(['my data'], ['private'])
     await expect.element(newPassword()).toHaveAttribute('autocomplete', 'new-password')
     await expect.element(newPassword()).toHaveAccessibleDescription('At least 12 characters.')
     await newPassword().fill('a brand new password')
@@ -168,7 +185,7 @@ describe('/reset-password', () => {
     await expect
       .element(page.getByRole('status').getByRole('link', { name: 'Sign in' }))
       .toHaveAttribute('href', '/login')
-    expect(queryClient.getQueryData(['my posts'])).toBeUndefined()
+    expect(queryClient.getQueryData(['my data'])).toBeUndefined()
     expect(calls.data).toEqual([{ token: 'abc123', newPassword: 'a brand new password' }])
   })
 
@@ -190,14 +207,14 @@ describe('/reset-password', () => {
   ])('explains %s without the code', async (_, failure, message) => {
     worker.use(authFunction('resetPassword', { ok: false, failure }))
     const { queryClient } = await renderReset('/reset-password?token=abc123')
-    queryClient.setQueryData(['my posts'], ['private'])
+    queryClient.setQueryData(['my data'], ['private'])
     await newPassword().fill('a brand new password')
     await button('Set new password').click()
     await expect.element(page.getByRole('alert')).toHaveTextContent(message)
     await expect.element(formOf('Set new password')).toHaveAccessibleDescription(message)
     await expect.element(button('Set new password')).toHaveFocus()
     expect(document.body.textContent).not.toContain(failure.code)
-    expect(queryClient.getQueryData(['my posts'])).toEqual(['private'])
+    expect(queryClient.getQueryData(['my data'])).toEqual(['private'])
   })
 })
 

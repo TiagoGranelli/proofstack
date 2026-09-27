@@ -19,12 +19,12 @@ export const test = base.extend<{ cspViolations: CspViolation[] }>({
   cspViolations: [
     async ({ context }, use) => {
       const violations: CspViolation[] = []
-      await context.exposeBinding('proofstackCspViolation', ({ page }, violation: Omit<CspViolation, 'page'>) => {
+      await context.exposeBinding('reportCspViolation', ({ page }, violation: Omit<CspViolation, 'page'>) => {
         violations.push({ page: page.url(), ...violation })
       })
       await context.addInitScript(() => {
         document.addEventListener('securitypolicyviolation', (event) => {
-          const report = (window as unknown as { proofstackCspViolation: ReportViolation }).proofstackCspViolation
+          const report = (window as unknown as { reportCspViolation: ReportViolation }).reportCspViolation
           report({
             directive: event.effectiveDirective,
             blocked: event.blockedURI,

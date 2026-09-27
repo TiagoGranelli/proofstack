@@ -1,0 +1,28 @@
+name: Feature or change
+description: Propose something the template should do, or a gate it should add, change or drop.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The template ships the foundation and documents the rest (docs/adopting.md, "Growing into a SaaS"). A proposal
+        is most likely to land when it helps most adopters and keeps the gates as strict as they are.
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What you are trying to do, and where the template gets in the way or falls short.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: What you would change, and which files or gates it touches.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives
+      description: What else you considered, including doing it in your own app instead of the template.

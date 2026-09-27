@@ -1,7 +1,7 @@
 schema_version = "1.3"
 
 [task]
-name = "proofstack/add-profile-page"
+name = "app/add-profile-page"
 
 [metadata]
 category = "page"

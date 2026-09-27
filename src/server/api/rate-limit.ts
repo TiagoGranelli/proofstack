@@ -1,7 +1,7 @@
 import '@tanstack/react-start/server-only'
 import { Context, Effect, Layer } from 'effect'
 import { RateLimited } from '#/contract/errors.ts'
-import { POST_WRITE_WINDOW_SECONDS, POST_WRITES_PER_WINDOW } from '#/contract/limits.ts'
+import { WRITE_WINDOW_SECONDS, WRITES_PER_WINDOW } from '#/contract/limits.ts'
 import { CurrentUser, WriteRateLimit } from '#/contract/middleware.ts'
 import { postgresRateLimitStorage } from '../auth-rate-limit.ts'
 
@@ -21,7 +21,7 @@ interface Decision {
 export class RateLimitStore extends Context.Service<
   RateLimitStore,
   { readonly consume: (key: string, rule: Rule) => Effect.Effect<Decision> }
->()('proofstack/RateLimitStore') {
+>()('app/RateLimitStore') {
   /**
    * The rate_limit table Better Auth's own limits use, with the same atomic upsert (../auth-rate-limit.ts).
    * Keys of the business API start with `api-write|`, which no Better Auth key (`<ip>|<path>`) does. A
@@ -32,7 +32,7 @@ export class RateLimitStore extends Context.Service<
   })
 }
 
-const WRITES: Rule = { window: POST_WRITE_WINDOW_SECONDS, max: POST_WRITES_PER_WINDOW }
+const WRITES: Rule = { window: WRITE_WINDOW_SECONDS, max: WRITES_PER_WINDOW }
 
 /**
  * Open sign-up means anyone can hold a session, so writes are limited per user, not per IP: a bucket per
@@ -48,7 +48,7 @@ export const WriteRateLimitLive = Layer.effect(
         const decision = yield* store.consume(`api-write|${user.id}`, WRITES)
         if (!decision.allowed)
           return yield* new RateLimited({
-            message: 'Too many changes to your posts',
+            message: 'Too many changes in a short time',
             retryAfter: decision.retryAfter ?? WRITES.window,
           })
         return yield* httpEffect

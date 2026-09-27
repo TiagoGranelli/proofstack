@@ -178,7 +178,7 @@ export const startEdge = async (options: {
   const ports = [options.port, ...(options.tls ? [options.tls.httpPort] : [])]
   const { command, args } = edgeCommand(runtime, name, env, ports)
   // The binary keeps its CA and certificates here (XDG_DATA_HOME); the container in its /data tmpfs.
-  const dataHome = runtime === 'binary' ? mkdtempSync(join(tmpdir(), 'proofstack-edge-')) : undefined
+  const dataHome = runtime === 'binary' ? mkdtempSync(join(tmpdir(), 'edge-')) : undefined
 
   mkdirSync(dirname(options.logFile), { recursive: true })
   const log = openSync(options.logFile, 'w')
