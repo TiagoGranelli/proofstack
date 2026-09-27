@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { defineConfig } from 'vitest/config'
 
 // Separate from vite.config.ts so tests do not load the Start/Nitro plugins.
@@ -6,8 +7,33 @@ import { defineConfig } from 'vitest/config'
 // - `api`: Effect handlers through HttpApiTest with an in-memory repository and a fake session store.
 // - `integration`: the running app that `pnpm verify:app` starts.
 
+/**
+ * Security-critical pure modules: `vitest run --coverage` fails unless the tests cover every line and branch
+ * of each. Coverage elsewhere is reported (coverage/index.html), not gated. Add a module here
+ * together with the unit tests that cover it.
+ */
+const COVERAGE_GATE = [
+  // Where `?redirect=` may send a user after sign-in (open-redirect defense).
+  'src/features/auth/utils/safe-redirect.ts',
+  // Every error the UI shows goes through here; it must never render raw server output.
+  'src/lib/api-error.ts',
+  // The trusted-proxy client-IP resolver (plan section 2) joins here when it lands, with its unit tests.
+]
+for (const file of COVERAGE_GATE) {
+  // A renamed file would otherwise drop out of the gate silently: a threshold glob that matches nothing passes.
+  readFileSync(file)
+}
+
 export default defineConfig({
   test: {
+    coverage: {
+      provider: 'v8',
+      include: ['src/**/*.{ts,tsx}'],
+      // Generated code and vendored shadcn primitives.
+      exclude: ['src/sdk/**', 'src/routeTree.gen.ts', 'src/components/ui/**', 'src/server/db/schema/auth.ts'],
+      reporter: ['text-summary', 'html'],
+      thresholds: Object.fromEntries(COVERAGE_GATE.map((file) => [file, { lines: 100, branches: 100 }])),
+    },
     projects: [
       {
         test: {

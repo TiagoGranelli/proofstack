@@ -15,6 +15,7 @@ describe('safeRedirect', () => {
     ['absolute URL', 'https://evil.example/'],
     ['scheme-relative URL', '//evil.example/'],
     ['triple slash', '///evil.example/'],
+    ['scheme-relative URL with an unparsable host', '//['],
     ['backslash host', '/\\evil.example'],
     ['backslash anywhere', '/a\\b'],
     ['tab inside the host', '/\t/evil.example'],
