@@ -86,6 +86,14 @@ const GATES: Gate[] = [
       'generated files with their source',
   },
   {
+    // Production dependencies only, read from node_modules (offline, about 0.2 s).
+    name: 'licenses',
+    run: script('licenses:check'),
+    fix:
+      'replace the dependency, or, if its license is acceptable, allow it in scripts/licenses.ts (ALLOWED for a ' +
+      'license, EXCEPTIONS for one exact version) with the reason',
+  },
+  {
     name: 'guards',
     run: guards,
     fix: 'restore the line named above (AGENTS.md, "Sharp edges"), or rename the folder named above with `git mv`',
