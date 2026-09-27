@@ -1,6 +1,5 @@
-// Reads a vulnerability allowlist in security/ (audit-allowlist.json for `pnpm audit:check`,
-// image-allowlist.json for the image scan in `pnpm ci:docker`): `{ "<list>": [{ <id>, package, reason,
-// expires }] }`. Returns the valid, unexpired entries and a problem for every other one. The callers add a
+// Reads the image vulnerability allowlist (security/image-allowlist.json, the grype scan in `pnpm ci:docker`):
+// `{ "<list>": [{ <id>, package, reason, expires }] }`. Returns the valid, unexpired entries and a problem for every other one. The callers add a
 // problem for each entry that matches no finding, so the lists only hold decisions that still apply.
 import { readFileSync } from 'node:fs'
 

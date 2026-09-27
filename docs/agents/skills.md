@@ -98,8 +98,8 @@ DISABLE_TELEMETRY=1 npx -y skills@1.7.0 use \
 ```
 
 The relevant skills are `better-auth/best-practices`, `better-auth/emailAndPassword`, and `security`.
-The Better Auth docs for the installed version are MIT and can be fetched with
-`node scripts/vendor-source.ts better-auth` (see [dependency-sources.md](dependency-sources.md)).
+The Better Auth docs for the installed version are MIT and can be fetched with a sparse clone (the
+`better-auth` preset in [dependency-sources.md](dependency-sources.md)).
 
 ## Not available or not useful
 

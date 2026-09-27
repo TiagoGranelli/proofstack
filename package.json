@@ -10,6 +10,13 @@
     "node": ">=26.0.0 <27",
     "pnpm": ">=12.6.0 <13"
   },
+  "devEngines": {
+    "runtime": {
+      "name": "node",
+      "version": "26.10.0",
+      "onFail": "download"
+    }
+  },
   "imports": {
     "#/*": "./src/*"
   },
@@ -48,11 +55,8 @@
     "verify:app": "node scripts/verify-app.ts",
     "check:drift": "node scripts/check-drift.ts",
     "check:migrations": "node scripts/check-migrations.ts",
-    "deps:check": "node scripts/deps-check.ts",
-    "images:check": "node scripts/images-check.ts",
-    "images:sync": "node scripts/images-check.ts --sync",
-    "sbom:release": "node scripts/sbom.ts",
-    "audit:check": "node scripts/audit.ts",
+    "sbom:release": "pnpm sbom --sbom-format cyclonedx --sbom-type application --prod --out sbom/proofstack.cdx.json",
+    "audit:check": "pnpm audit --audit-level high",
     "licenses:check": "node scripts/licenses.ts",
     "lighthouse": "node scripts/lighthouse.ts",
     "db:reset-test": "node --env-file-if-exists=.env scripts/test-db.ts",
