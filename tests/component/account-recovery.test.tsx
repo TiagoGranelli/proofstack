@@ -217,8 +217,9 @@ describe('/verify-email', () => {
     await expect.element(formOf('Confirm email')).toHaveAttribute('aria-busy', 'true')
     response.release()
     await expect
-      .element(page.getByRole('status'))
+      .element(statusText('Email confirmed'))
       .toHaveTextContent('Your email address is confirmed. Sign in to continue.')
+    await expectFocusedStatus('Email confirmed')
     await expect.element(resend()).not.toBeInTheDocument()
     expect(calls.data).toEqual([{ token: 'tok-1' }])
     await page.getByRole('link', { name: 'Sign in' }).click()
