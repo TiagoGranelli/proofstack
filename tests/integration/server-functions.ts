@@ -1,8 +1,8 @@
 // Calls the account server functions (src/lib/auth.functions.ts) over HTTP, as the browser's compiled client
 // does, so the integration tests reach them without a browser. Two details of TanStack Start are mirrored here
 // and fail loudly if they change: the production id of a server function (sha256 of `<file>--<export>
-// _createServerFn_handler`; an unknown id answers 404) and Seroval's JSON nodes for plain values, the wire
-// format of the input and the answer.
+// _createServerFn_handler`) and Seroval's JSON nodes for plain values, the wire format of the input and the
+// answer.
 import { createHash } from 'node:crypto'
 import { expect } from 'vitest'
 import type * as AuthFunctions from '#/lib/auth.functions.ts'
@@ -41,10 +41,16 @@ const decode = (node: Node): unknown => {
       return [null, undefined, true, false][node.s as number]
     case 9:
       return (node.a as Node[]).map(decode)
-    case 10: {
+    // Objects; 11 is one without a prototype (Start's `context`).
+    case 10:
+    case 11: {
       const { k, v } = node.p as { k: string[]; v: Node[] }
       return Object.fromEntries(k.map((key, index) => [plain(key), decode(v[index]!)]))
     }
+    // What the function threw, through Start's error plugin: only its message crosses (`Internal error`).
+    case 25:
+      if (node.c === '$TSR/Error') return new Error(decode((node.s as { message: Node }).message) as string)
+      throw new Error(`unexpected Seroval plugin node ${JSON.stringify(node)}`)
     default:
       throw new Error(`unexpected Seroval node ${JSON.stringify(node)}`)
   }
@@ -61,15 +67,17 @@ type Answer<F extends AuthFunction> = Awaited<ReturnType<(typeof AuthFunctions)[
  * Calls server function `name` with `data` as the client of `headers` (cookie, x-forwarded-for) from our origin,
  * on the main server or on `baseUrl`.
  * `response` is the raw HTTP answer (headers, Set-Cookie); `value` is what the function returned, or undefined
- * when it threw (non-2xx).
+ * when it threw, and then `thrown` is the message the browser would get.
  */
 export const callAuthFunction = async <F extends AuthFunction>(
   name: F,
   options: { method?: 'GET' | 'POST'; data?: Json; headers?: Record<string, string>; baseUrl?: string } = {},
-): Promise<{ response: Response; value: Answer<F> | undefined }> => {
+): Promise<{ response: Response; value: Answer<F> | undefined; thrown?: string }> => {
   const method = options.method ?? 'POST'
   const url = new URL(`/_serverFn/${idOf(name)}`, options.baseUrl ?? appUrl)
-  const payload = JSON.stringify(encode({ data: options.data }))
+  // The client sends Seroval's `toJSON` envelope (root node, feature flags, no marks); the answer is the root
+  // node alone (`toCrossJSON`).
+  const payload = JSON.stringify({ t: encode({ data: options.data }), f: 127, m: [] })
   if (method === 'GET') url.searchParams.set('payload', payload)
   const response = await fetch(url, {
     method,
@@ -81,8 +89,12 @@ export const callAuthFunction = async <F extends AuthFunction>(
     },
     ...(method === 'POST' ? { body: payload } : {}),
   })
-  expect(response.status, `server function ${name} (id ${idOf(name)}) exists`).not.toBe(404)
   const text = await response.clone().text()
-  const answer = response.ok ? (decode(JSON.parse(text) as Node) as { result?: unknown }) : undefined
-  return { response, value: answer?.result as Answer<F> | undefined }
+  // Nitro's bare 500 for an id Start does not know (docs/decisions/0009-unknown-server-function-id.md).
+  expect(text, `server function ${name} has id ${idOf(name)}`).not.toContain('"unhandled":true')
+  const answer = response.headers.get('content-type')?.includes('json') ? decode(JSON.parse(text) as Node) : undefined
+  if (answer instanceof Error) return { response, value: undefined, thrown: answer.message }
+  const { result, error } = (answer ?? {}) as { result?: unknown; error?: unknown }
+  if (error instanceof Error) return { response, value: undefined, thrown: error.message }
+  return { response, value: result as Answer<F> | undefined }
 }

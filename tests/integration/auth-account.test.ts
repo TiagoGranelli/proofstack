@@ -85,10 +85,9 @@ describe('account server functions', () => {
   })
 
   it('refuse to delete the account without the password or with a wrong one', async () => {
-    const missing = await deleteAccount({})
-    expect(missing.response.ok).toBe(false)
-    const empty = await deleteAccount({ password: '' })
-    expect(empty.response.ok).toBe(false)
+    // Refused by the server function's input schema, before Better Auth runs.
+    expect((await deleteAccount({})).thrown).toBe('Internal error')
+    expect((await deleteAccount({ password: '' })).thrown).toBe('Internal error')
     const wrong = await deleteAccount({ password: 'not-the-password-123' })
     expect(wrong.value).toEqual({ ok: false, failure: { code: 'INVALID_PASSWORD' } })
     expect(await sessionUser()).toMatchObject({ email: account.email })
