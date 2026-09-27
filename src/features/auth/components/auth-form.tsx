@@ -7,7 +7,9 @@ import { describeAuthFailure } from '#/features/auth/utils/describe-auth-failure
 
 /**
  * A form for an account action. Its button stays disabled until hydration: a native submit before that would
- * post the fields (passwords included) to the page itself. A failure is shown in an alert under the button.
+ * post the fields (passwords included) to the page itself. While the action is pending the button is only
+ * `aria-disabled` and further submits are ignored: a disabled button loses focus, so a keyboard user who
+ * pressed it would be dropped to <body> when the attempt fails. A failure is shown in an alert under the button.
  */
 export function AuthForm(props: {
   /** Prefix for the ids this form gives its alert. */
@@ -30,12 +32,17 @@ export function AuthForm(props: {
       aria-describedby={props.error ? errorId : undefined}
       onSubmit={(event) => {
         event.preventDefault()
-        props.onSubmit(new FormData(event.currentTarget))
+        if (!props.pending) props.onSubmit(new FormData(event.currentTarget))
       }}
     >
       {props.children}
       <div>
-        <Button type="submit" variant={props.submitVariant} disabled={!hydrated || props.pending}>
+        <Button
+          type="submit"
+          variant={props.submitVariant}
+          disabled={!hydrated}
+          aria-disabled={props.pending || undefined}
+        >
           {props.submitLabel}
         </Button>
       </div>
