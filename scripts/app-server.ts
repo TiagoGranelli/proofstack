@@ -81,7 +81,8 @@ const assertFreshBuild = () => {
 /**
  * Starts the built server on a free port against `databaseUrl`, which must name a *_test database: it is
  * dropped and recreated. Two accounts are created: `user` (the author the tests act as) and `otherUser`
- * (a second author for isolation checks).
+ * (a second author for isolation checks). With `alongside`, the server shares that one's database, accounts
+ * and secret instead, so a run can test two configurations (for example both sign-up policies) at once.
  */
 export const startApp = async (options: {
   databaseUrl: string
@@ -89,29 +90,40 @@ export const startApp = async (options: {
   port?: string
   /** TRUSTED_PROXIES for the server: trusting loopback lets each test suite pick its client IP (X-Forwarded-For). */
   trustedProxies?: string
+  /** More server settings, such as AUTH_SIGN_UP, SMTP_URL and MAIL_FROM. */
+  settings?: NodeJS.ProcessEnv
+  alongside?: RunningApp
 }): Promise<RunningApp> => {
   assertFreshBuild()
   const appPort = options.port ?? (await freePort())
   const url = `http://localhost:${appPort}`
   const { databaseUrl } = options
-  const user = { email: 'author@example.test', name: 'Test Author', password: password() }
-  const otherUser = { email: 'other@example.test', name: 'Other Author', password: password() }
+  const user = options.alongside?.user ?? { email: 'author@example.test', name: 'Test Author', password: password() }
+  const otherUser = options.alongside?.otherUser ?? {
+    email: 'other@example.test',
+    name: 'Other Author',
+    password: password(),
+  }
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     DATABASE_URL: databaseUrl,
     APP_URL: url,
     PORT: appPort,
     NODE_ENV: 'production',
-    BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET || crypto.randomUUID().repeat(2),
+    BETTER_AUTH_SECRET:
+      options.alongside?.env.BETTER_AUTH_SECRET || process.env.BETTER_AUTH_SECRET || crypto.randomUUID().repeat(2),
     TRUSTED_PROXIES: options.trustedProxies ?? '',
+    ...options.settings,
   }
 
-  await resetTestDatabase(databaseUrl)
-  await Promise.all(
-    [user, otherUser].map((u) =>
-      runQuiet('node', ['scripts/create-user.ts', u.email, u.name], { ...env, PROOFSTACK_USER_PASSWORD: u.password }),
-    ),
-  )
+  if (!options.alongside) {
+    await resetTestDatabase(databaseUrl)
+    await Promise.all(
+      [user, otherUser].map((u) =>
+        runQuiet('node', ['scripts/create-user.ts', u.email, u.name], { ...env, PROOFSTACK_USER_PASSWORD: u.password }),
+      ),
+    )
+  }
 
   mkdirSync(dirname(options.logFile), { recursive: true })
   const log = openSync(options.logFile, 'w')

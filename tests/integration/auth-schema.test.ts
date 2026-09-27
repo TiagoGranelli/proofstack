@@ -13,7 +13,8 @@ describe('auth schema', () => {
     const context = await auth.$context
     // Registered by the adapter unless advanced.database.validateSchema is false; never turn it off.
     expect(context.checkSchema).toBeTypeOf('function')
-    await expect(context.checkSchema?.()).resolves.toBeUndefined()
+    // Returns a promise on the first call and undefined once the schema is known to be clean.
+    await expect(Promise.resolve(context.checkSchema?.())).resolves.toBeUndefined()
   })
 
   it('lets the running app answer auth requests (the same check runs before each one)', async () => {

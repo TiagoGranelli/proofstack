@@ -2,6 +2,8 @@
 import { createClient } from '#/sdk/client/index.ts'
 
 export const appUrl = process.env.APP_URL!
+/** A second server on the same database: AUTH_SIGN_UP=closed, and TRUSTED_PROXIES excludes the test process. */
+export const closedAppUrl = process.env.CLOSED_APP_URL!
 
 export const users = {
   author: {

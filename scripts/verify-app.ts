@@ -12,6 +12,7 @@ import { assertChromium, startApp, tail } from './app-server.ts'
 import { dropTestDatabase, openConnections, testDatabaseUrl } from './test-db.ts'
 
 const LOG_FILE = 'test-results/app-server.log'
+const CLOSED_LOG_FILE = 'test-results/app-server-closed.log'
 /** srvx drains requests, then src/server/nitro/shutdown.ts ends the pool; both are quick with no traffic. */
 const MAX_SHUTDOWN_MS = 3_000
 
@@ -45,6 +46,14 @@ let exitCode = 1
 try {
   if (e2e) await assertChromium()
   const databaseUrl = testDatabaseUrl('verify', process.env.TEST_DATABASE_URL)
+  // Mail goes to Mailpit (`pnpm mail:up`); the E2E tests read the links from its API.
+  const mailpit = {
+    smtp: `smtp://127.0.0.1:${process.env.MAILPIT_SMTP_PORT || '54325'}`,
+    api: `http://127.0.0.1:${process.env.MAILPIT_HTTP_PORT || '54380'}`,
+  }
+  const ready = await fetch(`${mailpit.api}/readyz`).catch(() => undefined)
+  if (!ready?.ok) throw new Error(`Mailpit is not reachable at ${mailpit.api}. Start it with \`pnpm mail:up\`.`)
+  const mail = { SMTP_URL: mailpit.smtp, MAIL_FROM: 'ProofStack <no-reply@example.test>' }
   const app = await startApp({
     databaseUrl,
     logFile: LOG_FILE,
@@ -52,8 +61,25 @@ try {
     // The test process is the "proxy": each suite sends its own X-Forwarded-For and so gets its own sign-in
     // rate-limit bucket. The server believes the header only from these peers.
     trustedProxies: '127.0.0.1/32,::1/128',
+    // Open sign-up, so the E2E tests can create the throwaway accounts the account lifecycle flows consume.
+    settings: { AUTH_SIGN_UP: 'open', ...mail },
   })
-  console.log(`app ${app.url} (database ${new URL(databaseUrl).pathname.slice(1)}, log ${LOG_FILE})`)
+  // The shipped defaults next to it, on the same database: closed sign-up, and a proxy list that excludes the
+  // test process, whose X-Forwarded-For must then be ignored (tests/integration/auth-*.test.ts, tests/e2e).
+  const closed = await startApp({
+    databaseUrl,
+    logFile: CLOSED_LOG_FILE,
+    trustedProxies: '10.0.0.0/8',
+    settings: { AUTH_SIGN_UP: 'closed', ...mail },
+    alongside: app,
+  }).catch(async (error: unknown) => {
+    await app.stop()
+    throw error
+  })
+  console.log(
+    `app ${app.url} (database ${new URL(databaseUrl).pathname.slice(1)}, log ${LOG_FILE}), closed sign-up ${closed.url} ` +
+      `(log ${CLOSED_LOG_FILE}), Mailpit ${mailpit.api}`,
+  )
   try {
     const testEnv = {
       ...app.env,
@@ -63,6 +89,8 @@ try {
       TEST_OTHER_USER_EMAIL: app.otherUser.email,
       TEST_OTHER_USER_PASSWORD: app.otherUser.password,
       TEST_OTHER_USER_NAME: app.otherUser.name,
+      CLOSED_APP_URL: closed.url,
+      MAILPIT_URL: mailpit.api,
     }
     if (integration)
       timed(
@@ -74,7 +102,7 @@ try {
     if (e2e)
       timed('e2e (playwright)', 'pnpm', ['exec', 'playwright', 'test', '--pass-with-no-tests', ...filters], testEnv)
   } finally {
-    const stopped = await app.stop()
+    const [stopped] = await Promise.all([app.stop(), closed.stop()])
     // The process exited, so its sockets are gone; Postgres may take a moment to reap the backends.
     let leftover = await openConnections(databaseUrl)
     for (let i = 0; i < 10 && leftover.length; i++) {
