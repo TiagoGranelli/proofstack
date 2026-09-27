@@ -1,0 +1,101 @@
+# Production on one host: Postgres, the migrations as a one-shot service, the app, and Caddy with automatic
+# HTTPS. docs/operations.md, "Deploy on one server with Docker Compose", has the whole procedure.
+# Copy this file, Caddyfile and postgres-init.sh into one directory on the server, next to a deploy.env made
+# from deploy.env.example, then:
+#   docker compose -f compose.production.yaml --env-file deploy.env up -d
+# Every service restarts with the host (restart: always). The migrations run before the app starts, on every
+# `up` that changes the image. Image pins are checked against scripts/images.ts by `pnpm ci:workflows`.
+name: proofstack
+
+services:
+  db:
+    image: postgres:18.6@sha256:5a5a84b19854a9ffaa54082c166ff4ec27473a361e496e5ea167f298f2da9722
+    restart: always
+    # pg_stat_statements records every statement's count and time: `select * from pg_stat_statements`.
+    command: [postgres, -c, shared_preload_libraries=pg_stat_statements]
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy.env}
+      POSTGRES_DB: proofstack
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?set APP_DB_PASSWORD in deploy.env}
+    volumes:
+      - db-data:/var/lib/postgresql
+      # Runs once, when db-data is created: the app's own role, its timeouts, pg_stat_statements.
+      - ./postgres-init.sh:/docker-entrypoint-initdb.d/postgres-init.sh:ro
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U postgres -d proofstack]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    networks: [internal]
+    mem_limit: 1g
+
+  migrate:
+    image: ${APP_IMAGE:?set APP_IMAGE in deploy.env}
+    command: [node, .output/migrate.mjs]
+    restart: 'no'
+    environment: &database
+      DATABASE_URL: postgres://app:${APP_DB_PASSWORD}@db:5432/proofstack
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [internal]
+    mem_limit: 256m
+
+  app:
+    image: ${APP_IMAGE}
+    restart: always
+    environment:
+      <<: *database
+      APP_URL: https://${DOMAIN:?set DOMAIN in deploy.env}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET in deploy.env}
+      # Only the edge, at its fixed address below, may set X-Forwarded-For.
+      TRUSTED_PROXIES: 10.254.254.10/32
+      AUTH_SIGN_UP: ${AUTH_SIGN_UP:-closed}
+      SMTP_URL: ${SMTP_URL:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    # Longer than SERVER_SHUTDOWN_TIMEOUT (5 s) plus the shutdown steps (mail sends can take up to 20 s).
+    stop_grace_period: 30s
+    networks: [internal]
+    mem_limit: 512m
+
+  edge:
+    image: caddy:2.11.4-alpine@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b
+    restart: always
+    environment:
+      # A public name gets a certificate from Let's Encrypt (ports 80 and 443 must reach this host);
+      # `localhost` gets one from Caddy's internal CA, for trying the stack on a workstation.
+      EDGE_ADDRESS: ${DOMAIN}
+      EDGE_UPSTREAM: app:3000
+    ports:
+      - ${EDGE_HTTP_PORT:-80}:80
+      - ${EDGE_HTTPS_PORT:-443}:443
+      - ${EDGE_HTTPS_PORT:-443}:443/udp
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Certificates and the ACME account: keep them, or every restart asks Let's Encrypt again.
+      - edge-data:/data
+      - edge-config:/config
+    depends_on:
+      app:
+        condition: service_healthy
+    networks:
+      internal:
+        ipv4_address: 10.254.254.10
+    mem_limit: 128m
+
+networks:
+  # A fixed subnet so the app can trust exactly the edge's address. Change it if it collides with a network
+  # the host already routes.
+  internal:
+    ipam:
+      config:
+        - subnet: 10.254.254.0/24
+
+volumes:
+  db-data:
+  edge-data:
+  edge-config:

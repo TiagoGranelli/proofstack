@@ -1,8 +1,8 @@
 // Every CI job's logic, one function per job. .github/workflows/ci.yml only installs tooling, starts
 // services and calls `pnpm ci:<job>`; `pnpm ci:local` runs the same commands in the Playwright Ubuntu image.
 // Usage: node scripts/ci-jobs.ts <job> [args for the job's script]
-//   workflows   actionlint + zizmor on .github, and image pins (compose.yaml, ci.yml, Dockerfile) consistent
-//               with scripts/images.ts (Docker)
+//   workflows   actionlint + zizmor on .github, image pins (compose files, ci.yml, Dockerfile) consistent with
+//               scripts/images.ts, and the deploy recipes in deploy/ valid (Docker)
 //   static      pnpm check without its drift gate (the drift job runs every drift check)
 //   supply-chain registry signatures of every installed package, and the vulnerability gate (scripts/audit.ts)
 //   secrets     gitleaks over every commit of HEAD's history (.gitleaks.toml; Docker, a full clone)
@@ -57,9 +57,45 @@ const workflows = () => {
         ]),
     ],
     ['image pins', imagePins],
+    ['deploy recipes', deployRecipes],
   ]
   return sequence(steps)
 }
+
+/**
+ * The production compose file resolves with the example settings, and the Kubernetes manifests match the
+ * Kubernetes 1.33 schemas (kubeconform, strict: an unknown field fails). kubeconform downloads the schemas.
+ */
+const deployRecipes = () =>
+  sequence([
+    [
+      'compose.production.yaml',
+      () =>
+        run(
+          'docker',
+          ['compose', '-f', 'deploy/compose.production.yaml', '--env-file', 'deploy/deploy.env.example'].concat([
+            'config',
+            '--quiet',
+          ]),
+        ),
+    ],
+    [
+      'kubernetes.yaml',
+      () =>
+        run(
+          'docker',
+          [
+            'run',
+            '--rm',
+            '--memory',
+            '256m',
+            '--volume',
+            `${process.cwd()}/deploy:/deploy:ro`,
+            IMAGES.kubeconform,
+          ].concat(['-strict', '-summary', '-kubernetes-version', '1.33.0', '/deploy/kubernetes.yaml']),
+        ),
+    ],
+  ])
 
 /**
  * gitleaks from its pinned image, offline and read-only, over every commit reachable from HEAD: a secret that

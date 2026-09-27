@@ -19,7 +19,7 @@ without validation: a non-numeric port silently falls back to 3000, and a non-nu
 | `APP_URL` | yes | Public origin as browsers see it: scheme, host and port, no path (`https://app.example.com`). |
 | `BETTER_AUTH_SECRET` | yes | At least 32 characters; signs session cookies. Generate with `openssl rand -base64 32`. |
 | `TRUSTED_PROXIES` | behind a proxy | Addresses or CIDR ranges of your reverse proxies, comma-separated (`127.0.0.1/32`, `10.0.0.0/8`). See [Client IP](#client-ip-and-rate-limiting). |
-| `DATABASE_POOL_MAX` | no | Postgres connections per process, 1 to 100. Default 10. |
+| `DATABASE_POOL_MAX` | no | Postgres connections per process, 1 to 100. Default 10. See [Connection math](#connection-math). |
 | `DATABASE_URL_POOLED` | behind a pooler | `true` when `DATABASE_URL` is a connection pooler (PgBouncer, Neon's `-pooler` host, Supabase's pooler). Default `false`. See [Connection poolers](#connection-poolers). |
 | `AUTH_SIGN_UP` | no | `closed` (default): accounts come from `pnpm user:create`. `open`: anyone can sign up at `/sign-up`; needs `SMTP_URL`. See [Accounts and mail](#accounts-and-mail). |
 | `SMTP_URL` | for mail | `smtps://user:password@smtp.example.com:465` (TLS) or `smtp://...:587` (STARTTLS when offered); credentials percent-encoded. Unset: mail is only logged. |
@@ -67,7 +67,8 @@ docker build -t proofstack .
 dependencies by `scripts/bundle-cli.ts`: `migrate.mjs` (`scripts/migrate.ts`) and `create-user.mjs`
 (`scripts/create-user.ts`). No `node_modules` are needed at runtime.
 
-Deploy sequence:
+Three recipes put this sequence together: [one server with Docker Compose](#deploy-on-one-server-with-docker-compose)
+(the simplest), [Fly.io](#deploy-on-flyio) and [Kubernetes](#deploy-on-kubernetes). Deploy sequence:
 
 1. Build the image (or `pnpm build && node scripts/bundle-cli.ts` outside Docker).
 2. Run the migrations once per deploy, before the new version receives traffic:
@@ -159,9 +160,7 @@ docker run --rm -it --env-file app.env proofstack node .output/create-user.mjs y
 printf %s "$PASSWORD" | docker run --rm -i --env-file app.env proofstack node .output/create-user.mjs you@example.com "Your Name"
 ```
 
-In the deploy recipes below the same command runs as `docker compose run --rm -it app node
-.output/create-user.mjs ...`, `fly ssh console -C "node .output/create-user.mjs ..."` or `kubectl exec -it
-deploy/proofstack -- node .output/create-user.mjs ...`. From a checkout, `pnpm user:create <email> <name>`
+Each deploy recipe below shows its form of the command. From a checkout, `pnpm user:create <email> <name>`
 does the same. Accounts it creates have a verified address and can sign in at once
 ([ADR 0003](decisions/0003-sign-up-policy.md)); `pnpm ci:docker` creates one from the image and signs in
 with it through the edge.
@@ -198,6 +197,187 @@ recommends a direct connection for schema migrations.
 `pnpm ci:docker` runs three migrators at once through PgBouncer 1.25 in transaction mode (two server
 connections, the timeouts on the role), then creates the first account and serves the app through it
 with `DATABASE_URL_POOLED=true`.
+
+## Deploy on one server with Docker Compose
+
+The simplest production setup: one host with Docker, `deploy/compose.production.yaml` running Postgres, the
+migrations (a one-shot service), the app and Caddy with automatic HTTPS. Every service has `restart: always`
+and the data lives in named volumes. It needs a server with Docker Engine and the Compose plugin, a DNS
+record for your domain pointing at it, and ports 80 and 443 (TCP, and UDP for HTTP/3) open.
+
+1. On your machine, build and push an image with its own tag (a version or the commit, never `latest`):
+   ```sh
+   docker build -t "$APP_IMAGE" . && docker push "$APP_IMAGE"
+   ```
+2. Once, copy the recipe to a directory on the server and create its settings from the example
+   (`$DEPLOY_HOST` is your `user@host`):
+   ```sh
+   ssh "$DEPLOY_HOST" mkdir -p proofstack
+   scp deploy/compose.production.yaml deploy/Caddyfile deploy/postgres-init.sh deploy/deploy.env.example "$DEPLOY_HOST":proofstack/
+   ssh "$DEPLOY_HOST" 'cd proofstack && cp deploy.env.example deploy.env && chmod 600 deploy.env'
+   ```
+   Edit `deploy.env` there: `APP_IMAGE`, `DOMAIN`, the two database passwords and `BETTER_AUTH_SECRET`
+   (generate them as its comments say), and SMTP. It is gitignored; keep it only on the server.
+3. Deploy, and again for every new image (set its tag in `deploy.env` first):
+   ```sh
+   ssh "$DEPLOY_HOST" 'cd proofstack && docker compose -f compose.production.yaml --env-file deploy.env pull && docker compose -f compose.production.yaml --env-file deploy.env up -d'
+   ```
+   `up -d` runs `migrate` to completion before it starts the new app container, and the app before Caddy.
+   The old container stops before the new one starts, so each deploy has a few seconds of 502 from Caddy;
+   use Fly.io or Kubernetes for rolling deploys.
+4. Create the first account (a hidden prompt asks for the password):
+   ```sh
+   ssh -t "$DEPLOY_HOST" 'cd proofstack && docker compose -f compose.production.yaml --env-file deploy.env run --rm --no-deps app node .output/create-user.mjs you@example.com "Your Name"'
+   ```
+
+On the first start, `postgres-init.sh` creates the role `app`, which owns the database but is not a
+superuser, puts the statement and idle-transaction timeouts on it, and creates `pg_stat_statements`. The app
+trusts `X-Forwarded-For` only from Caddy, at a fixed address on the stack's own network (`10.254.254.0/24`;
+change both places if the host already routes that range). Logs: `docker compose ... logs -f app`. To roll
+back, set the previous tag and run step 3; migrations stay applied, which is why each must be compatible
+with the version before it ([Build and deploy](#build-and-deploy)).
+
+Tested locally with `DOMAIN=localhost`, where Caddy uses its internal CA, on ports 58080 and 58443: HTTPS
+with HTTP/2 and the redirect from HTTP, the migrations, `create-user` through the command above, a sign-in
+through Caddy (the session records the client's address, not Caddy's), the role's settings, and the backup
+and restore drill below.
+
+## Deploy on Fly.io
+
+`deploy/fly.toml` builds the image from the `Dockerfile` and runs the migrations as the `release_command`,
+once per deploy in a temporary machine, before the rolling update starts; a failed migration stops the
+deploy. The health check is `/api/ready`, and `kill_timeout` (30 s) covers the drain and the shutdown steps.
+
+1. `cp deploy/fly.toml fly.toml`, then set `app`, `primary_region` and `APP_URL`.
+2. `fly launch --no-deploy` to create the app. Take Postgres from Fly, Neon or Supabase. With a pooled URL,
+   set `DATABASE_URL_POOLED=true` and a direct `MIGRATION_DATABASE_URL` ([Connection poolers](#connection-poolers)).
+3. `fly secrets set DATABASE_URL=... BETTER_AUTH_SECRET=... SMTP_URL=... MAIL_FROM=...`
+4. `fly deploy`
+5. First account: `fly ssh console --pty -C 'node .output/create-user.mjs you@example.com "Your Name"'`
+
+Not deployed to Fly yet. Before relying on per-IP rate limits, check that `TRUSTED_PROXIES` in `fly.toml`
+matches the addresses Fly's proxy connects from.
+
+## Deploy on Kubernetes
+
+`deploy/kubernetes.yaml` holds a Deployment (two replicas, rolling with no unavailable pod), a Service and a
+PodDisruptionBudget; bring your own Ingress or Gateway for TLS. `pnpm ci:workflows` validates it with
+kubeconform against the Kubernetes 1.33 schemas (strict: an unknown field fails). It has not been applied to
+a cluster.
+
+```sh
+kubectl create secret generic proofstack --from-literal=DATABASE_URL=... --from-literal=BETTER_AUTH_SECRET=...
+kubectl apply -f deploy/kubernetes.yaml
+kubectl exec -it deploy/proofstack -c app -- node .output/create-user.mjs you@example.com "Your Name"
+```
+
+- **Migrations** run in an init container of every pod: concurrent runs queue on the advisory lock, and the
+  later ones apply nothing. For long migrations, run them as a Job per release before rolling the
+  Deployment instead.
+- **Probes:** startup and liveness on `/api/health`, readiness on `/api/ready`. Liveness never checks the
+  database.
+- **Termination:** when a pod starts terminating, Kubernetes removes it from the Service's endpoints, but
+  load balancers and kube-proxy notice at their own pace. The `preStop` sleep (5 s) keeps it serving
+  meanwhile. Then SIGTERM starts the drain: `/api/ready` answers 503, responses close their connections,
+  srvx waits up to `SERVER_SHUTDOWN_TIMEOUT` (5 s) for in-flight requests, and the shutdown steps finish
+  pending mail and Better Auth work before the pool closes ([Shutdown](#shutdown)).
+  `terminationGracePeriodSeconds` (35) covers all of it; after that, the kubelet sends SIGKILL.
+- **Hardening:** non-root (`node`, uid 1000), no privilege escalation, every capability dropped, and a
+  read-only root file system, which works because the server writes nothing (checked with
+  `docker run --read-only --user 1000 --cap-drop ALL` on the image: migrations, pages, `/api/ready` and a
+  clean stop).
+- **Client IP:** set `TRUSTED_PROXIES` to the addresses your ingress controller's pods connect from, and make
+  the controller append the client to `X-Forwarded-For`.
+
+## Secrets
+
+The secrets are `BETTER_AUTH_SECRET`, `DATABASE_URL` and `MIGRATION_DATABASE_URL` (they hold the database
+password), `SMTP_URL` (its credentials) and, on the Compose recipe, the two database passwords. Keep them in
+the platform's secret store: `deploy.env` with mode 600 on the server, `fly secrets`, a Kubernetes Secret
+(with encryption at rest, or an external secrets operator). Never put them in the image (the Dockerfile's
+build uses placeholders only), in `fly.toml`, in a manifest or in the repository. Anyone who can run
+`docker inspect` or read the pod spec can read them, so treat that access as access to the secrets.
+Rotating `BETTER_AUTH_SECRET` signs everyone out ([Rotating `BETTER_AUTH_SECRET`](#rotating-better_auth_secret)).
+Rotating the database password: `ALTER ROLE app PASSWORD '...'`, update the secret, restart the app.
+
+## Database operations
+
+### Connection math
+
+Each app process opens up to `DATABASE_POOL_MAX` connections (default 10). Postgres allows
+`max_connections` (100 by default, 3 of them reserved for superusers; managed plans are often lower). Add
+up everything that connects at the busiest moment:
+
+```
+replicas × DATABASE_POOL_MAX
++ surge during a rolling deploy (maxSurge × DATABASE_POOL_MAX)
++ 1 per migrator running (init containers start with the pods)
++ admin sessions, backups, other services
+≤ max_connections − superuser_reserved_connections
+```
+
+Four replicas with the default pool and a surge of one need 50, plus a few: fine on 100. When the sum gets
+close, lower `DATABASE_POOL_MAX` (a request holds a connection only for its queries), or put a pooler in
+transaction mode in front ([Connection poolers](#connection-poolers)): then the pooler's own pool size is
+what Postgres sees, and the app's pools only bound the clients. Autoscaling and serverless platforms need
+the pooler.
+
+### TLS to Postgres
+
+The driver's connection-string parser (pg-connection-string 2.14) treats `sslmode=require`, `prefer` and
+`verify-ca` as `verify-full` and warns once: the server certificate must chain to a trusted CA and match the
+host. That works as is with providers whose certificates chain to a public CA. With a private CA (AWS RDS,
+Google Cloud SQL, DigitalOcean and others), download the provider's CA bundle, put it in the image or a
+volume, and name it in the URL (`sslrootcert=/path/ca.pem`); the driver reads that file when it connects, so
+add `--allow-fs-read=/path/ca.pem` to the image's `CMD` as well
+([ADR 0012](decisions/0012-node-permission-model.md)). `uselibpqcompat=true&sslmode=require` gives libpq's
+meaning (encrypted, but no certificate check); avoid it outside a private network.
+
+### Query statistics
+
+`pg_stat_statements` is preloaded in both compose files. In production, `postgres-init.sh` creates the
+extension; locally, run `create extension pg_stat_statements` once. Managed providers include it (enable
+the extension in their console if needed). The slowest statements in total:
+
+```sql
+select calls, round(total_exec_time) as total_ms, round(mean_exec_time, 1) as mean_ms, query
+from pg_stat_statements order by total_exec_time desc limit 20;
+```
+
+## Backups and restore
+
+**Managed Postgres:** use the provider's point-in-time recovery (Neon's history retention, Supabase's PITR,
+RDS automated backups), set the retention you need, and practice restoring to a new branch or instance.
+
+**Self-hosted (the Compose recipe):** take a logical dump every night and copy it off the host, encrypted
+(with restic, for example). A nightly dump loses up to a day; for point-in-time recovery, archive WAL with
+pgBackRest or WAL-G to object storage.
+
+```sh
+docker compose -f compose.production.yaml --env-file deploy.env exec -T db \
+  pg_dump -U postgres --format=custom --exclude-extension=pg_stat_statements proofstack >"proofstack-$(date +%F).dump"
+```
+
+`pg_stat_statements` stays out of the dump because only a superuser may create it, and the restore runs as
+`app`; `postgres-init.sh` recreates it on a new server.
+
+**Restore drill.** A backup counts only once it has been restored. Monthly, restore the latest dump into a
+scratch database next to production, run the migrator against it (it must apply nothing), and look at the
+data:
+
+```sh
+dc() { docker compose -f compose.production.yaml --env-file deploy.env "$@"; }
+dc exec -T db psql -U postgres -c 'create database restore_drill owner app'
+dc exec -T db pg_restore -U postgres --dbname=restore_drill --no-owner --role=app <proofstack-2026-09-27.dump
+dc exec -T db psql -U postgres -d restore_drill -c 'select count(*) from "user"'
+. ./deploy.env && dc run --rm --no-deps -e "DATABASE_URL=postgres://app:$APP_DB_PASSWORD@db:5432/restore_drill" migrate
+dc exec -T db psql -U postgres -c 'drop database restore_drill'
+```
+
+The same steps ran against the local test of the recipe. To restore for real, stop the
+app (`dc stop app`), restore into a new database the same way, point `DATABASE_URL` at it (or rename the
+databases), and start the app. Deleted accounts come back with a restore; see
+[Data retention](#data-retention) for what that means for erasure.
 
 ## Reverse proxy
 
@@ -584,7 +764,7 @@ browsers, Postgres and (for `verify`) Mailpit, and moves artifacts. The logic li
 
 | Script | Job |
 | --- | --- |
-| `pnpm ci:workflows` | actionlint 1.7.12 and zizmor 1.30.1 (images pinned by digest, offline, read-only), and a check that `compose.yaml`, `ci.yml` and the `Dockerfile` pin the same images as `scripts/images.ts`. Needs Docker. |
+| `pnpm ci:workflows` | actionlint 1.7.12 and zizmor 1.30.1 (images pinned by digest, offline, read-only), a check that `compose.yaml`, `deploy/compose.production.yaml`, `ci.yml` and the `Dockerfile` pin the same images as `scripts/images.ts`, and the deploy recipes (`docker compose config` on the production compose file, kubeconform 0.8.0 on `deploy/kubernetes.yaml`, which downloads the schemas). Needs Docker. |
 | `pnpm ci:secrets` | gitleaks 8.30.1 (image pinned by digest, offline, read-only) over every commit reachable from HEAD, with `.gitleaks.toml`. Needs Docker and a full clone (`fetch-depth: 0`). |
 | `pnpm ci:static` | `pnpm check` without its drift gate (so with the migration lint and the license gate) |
 | `pnpm ci:supply-chain` | `pnpm audit signatures` (registry signatures of every installed package) and `pnpm audit:check`. The frozen install before it already verified the lockfile against `minimumReleaseAge` and `trustPolicy`. Needs the npm registry. |

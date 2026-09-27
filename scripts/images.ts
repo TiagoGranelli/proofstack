@@ -28,6 +28,9 @@ export const IMAGES = {
   zizmor: 'ghcr.io/zizmorcore/zizmor:1.30.1@sha256:a2eb396d886c053073405c7a980f2139ba2248ec172243cfa3841e57196e8101',
   /** Vulnerability scan of the production image in `pnpm ci:docker` (security/image-allowlist.json). */
   grype: 'anchore/grype:v0.119.0@sha256:8c2c9234a345577a6d321a4753aa3ee1276d8975c8452d2344a56b57733ecad3',
+  /** Validates deploy/kubernetes.yaml against the Kubernetes schemas in `pnpm ci:workflows`. */
+  kubeconform:
+    'ghcr.io/yannh/kubeconform:v0.8.0@sha256:faffaf43f95aa6425306e1ab8d6fcad72acb9049158f38e574c085ea1ec0f64e',
   /** SBOM of the production image for a release (`pnpm sbom:release`). */
   syft: 'anchore/syft:v1.52.0@sha256:500e2d872ac019436926e8322b4fc1f39441d94d21f6f4046c6ff29b30e8cb02',
   /** Secret scan over the git history (`pnpm ci:secrets`, .gitleaks.toml). */

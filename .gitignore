@@ -14,5 +14,6 @@ sbom/
 .env
 .env.*
 !.env.example
+deploy/deploy.env
 .DS_Store
 .claude/worktrees/
