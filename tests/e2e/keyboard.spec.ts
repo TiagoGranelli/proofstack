@@ -219,6 +219,8 @@ test.describe('editing from the keyboard', () => {
     const { body, edit } = await dashboardWithMyPost(page, author)
     await edit.focus()
     await page.keyboard.press('Enter')
+    // The editor loads on demand (from the focus on Edit): type once it has the caret, as a user would.
+    await expect(page.getByLabel('Edit post')).toBeFocused()
     await page.keyboard.type(' (saved)')
     await page.keyboard.press('Tab')
     await page.keyboard.press('Tab')
@@ -310,6 +312,8 @@ test.describe('dialogs', () => {
     await remove.focus()
     await page.keyboard.press('Enter')
     const dialog = page.getByRole('alertdialog', { name: 'Delete this post?' })
+    // The dialog loads on demand: it opens with focus on Keep it.
+    await expect(dialog.getByRole('button', { name: 'Keep it' })).toBeFocused()
     const stops: string[] = []
     for (let press = 0; press < 3; press++) {
       await page.keyboard.press('Tab')
