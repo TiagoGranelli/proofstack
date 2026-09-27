@@ -25,6 +25,8 @@ const COVERAGE_GATE = [
   'src/features/auth/utils/safe-redirect.ts',
   // Every error the UI shows goes through here; it must never render raw server output.
   'src/lib/api-error.ts',
+  // The same for every failed account action (sign-in, sign-up, password, sessions, delete account).
+  'src/features/auth/utils/describe-auth-failure.ts',
   // The X-Forwarded-For value Better Auth resolves the client IP from (rate limits, sessions).
   'src/server/http/forwarded-for.ts',
 ]
@@ -92,6 +94,7 @@ export default defineConfig({
             'react',
             'react/jsx-dev-runtime',
             'react-dom/client',
+            'react-dom/server',
             '@tanstack/react-query',
             '@tanstack/react-router',
             'class-variance-authority',

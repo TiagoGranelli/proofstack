@@ -3,6 +3,7 @@
 // worker (tests/component/api-mocks.ts).
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import {
+  type AnyRoute,
   createMemoryHistory,
   createRootRoute,
   createRoute,
@@ -14,17 +15,31 @@ import type { ReactNode } from 'react'
 import { render } from 'vitest-browser-react'
 
 /** The app's page paths, so that links and redirects under test land on a route. */
-const PATHS = ['/', '/about', '/login', '/dashboard']
+const PATHS = [
+  '/',
+  '/about',
+  '/login',
+  '/sign-up',
+  '/forgot-password',
+  '/reset-password',
+  '/verify-email',
+  '/dashboard',
+  '/account',
+]
 
 /** Like src/router.tsx, minus retries: a failed request shows its error state at once. */
 export const testQueryClient = () =>
   new QueryClient({ defaultOptions: { queries: { staleTime: 30_000, retry: false }, mutations: { retry: false } } })
 
 /**
- * Renders `ui` on every route, starting at `url`. Returns the render result plus the `router` (assert on
+ * Renders `ui` on every route, starting at `url`. `route` puts a real file route of src/routes at `path`
+ * (its search validation, loader and component run; `ui` is usually `null` then). Returns the render result plus the `router` (assert on
  * `router.state.location`) and the `queryClient` (seed or inspect the cache).
  */
-export async function renderInApp(ui: ReactNode, options: { url?: string; queryClient?: QueryClient } = {}) {
+export async function renderInApp(
+  ui: ReactNode,
+  options: { url?: string; queryClient?: QueryClient; route?: { path: string; route: AnyRoute } } = {},
+) {
   const queryClient = options.queryClient ?? testQueryClient()
   const rootRoute = createRootRoute({
     component: () => (
@@ -34,10 +49,16 @@ export async function renderInApp(ui: ReactNode, options: { url?: string; queryC
       </>
     ),
   })
+  const page = options.route
+  // Attached the way src/routeTree.gen.ts attaches it, under this test's root.
+  page?.route.update({ id: page.path, path: page.path, getParentRoute: () => rootRoute } as never)
   const router = createRouter({
-    routeTree: rootRoute.addChildren(
-      PATHS.map((path) => createRoute({ getParentRoute: () => rootRoute, path, component: () => null })),
-    ),
+    routeTree: rootRoute.addChildren([
+      ...PATHS.filter((path) => path !== page?.path).map((path) =>
+        createRoute({ getParentRoute: () => rootRoute, path, component: () => null }),
+      ),
+      ...(page ? [page.route] : []),
+    ]),
     history: createMemoryHistory({ initialEntries: [options.url ?? '/'] }),
     context: { queryClient },
   })
