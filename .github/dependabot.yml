@@ -5,6 +5,9 @@ updates:
     directories: ['/', '/.github/actions/*']
     schedule:
       interval: weekly
+    # Same quarantine as npm below: a compromised release is usually caught within days.
+    cooldown:
+      default-days: 7
     groups:
       github-actions:
         patterns: ['*']

@@ -42,7 +42,15 @@
     "verify:app": "node scripts/verify-app.ts",
     "check:drift": "node scripts/check-drift.ts",
     "lighthouse": "node scripts/lighthouse.ts",
-    "db:reset-test": "node --env-file-if-exists=.env scripts/test-db.ts"
+    "db:reset-test": "node --env-file-if-exists=.env scripts/test-db.ts",
+    "ci:workflows": "node scripts/ci-jobs.ts workflows",
+    "ci:static": "node scripts/ci-jobs.ts static",
+    "ci:drift": "node scripts/ci-jobs.ts drift",
+    "ci:build": "node scripts/ci-jobs.ts build",
+    "ci:verify": "node scripts/ci-jobs.ts verify",
+    "ci:lighthouse": "node scripts/ci-jobs.ts lighthouse",
+    "ci:docker": "node scripts/ci-jobs.ts docker",
+    "ci:local": "node scripts/ci-local.ts"
   },
   "dependencies": {
     "@better-auth/drizzle-adapter": "1.7.6",

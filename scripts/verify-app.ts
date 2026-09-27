@@ -2,8 +2,10 @@
 // (Vitest, tests/integration), browser flows (Playwright, tests/e2e) and a graceful-shutdown check.
 // Both test runners always run; the exit code is non-zero if either (or the shutdown check) fails.
 // Server output goes to test-results/app-server.log and is printed only on failure.
-// Usage: pnpm build && pnpm verify:app [--no-e2e] [--no-integration] [filter ...]
+// Usage: pnpm build && pnpm verify:app [--no-e2e] [--no-integration] [--edge] [filter ...]
 //   filter: file name filters passed to both runners, e.g. `pnpm verify:app security flows`
+//   --edge: run both suites through the reference edge (Caddy, deploy/Caddyfile) as in production; its log
+//           is test-results/edge.log. Playwright projects: PW_PROJECTS (see playwright.config.ts).
 // Env: TEST_DATABASE_URL overrides the database (default: proofstack_verify_<pid>_test next to DATABASE_URL,
 //      dropped afterwards unless KEEP_TEST_DB=1). ALLOW_STALE_BUILD=1 skips the build freshness check.
 import { spawnSync } from 'node:child_process'
@@ -18,15 +20,16 @@ const MAX_SHUTDOWN_MS = 3_000
 const args = process.argv.slice(2)
 const flags = new Set(args.filter((a) => a.startsWith('--')))
 const filters = args.filter((a) => !a.startsWith('--'))
-const unknown = [...flags].filter((f) => !['--no-e2e', '--no-integration'].includes(f))
+const unknown = [...flags].filter((f) => !['--no-e2e', '--no-integration', '--edge'].includes(f))
 if (unknown.length) {
   console.error(
-    `unknown option(s): ${unknown.join(', ')}. Usage: pnpm verify:app [--no-e2e] [--no-integration] [filter ...]`,
+    `unknown option(s): ${unknown.join(', ')}. Usage: pnpm verify:app [--no-e2e] [--no-integration] [--edge] [filter ...]`,
   )
   process.exit(2)
 }
 const integration = !flags.has('--no-integration')
 const e2e = !flags.has('--no-e2e')
+const edge = flags.has('--edge')
 
 type Result = { name: string; ok: boolean; detail: string }
 const results: Result[] = []
@@ -52,8 +55,13 @@ try {
     // The test process is the "proxy": each suite sends its own X-Forwarded-For and so gets its own sign-in
     // rate-limit bucket. The server honors the header only from loopback/private peers.
     trustedIpHeader: 'x-forwarded-for',
+    // Behind the edge the test process is a proxy in front of Caddy instead: Caddy believes its
+    // X-Forwarded-For (it connects from loopback) and hands the resolved client IP to the app.
+    ...(edge ? { edge: { trustedProxies: 'private_ranges', logFile: 'test-results/edge.log' } } : {}),
   })
-  console.log(`app ${app.url} (database ${new URL(databaseUrl).pathname.slice(1)}, log ${LOG_FILE})`)
+  console.log(
+    `app ${app.url}${edge ? ` (edge in front of ${app.directUrl})` : ''} (database ${new URL(databaseUrl).pathname.slice(1)}, log ${LOG_FILE})`,
+  )
   try {
     const testEnv = {
       ...app.env,

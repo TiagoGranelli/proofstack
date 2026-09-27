@@ -1,9 +1,12 @@
 // Boots the built app (.output) against a fresh, migrated test database with two author accounts.
 // Shared by scripts/verify-app.ts and scripts/lighthouse.ts. Server output goes to a log file.
+// With `edge`, the app sits behind the reference edge (deploy/Caddyfile, scripts/edge.ts) as in production:
+// the returned url and APP_URL are the edge's, the Node server trusts only the X-Real-IP header it sets.
 import { spawn } from 'node:child_process'
 import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { dirname, join } from 'node:path'
+import { startEdge } from './edge.ts'
 import { resetTestDatabase } from './test-db.ts'
 
 if (existsSync('.env')) process.loadEnvFile('.env')
@@ -11,7 +14,10 @@ if (existsSync('.env')) process.loadEnvFile('.env')
 type User = { email: string; name: string; password: string }
 
 export type RunningApp = {
+  /** The public origin (APP_URL): the edge's when there is one, otherwise the Node server's. */
   url: string
+  /** The Node server itself, bypassing the edge. */
+  directUrl: string
   env: NodeJS.ProcessEnv
   databaseUrl: string
   user: User
@@ -20,6 +26,8 @@ export type RunningApp = {
   /** SIGTERM, then waits for the exit (SIGKILL after 10 s). Resolves with how long the shutdown took. */
   stop: () => Promise<{ ms: number; code: number | null; signal: NodeJS.Signals | null }>
 }
+
+const noop = async () => {}
 
 const password = () => `pw-${crypto.randomUUID()}`
 
@@ -89,10 +97,18 @@ export const startApp = async (options: {
   port?: string
   /** TRUSTED_IP_HEADER for the server; tests use x-forwarded-for to give every suite its own rate-limit bucket. */
   trustedIpHeader?: string
+  /**
+   * Put the reference edge in front. `trustedProxies` becomes the edge's EDGE_TRUSTED_PROXIES: the test
+   * runners send their own X-Forwarded-For per suite, so they pass `private_ranges`. The server then reads
+   * the client IP from X-Real-IP, which the edge overwrites (`trustedIpHeader` is ignored).
+   */
+  edge?: { trustedProxies?: string; logFile: string }
 }): Promise<RunningApp> => {
   assertFreshBuild()
   const appPort = options.port ?? (await freePort())
-  const url = `http://localhost:${appPort}`
+  const directUrl = `http://localhost:${appPort}`
+  const edgePort = options.edge ? await freePort() : undefined
+  const url = edgePort ? `http://localhost:${edgePort}` : directUrl
   const { databaseUrl } = options
   const user = { email: 'author@example.test', name: 'Test Author', password: password() }
   const otherUser = { email: 'other@example.test', name: 'Other Author', password: password() }
@@ -103,7 +119,7 @@ export const startApp = async (options: {
     PORT: appPort,
     NODE_ENV: 'production',
     BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET || crypto.randomUUID().repeat(2),
-    TRUSTED_IP_HEADER: options.trustedIpHeader ?? '',
+    TRUSTED_IP_HEADER: options.edge ? 'x-real-ip' : (options.trustedIpHeader ?? ''),
   }
 
   await resetTestDatabase(databaseUrl)
@@ -123,7 +139,9 @@ export const startApp = async (options: {
   const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) =>
     server.once('exit', (code, signal) => resolve({ code, signal })),
   )
+  let stopEdge: () => Promise<void> = noop
   const stop = async () => {
+    await stopEdge()
     const started = performance.now()
     if (server.exitCode === null && server.signalCode === null) {
       server.kill('SIGTERM')
@@ -134,17 +152,33 @@ export const startApp = async (options: {
     return { ms: Math.round(performance.now() - started), ...(await exited) }
   }
 
-  for (let attempt = 0; attempt < 120; attempt++) {
-    if (server.exitCode !== null)
-      throw new Error(`server exited with ${server.exitCode}. Log (${options.logFile}):\n${tail(options.logFile)}`)
-    try {
-      if ((await fetch(`${url}/api/ready`)).ok)
-        return { url, env, databaseUrl, user, otherUser, logFile: options.logFile, stop }
-    } catch {}
-    await new Promise((r) => setTimeout(r, 250))
+  const ready = async () => {
+    for (let attempt = 0; attempt < 120; attempt++) {
+      if (server.exitCode !== null)
+        throw new Error(`server exited with ${server.exitCode}. Log (${options.logFile}):\n${tail(options.logFile)}`)
+      try {
+        if ((await fetch(`${directUrl}/api/ready`)).ok) return
+      } catch {}
+      await new Promise((r) => setTimeout(r, 250))
+    }
+    throw new Error(`server did not become ready in 30 s. Log (${options.logFile}):\n${tail(options.logFile)}`)
   }
-  await stop()
-  throw new Error(`server did not become ready in 30 s. Log (${options.logFile}):\n${tail(options.logFile)}`)
+  try {
+    await ready()
+    if (options.edge && edgePort) {
+      const edge = await startEdge({
+        port: edgePort,
+        upstreamPort: appPort,
+        trustedProxies: options.edge.trustedProxies,
+        logFile: options.edge.logFile,
+      })
+      stopEdge = edge.stop
+    }
+  } catch (error) {
+    await stop()
+    throw error
+  }
+  return { url, directUrl, env, databaseUrl, user, otherUser, logFile: options.logFile, stop }
 }
 
 /** Playwright's Chromium, or a clear instruction to install it. */

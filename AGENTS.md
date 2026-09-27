@@ -97,21 +97,27 @@ Postgres, and applies migrations.
 | `pnpm test:unit [filter ...]` | Unit tests only: pure functions, no app |
 | `pnpm format`, `pnpm lint:fix` | Autofixes |
 | `pnpm check:drift [contract\|migrations\|auth\|database]` | Checks that generated files match their sources; `database` needs Postgres |
-| `pnpm build && pnpm verify:app [--no-e2e] [--no-integration] [filter ...]` | Starts the built server against a fresh per-run `proofstack_<purpose>_<pid>_test` database (dropped afterwards) and runs Vitest (`tests/integration`) and Playwright (`tests/e2e`); app logs go to `test-results/app-server.log`. Refuses a stale `.output` |
-| `pnpm build && pnpm lighthouse [--runs=3] [--page=<name>] [--form-factor=mobile\|desktop]` | Lighthouse gate on the built app; see the policy below |
+| `pnpm build && pnpm verify:app [--no-e2e] [--no-integration] [--edge] [filter ...]` | Starts the built server against a fresh per-run `proofstack_<purpose>_<pid>_test` database (dropped afterwards) and runs Vitest (`tests/integration`) and Playwright (`tests/e2e`, projects from `PW_PROJECTS`); app logs go to `test-results/app-server.log`. `--edge` puts the Caddy edge in front. Refuses a stale `.output` |
+| `pnpm build && pnpm lighthouse [--runs=3] [--page=<name>] [--form-factor=mobile\|desktop] [--direct]` | Lighthouse gate on the built app behind the Caddy edge (needs Docker); see the policy below |
+| `pnpm ci:local [job ...]` | The CI jobs (`workflows static drift build verify lighthouse docker`, default all) as `pnpm ci:<job>` scripts in the Playwright Ubuntu container next to Postgres, all five browser projects included. Needs Docker. See [docs/operations.md](docs/operations.md#ci-and-local-ci) |
 
 `pnpm test` (Vitest project `integration`) and `pnpm test:e2e` expect an app that is already running at
 `APP_URL` with `TEST_USER_*` set; `verify:app` provides both.
 
-**Lighthouse policy** (`POLICY` in `scripts/lighthouse.ts`): per page and form factor, every gated
-category's median must be at least 99, at most one category may sit at 99, no single run may score below
-95, and the median metrics must stay within the budgets. `agentic-browsing` is reported but not gated. SEO
-is not gated on `/login` and `/dashboard` (noindex). CI runs `pnpm lighthouse --runs=5`.
+**Lighthouse policy** (`POLICY` in `scripts/lighthouse.ts`): per page and form factor, accessibility, best
+practices and SEO must score 100 on every run; performance needs a median of at least 99, at most one run
+below 100 and none below 95; the median metrics must stay within the budgets. `agentic-browsing` is
+reported but not gated. SEO is not gated on `/login` and `/dashboard` (noindex). Exit 2 means
+inconclusive, not failed: a run's `benchmarkIndex` was below 1000 or Lighthouse warned about a slow CPU
+(each run's value and warnings are in `lighthouse-report/summary.json`). CI runs `pnpm lighthouse --runs=5`.
 
 ## Tests
 
-- Install the test browser once: `pnpm exec playwright install chromium`. `verify:app` and `lighthouse`
-  use `CHROME_PATH` instead when it is set.
+- Install the test browsers once: `pnpm exec playwright install chromium firefox`. `verify:app` and
+  `lighthouse` use `CHROME_PATH` instead of Playwright's Chromium when it is set. E2E runs every flow on the
+  Playwright projects `chromium`, `firefox`, `webkit`, `Pixel 7` and `iPhone 15`; outside CI the default is
+  `chromium,firefox`, because WebKit needs Ubuntu's libraries. `PW_PROJECTS=all` (or a list) chooses;
+  `pnpm ci:local verify` runs all five.
 - `verify:app` starts one server on one database per run. The integration tests and then the E2E tests
   run against it, so both suites see each other's data.
 - Integration files run in parallel against the same two test users. Each file creates its own client IP

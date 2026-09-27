@@ -1,0 +1,37 @@
+# Reference edge in front of the Node server: TLS, compression, client IP. Used by
+# `docker compose --profile edge up`, `pnpm lighthouse` and `pnpm verify:app --edge`.
+# See docs/operations.md, "Edge proxy (Caddy)".
+#
+# Environment, read when Caddy starts:
+#   EDGE_ADDRESS          Site address. A domain (app.example.com) gets automatic HTTPS; ":8080" (default)
+#                         serves plain HTTP on every interface.
+#   EDGE_UPSTREAM         host:port of the app. Default app:3000 (the compose service).
+#   EDGE_TRUSTED_PROXIES  Space-separated CIDRs (or `private_ranges`) of proxies in front of this edge whose
+#                         X-Forwarded-For is believed. Empty (default): the TCP peer is the client, and
+#                         X-Forwarded-For sent by clients is ignored.
+{
+	# No admin API: config changes mean a restart, and several edges can share a host network.
+	admin off
+	servers {
+		trusted_proxies static {$EDGE_TRUSTED_PROXIES}
+		# Walk X-Forwarded-For from the right and stop at the first untrusted address, so a client cannot
+		# choose its IP by prepending entries.
+		trusted_proxies_strict
+		client_ip_headers X-Forwarded-For
+	}
+}
+
+{$EDGE_ADDRESS::8080} {
+	# Compresses what the app sends uncompressed (SSR HTML, API JSON). Responses that already carry a
+	# Content-Encoding (the build's precompressed .br assets) pass through as they are.
+	encode zstd gzip
+
+	# Caddy has no response cache: nothing is stored, and Cache-Control, ETag and Set-Cookie from the app
+	# reach the client unchanged. Host, Origin, Referer and Sec-Fetch-* are forwarded as received.
+	reverse_proxy {$EDGE_UPSTREAM:app:3000} {
+		# The client IP as Caddy resolved it: the TCP peer, or with EDGE_TRUSTED_PROXIES the rightmost
+		# untrusted X-Forwarded-For entry. Overwrites whatever the client sent. The app reads it with
+		# TRUSTED_IP_HEADER=x-real-ip.
+		header_up X-Real-IP {client_ip}
+	}
+}
