@@ -4,8 +4,8 @@
 // Usage: pnpm check [--only=gate,...] [--skip=gate,...]   (CI runs the gates as separate steps)
 //
 // Gates that compare with what is already there (`security`, the `applied-migrations` guard) use a baseline:
-// PROOFSTACK_BASE_DIR / PROOFSTACK_DIFF_FILE when the pre-commit hook sets them (HEAD's drizzle/ and the staged
-// diff), otherwise the git ref PROOFSTACK_BASE_REF: by default HEAD locally (uncommitted edits count as new) and
+// CHECK_BASE_DIR / CHECK_DIFF_FILE when the pre-commit hook sets them (HEAD's drizzle/ and the staged
+// diff), otherwise the git ref CHECK_BASE_REF: by default HEAD locally (uncommitted edits count as new) and
 // HEAD^ on GitHub Actions (the commit under test against its parent; the checkout fetches two commits).
 import { spawnSync } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
@@ -23,7 +23,7 @@ const tool = (name: string, args: string[]) => () =>
   xSync(name, args, { nodeOptions: { stdio: 'inherit' } }).exitCode === 0
 
 const ON_CI = process.env.GITHUB_ACTIONS === 'true'
-const BASE_REF = process.env.PROOFSTACK_BASE_REF ?? (ON_CI ? 'HEAD^' : 'HEAD')
+const BASE_REF = process.env.CHECK_BASE_REF ?? (ON_CI ? 'HEAD^' : 'HEAD')
 const git = (args: string[]) => spawnSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
 let baseRefExists: boolean | undefined
 const hasBaseRef = () =>
@@ -79,7 +79,7 @@ const changesSinceBase = () => {
 
 /** New security-sink candidates (fallow's catalogue: XSS, injection, SSRF, open redirect, …) in src/ lines changed since the baseline. */
 const security = () => {
-  const diffFile = process.env.PROOFSTACK_DIFF_FILE
+  const diffFile = process.env.CHECK_DIFF_FILE
   const diff = diffFile ? readFileSync(diffFile, 'utf8') : hasBaseRef() ? changesSinceBase() : undefined
   if (diff === undefined) {
     console.log(NO_BASE ?? 'security: skipped, no git history to compare with')
@@ -319,7 +319,7 @@ type JournalEntry = { idx: number; tag: string }
 
 /** A file as it is in the baseline; undefined when the baseline does not have it. */
 const baselineFile = (path: string) => {
-  const dir = process.env.PROOFSTACK_BASE_DIR
+  const dir = process.env.CHECK_BASE_DIR
   if (dir) return existsSync(join(dir, path)) ? read(join(dir, path)) : undefined
   const result = git(['show', `${BASE_REF}:${path}`])
   return result.status === 0 ? result.stdout : undefined
@@ -342,7 +342,7 @@ const changedMigration = (entry: JournalEntry, current: JournalEntry | undefined
 
 /** Migrations already in the baseline's journal must be unchanged (drizzle/*.sql and their journal entries). */
 const appliedMigrations = () => {
-  if (!process.env.PROOFSTACK_BASE_DIR && !hasBaseRef()) return NO_BASE ? [`[applied-migrations] ${NO_BASE}`] : []
+  if (!process.env.CHECK_BASE_DIR && !hasBaseRef()) return NO_BASE ? [`[applied-migrations] ${NO_BASE}`] : []
   const current = existsSync(JOURNAL) ? entriesOf(read(JOURNAL)) : []
   return entriesOf(baselineFile(JOURNAL)).flatMap((entry, index) => changedMigration(entry, current[index]))
 }
@@ -495,7 +495,7 @@ const GATES: Gate[] = [
   },
   {
     // squawk over the migrations after the grandfathered ones (.squawk.toml). The first run downloads the pinned
-    // binary into ~/.cache/proofstack; later runs are offline, about 0.1 s.
+    // binary into ~/.cache/squawk; later runs are offline, about 0.1 s.
     name: 'migration-lint',
     run: script('check:migrations'),
     fix:

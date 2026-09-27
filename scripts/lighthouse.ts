@@ -1,13 +1,4 @@
-import { appendFileSync, copyFileSync, mkdirSync, readFileSync, rmSync, statfsSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
-import { eq } from 'drizzle-orm'
-import { drizzle } from 'drizzle-orm/node-postgres'
-import { computeMedianRun } from 'lighthouse/core/lib/median-run.js'
-import { Pool } from 'pg'
-import { xSync } from 'tinyexec'
-import { post, user } from '#/server/db/schema/index.ts'
-import { assertChromium, type RunningApp, startApp } from './app-server.ts'
-// Lighthouse gate. Boots the built app against a fresh database with seeded posts and a signed-in author,
+// Lighthouse gate. Boots the built app against a fresh database with seeded data and a signed-in author,
 // puts the reference edge in front of it (deploy/Caddyfile: HTTPS, HTTP/2, compression, as in production),
 // runs Lighthouse several times per page and form factor with Playwright's Chromium, and applies POLICY.
 // Writes lighthouse-report/summary.{json,md} plus every raw report.
@@ -17,9 +8,18 @@ import { assertChromium, type RunningApp, startApp } from './app-server.ts'
 //   --edge-protocol: h2 (default, production), or HTTP/1.1 over HTTPS (h1) or plain HTTP (http) to compare.
 // Exit codes: 0 pass, 1 fail, 2 inconclusive (the machine measured as too slow for the performance score).
 // Lighthouse runs one at a time; run nothing else heavy meanwhile, it shifts the simulated timings.
-// Env: LIGHTHOUSE_DATABASE_URL overrides the database (default: proofstack_lighthouse_<pid>_test next to
+// Env: LIGHTHOUSE_DATABASE_URL overrides the database (default: app_lighthouse_<pid>_test next to
 //      DATABASE_URL, dropped afterwards). Logs: lighthouse-report/{app-server,edge}.log. EDGE_RUNTIME: see
 //      scripts/edge.ts.
+import { appendFileSync, copyFileSync, mkdirSync, readFileSync, rmSync, statfsSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { eq } from 'drizzle-orm'
+import { drizzle } from 'drizzle-orm/node-postgres'
+import { computeMedianRun } from 'lighthouse/core/lib/median-run.js'
+import { Pool } from 'pg'
+import { xSync } from 'tinyexec'
+import { post, user } from '#/server/db/schema/index.ts'
+import { assertChromium, type RunningApp, startApp } from './app-server.ts'
 import { dropTestDatabase, testDatabaseUrl } from './test-db.ts'
 
 type Category = 'performance' | 'accessibility' | 'best-practices' | 'seo' | 'agentic-browsing'

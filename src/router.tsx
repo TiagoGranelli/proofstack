@@ -17,17 +17,16 @@ const getSsrOptions = createIsomorphicFn().server(() => {
 })
 
 // Called once per request on the server, so every request gets its own QueryClient and no cached
-// query (such as another user's posts) can leak between requests.
+// query (such as another user's data) can leak between requests.
 export function getRouter() {
   const queryClient = createQueryClient({ defaultOptions: { queries: { staleTime: 30_000 } } })
   const router = createRouter({
     routeTree,
     context: { queryClient },
     // Navigation is stale-while-revalidate (the router default): a revisited route renders its cached data
-    // at once and refetches in the background. Data this tab changed is already fresh by then: every post
-    // write refetches the lists it declares in `meta.invalidates` before it finishes (postListsChanged in
-    // src/features/posts/api/posts-cache.ts, performed by src/lib/query-client.ts), so no global blocking
-    // reload is needed.
+    // at once and refetches in the background. Data this tab changed is already fresh by then: each mutation
+    // declares the queries it changed in `meta.invalidates`, which src/lib/query-client.ts refetches before the
+    // mutation finishes, so no global blocking reload is needed.
     defaultPreload: 'intent',
     defaultErrorComponent: RouteError,
     defaultPendingComponent: RoutePending,

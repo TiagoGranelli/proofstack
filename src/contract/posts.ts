@@ -1,6 +1,6 @@
 import { Schema, SchemaTransformation } from 'effect'
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from 'effect/unstable/httpapi'
-import { POST_WRITE_WINDOW_SECONDS, POST_WRITES_PER_WINDOW, POSTS_PAGE_DEFAULT, POSTS_PAGE_MAX } from './limits.ts'
+import { POSTS_PAGE_DEFAULT, POSTS_PAGE_MAX, WRITE_WINDOW_SECONDS, WRITES_PER_WINDOW } from './limits.ts'
 import { Authentication, RequestValidation, WriteRateLimit } from './middleware.ts'
 import { PostInput } from './post-input.ts'
 
@@ -122,6 +122,6 @@ export class MyPosts extends HttpApiGroup.make('myPosts')
       title: 'My posts',
       description:
         `CRUD for the signed-in author. Creating, editing and deleting count together against a limit of ` +
-        `${POST_WRITES_PER_WINDOW} per ${POST_WRITE_WINDOW_SECONDS} s per user; past it they answer 429.`,
+        `${WRITES_PER_WINDOW} per ${WRITE_WINDOW_SECONDS} s per user; past it they answer 429.`,
     }),
   ) {}

@@ -15,15 +15,15 @@ services:
     # `select * from pg_stat_statements` shows every statement's count and time.
     command: [postgres, -c, shared_preload_libraries=pg_stat_statements]
     environment:
-      POSTGRES_USER: proofstack
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-proofstack-local}
-      POSTGRES_DB: proofstack
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-app-local}
+      POSTGRES_DB: app
     ports:
       - 127.0.0.1:${POSTGRES_PORT:-54329}:5432
     volumes:
       - db-data:/var/lib/postgresql
     healthcheck:
-      test: [CMD-SHELL, pg_isready -U proofstack -d proofstack]
+      test: [CMD-SHELL, pg_isready -U app -d app]
       interval: 2s
       timeout: 3s
       retries: 30
@@ -40,17 +40,17 @@ services:
   migrate:
     profiles: [edge]
     build: .
-    image: proofstack:local
+    image: app:local
     command: [node, .output/migrate.mjs]
     environment: &app-database
-      DATABASE_URL: postgres://proofstack:${POSTGRES_PASSWORD:-proofstack-local}@db:5432/proofstack
+      DATABASE_URL: postgres://app:${POSTGRES_PASSWORD:-app-local}@db:5432/app
     depends_on:
       db:
         condition: service_healthy
 
   app:
     profiles: [edge]
-    image: proofstack:local
+    image: app:local
     environment:
       <<: *app-database
       # The public origin is the edge's.

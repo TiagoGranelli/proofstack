@@ -2,6 +2,7 @@
 // records every Tab stop with its accessible name and whether its focus is visible.
 import { AxeBuilder } from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
+import { APP_NAME } from '#/config/app.ts'
 
 /** WCAG 2.0, 2.1 and 2.2 at levels A and AA, plus axe's best practices. */
 const AXE_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice']
@@ -104,6 +105,6 @@ export async function tabOrder(page: Page, max?: number) {
 export const SITE_HEADER = `
 - banner:
   - navigation "Main":
-    - link "ProofStack"
+    - link "${APP_NAME}"
     - link "About"
     - link "Dashboard"`

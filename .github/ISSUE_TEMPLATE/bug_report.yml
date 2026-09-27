@@ -1,0 +1,52 @@
+name: Bug report
+description: Something in the template does not work as documented.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For a security problem, do not open an issue: report it privately (Security tab, "Report a vulnerability").
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you ran or did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: From a fresh clone if you can. Commands, requests or clicks, in order.
+      placeholder: |
+        1. pnpm install && pnpm bootstrap
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Output
+      description: The failing gate's output, the error, or the relevant log lines (test-results/app-server*.log). Redact secrets.
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: The release tag (vX.Y.Z) or commit you are on.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Node and pnpm versions, Docker version if it matters.
+  - type: dropdown
+    id: adopted
+    attributes:
+      label: Where
+      options:
+        - In this repository, unchanged
+        - In an app created from the template
+    validations:
+      required: true

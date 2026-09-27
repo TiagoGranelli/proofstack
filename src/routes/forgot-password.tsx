@@ -1,8 +1,9 @@
 import { Link, createFileRoute } from '@tanstack/react-router'
+import { pageTitle } from '#/config/app.ts'
 import { ForgotPasswordForm } from '#/features/auth/components/forgot-password-form.tsx'
 
 export const Route = createFileRoute('/forgot-password')({
-  head: () => ({ meta: [{ title: 'Forgot password · ProofStack' }, { name: 'robots', content: 'noindex' }] }),
+  head: () => ({ meta: [{ title: pageTitle('Forgot password') }, { name: 'robots', content: 'noindex' }] }),
   headers: () => ({ 'cache-control': 'private, no-store' }),
   component: ForgotPassword,
 })

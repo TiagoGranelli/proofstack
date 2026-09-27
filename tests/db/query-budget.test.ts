@@ -1,87 +1,24 @@
 // Query budgets against real Postgres: each repository method, and each server path that reads a list of
 // rows, issues a fixed number of SQL statements whatever the data size. An N+1 (a query per row) fails here
-// with the method's name and the statements it sent. A new repository method gets a budget here.
-import { drizzle } from 'drizzle-orm/node-postgres'
+// with the method's name and the statements it sent. A new repository method gets a budget here, or in a file
+// of its own next to this one.
 import { Effect, Layer } from 'effect'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import type { PageCursor, PostPage } from '#/contract/posts.ts'
+import { afterAll, describe, expect, it } from 'vitest'
 import { auth } from '#/server/auth.ts'
-import { Database, pool } from '#/server/db/client.ts'
-import * as schema from '#/server/db/schema/index.ts'
+import { pool } from '#/server/db/client.ts'
+import { DatabaseHealth } from '#/server/db/health.ts'
 import { env } from '#/server/env.ts'
-import { PostsRepo } from '#/server/posts/repo.ts'
-import { createAccount, expectBudget, statementsOf } from './helpers.ts'
+import { createAccount, expectBudget, recordingDatabase, statementsOf, withBudget } from './helpers.ts'
 
 afterAll(() => pool.end())
 
-/** The app's pool behind a Drizzle client that records every statement it sends, injected as `Database`. */
-const logged: string[] = []
-const recordingDb = drizzle({ client: pool, schema, logger: { logQuery: (query) => void logged.push(query) } })
-const repoLayer = PostsRepo.layer.pipe(Layer.provide(Layer.succeed(Database, recordingDb)))
-
-type Repo = typeof PostsRepo.Service
-/** Runs one repository call and checks it sent exactly `budget` statements. */
-const withBudget = async <A, E>(what: string, budget: number, call: (repo: Repo) => Effect.Effect<A, E>) => {
-  logged.length = 0
-  const result = await Effect.runPromise(
-    Effect.gen(function* () {
-      return yield* call(yield* PostsRepo)
-    }).pipe(Effect.provide(repoLayer)),
-  )
-  expectBudget(what, [...logged], budget)
-  return result
-}
-
-type Author = { id: string; name: string }
-let few: Author
-let many: Author
-beforeAll(async () => {
-  const [a, b] = await Promise.all([createAccount('budget-few'), createAccount('budget-many')])
-  few = a
-  many = b
-  await recordingDb.insert(schema.post).values({ authorId: few.id, body: 'the only post' })
-  await recordingDb
-    .insert(schema.post)
-    .values(Array.from({ length: 50 }, (_, i) => ({ authorId: many.id, body: `post ${i}` })))
-})
-
-const lastKey = (page: PostPage): PageCursor | undefined => page.nextCursor ?? undefined
-
-describe('PostsRepo', () => {
-  it('lists one page in one statement, with 1 post or 50, with or without a cursor', async () => {
-    const one = await withBudget('listByAuthor (1 post)', 1, (repo) => repo.listByAuthor(few, { limit: 20 }))
-    expect(one.items).toHaveLength(1)
-    const full = await withBudget('listByAuthor (50 posts)', 1, (repo) => repo.listByAuthor(many, { limit: 50 }))
-    expect(full.items).toHaveLength(50)
-    const first = await withBudget('listByAuthor (page 1 of 50)', 1, (repo) => repo.listByAuthor(many, { limit: 20 }))
-    const next = await withBudget('listByAuthor (page 2 of 50)', 1, (repo) =>
-      repo.listByAuthor(many, { limit: 20, cursor: lastKey(first) }),
-    )
-    expect(next.items).toHaveLength(20)
-
-    // The public list joins the author's name in the same statement, however many authors a page holds.
-    const small = await withBudget('listPublic (limit 1)', 1, (repo) => repo.listPublic({ limit: 1 }))
-    const large = await withBudget('listPublic (limit 50)', 1, (repo) =>
-      repo.listPublic({ limit: 50, cursor: lastKey(small) }),
-    )
-    expect(new Set(large.items.map((post) => post.authorName)).size).toBeGreaterThan(1)
-  })
-
-  it('creates, edits and deletes in one statement each, and edits move updatedAt', async () => {
-    const created = await withBudget('create', 1, (repo) => repo.create(few, 'budgeted'))
-    // Postgres generated a time-ordered id (the column default, uuidv7()).
-    expect(created.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
-    const updated = await withBudget('update', 1, (repo) => repo.update(few, created.id, 'budgeted, edited'))
-    expect(updated?.createdAt).toBe(created.createdAt)
-    expect(Date.parse(updated!.updatedAt)).toBeGreaterThan(Date.parse(created.updatedAt))
-    // Another author's post: the same single statement finds nothing.
-    expect(await withBudget('update (not the owner)', 1, (repo) => repo.update(many, created.id, 'x'))).toBeUndefined()
-    // A malformed id never reaches Postgres.
-    expect(await withBudget('update (malformed id)', 0, (repo) => repo.update(few, 'not-a-uuid', 'x'))).toBeUndefined()
-    expect(await withBudget('remove (malformed id)', 0, (repo) => repo.remove(few, 'not-a-uuid'))).toBe(false)
-    expect(await withBudget('remove', 1, (repo) => repo.remove(few, created.id))).toBe(true)
-    expect(await withBudget('remove (gone)', 1, (repo) => repo.remove(few, created.id))).toBe(false)
-    await withBudget('ping', 1, (repo) => repo.ping)
+describe('DatabaseHealth', () => {
+  it('pings in one statement', async () => {
+    const health = DatabaseHealth.layer.pipe(Layer.provide(recordingDatabase))
+    const ping = Effect.gen(function* () {
+      return yield* (yield* DatabaseHealth).ping
+    })
+    await expect(withBudget('ping', 1, ping.pipe(Effect.provide(health)))).resolves.toBeUndefined()
   })
 })
 

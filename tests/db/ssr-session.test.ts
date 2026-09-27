@@ -4,7 +4,7 @@
 // Authentication middleware asks for the same cookie's session. Counted at pg's Client (helpers.ts).
 import { getRequestHeaders, requestHandler } from '@tanstack/react-start/server'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { myPostsCreate, myPostsList } from '#/sdk/sdk.gen.ts'
+import { meGet } from '#/sdk/sdk.gen.ts'
 import { createInProcessApiClient } from '#/server/api/in-process-client.ts'
 import { auth } from '#/server/auth.ts'
 import { pool } from '#/server/db/client.ts'
@@ -58,13 +58,13 @@ describe('an authed SSR page', () => {
     const { result, statements } = await statementsOf(() =>
       serve(cookie, async () => {
         const guard = await requestSession(getRequestHeaders())
-        const page = await myPostsList({ client: createInProcessApiClient() })
-        return { signedIn: guard !== null, status: page.response?.status }
+        const me = await meGet({ client: createInProcessApiClient() })
+        return { signedIn: guard !== null, status: me.response?.status }
       }),
     )
     expect(result).toEqual({ signedIn: true, status: 200 })
-    // The list itself is one more statement (tests/db/query-budget.test.ts).
-    expectBudget('an authed SSR page', statements, lookup + 1)
+    // GET /api/me answers from the session the middleware already has: nothing more than the one lookup.
+    expectBudget('an authed SSR page', statements, lookup)
   })
 
   it('keeps lookups apart per request and per cookie', async () => {
@@ -90,13 +90,13 @@ describe('an authed SSR page', () => {
   it('refuses a write through the in-process client before it reaches the API', async () => {
     const { result, statements } = await statementsOf(() =>
       serve(cookie, () =>
-        // The SDK hands a thrown fetch back as `error` (query options set throwOnError, and then it throws).
-        myPostsCreate({ client: createInProcessApiClient(), body: { body: 'never written' } }).then(({ error }) =>
-          error instanceof Error ? error.message : 'sent',
-        ),
+        // Any write: the client refuses it before routing. The SDK hands a thrown fetch back as `error`.
+        createInProcessApiClient()
+          .post({ url: '/api/me' })
+          .then(({ error }) => (error instanceof Error ? error.message : 'sent')),
       ),
     )
-    expect(result).toMatch(/^The in-process API client only sends GET \(got POST \/api\/me\/posts\)/)
+    expect(result).toMatch(/^The in-process API client only sends GET \(got POST \/api\/me\)/)
     expectBudget('a refused write', statements, 0)
   })
 })

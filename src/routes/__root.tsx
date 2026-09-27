@@ -1,6 +1,7 @@
 import type { QueryClient } from '@tanstack/react-query'
 import { HeadContent, Outlet, Scripts, createRootRouteWithContext, useHydrated } from '@tanstack/react-router'
 import { SiteHeader } from '#/components/layouts/site-header.tsx'
+import { APP_NAME } from '#/config/app.ts'
 import { documentHeaders, nonceSources } from '#/lib/content-security-policy.ts'
 import '#/styles/app.css'
 
@@ -13,7 +14,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: 'utf-8' },
       { name: 'viewport', content: 'width=device-width, initial-scale=1' },
-      { title: 'ProofStack' },
+      { title: APP_NAME },
       { name: 'description', content: 'Short posts with public reading and authenticated authoring.' },
       { name: 'theme-color', content: '#ffffff' },
     ],

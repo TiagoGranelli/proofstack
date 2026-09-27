@@ -168,7 +168,7 @@ describe('/reset-password', () => {
     const calls = authCalls('resetPassword')
     worker.use(calls.handler, authFunction('resetPassword', response))
     const { queryClient } = await renderReset('/reset-password?token=abc123')
-    queryClient.setQueryData(['my posts'], ['private'])
+    queryClient.setQueryData(['my data'], ['private'])
     await expect.element(newPassword()).toHaveAttribute('autocomplete', 'new-password')
     await expect.element(newPassword()).toHaveAccessibleDescription('At least 12 characters.')
     await newPassword().fill('a brand new password')
@@ -185,7 +185,7 @@ describe('/reset-password', () => {
     await expect
       .element(page.getByRole('status').getByRole('link', { name: 'Sign in' }))
       .toHaveAttribute('href', '/login')
-    expect(queryClient.getQueryData(['my posts'])).toBeUndefined()
+    expect(queryClient.getQueryData(['my data'])).toBeUndefined()
     expect(calls.data).toEqual([{ token: 'abc123', newPassword: 'a brand new password' }])
   })
 
@@ -207,14 +207,14 @@ describe('/reset-password', () => {
   ])('explains %s without the code', async (_, failure, message) => {
     worker.use(authFunction('resetPassword', { ok: false, failure }))
     const { queryClient } = await renderReset('/reset-password?token=abc123')
-    queryClient.setQueryData(['my posts'], ['private'])
+    queryClient.setQueryData(['my data'], ['private'])
     await newPassword().fill('a brand new password')
     await button('Set new password').click()
     await expect.element(page.getByRole('alert')).toHaveTextContent(message)
     await expect.element(formOf('Set new password')).toHaveAccessibleDescription(message)
     await expect.element(button('Set new password')).toHaveFocus()
     expect(document.body.textContent).not.toContain(failure.code)
-    expect(queryClient.getQueryData(['my posts'])).toEqual(['private'])
+    expect(queryClient.getQueryData(['my data'])).toEqual(['private'])
   })
 })
 

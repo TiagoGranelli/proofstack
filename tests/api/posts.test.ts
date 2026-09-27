@@ -3,12 +3,7 @@
 // clause, rate limits, CSRF) is covered by tests/integration against the running app.
 import { assert, describe, it } from '@effect/vitest'
 import { Effect } from 'effect'
-import {
-  POST_WRITE_WINDOW_SECONDS,
-  POST_WRITES_PER_WINDOW,
-  POSTS_PAGE_DEFAULT,
-  POSTS_PAGE_MAX,
-} from '#/contract/limits.ts'
+import { WRITE_WINDOW_SECONDS, WRITES_PER_WINDOW, POSTS_PAGE_DEFAULT, POSTS_PAGE_MAX } from '#/contract/limits.ts'
 import type { PageCursor, PostPage } from '#/contract/posts.ts'
 import { apiLayer, authors, clientAs } from './harness.ts'
 
@@ -120,7 +115,7 @@ describe('myPosts', () => {
   it.effect('answers 429 past the write limit, per user, and keeps reading', () =>
     Effect.gen(function* () {
       const [alice, bob] = [yield* clientAs('alice'), yield* clientAs('bob')]
-      for (let i = 3; i < POST_WRITES_PER_WINDOW; i++) yield* alice.myPosts.create({ payload: { body: `post ${i}` } })
+      for (let i = 3; i < WRITES_PER_WINDOW; i++) yield* alice.myPosts.create({ payload: { body: `post ${i}` } })
       const post = yield* alice.myPosts.create({ payload: { body: 'kept' } })
       yield* alice.myPosts.update({ params: { id: post.id }, payload: { body: 'edited' } })
       // A write that finds nothing still counts.
@@ -141,8 +136,8 @@ describe('myPosts', () => {
         // The wait the store computed (see the harness's clock), not a fixed stand-in such as the whole window.
         assert.deepStrictEqual(yield* response.json, {
           _tag: 'RateLimited',
-          message: 'Too many changes to your posts',
-          retryAfter: POST_WRITE_WINDOW_SECONDS - 1 - index,
+          message: 'Too many changes in a short time',
+          retryAfter: WRITE_WINDOW_SECONDS - 1 - index,
         })
       }
 

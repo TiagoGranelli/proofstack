@@ -3,7 +3,7 @@
 // counts the same composition in SQL statements (tests/db/ssr-session.test.ts).
 import { requestHandler } from '@tanstack/react-start/server'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { myPostsCreate, myPostsList, systemHealth } from '#/sdk/sdk.gen.ts'
+import { meGet, systemHealth } from '#/sdk/sdk.gen.ts'
 import { createInProcessApiClient } from '#/server/api/in-process-client.ts'
 import { auth } from '#/server/auth.ts'
 import { env } from '#/server/env.ts'
@@ -54,18 +54,16 @@ describe('the in-process API client', () => {
 
   it("reads as a visitor when the page request has no cookie, never with another request's session", async () => {
     const cookies = lookups()
-    const { response } = await serve(() => myPostsList({ client: createInProcessApiClient() }), null)
+    const { response } = await serve(() => meGet({ client: createInProcessApiClient() }), null)
     expect(response?.status).toBe(401)
     expect(cookies().every((cookie) => cookie === null)).toBe(true)
   })
 
   it('refuses anything but GET before the handler runs', async () => {
-    const { error, response } = await serve(() =>
-      myPostsCreate({ client: createInProcessApiClient(), body: { body: 'never sent' } }),
-    )
+    const { error, response } = await serve(() => createInProcessApiClient().post({ url: '/api/me' }))
     expect(response).toBeUndefined()
     // The SDK hands a thrown fetch back as `error`, whatever its declared error bodies are.
     const thrown: unknown = error
-    expect(thrown instanceof Error && thrown.message).toMatch(/only sends GET \(got POST \/api\/me\/posts\)/)
+    expect(thrown instanceof Error && thrown.message).toMatch(/only sends GET \(got POST \/api\/me\)/)
   })
 })

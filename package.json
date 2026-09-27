@@ -1,6 +1,6 @@
 {
   "name": "proofstack",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "Full-stack web application template with a verifiable API contract.",
   "license": "MIT",
@@ -55,7 +55,7 @@
     "verify:app": "node scripts/verify-app.ts",
     "check:drift": "node scripts/check-drift.ts",
     "check:migrations": "node scripts/check-migrations.ts",
-    "sbom:release": "pnpm sbom --sbom-format cyclonedx --sbom-type application --prod --out sbom/proofstack.cdx.json",
+    "sbom:release": "pnpm sbom --sbom-format cyclonedx --sbom-type application --prod --out sbom/npm.cdx.json",
     "audit:check": "pnpm audit --audit-level high",
     "licenses:check": "node scripts/licenses.ts",
     "lighthouse": "node scripts/lighthouse.ts",

@@ -1,4 +1,5 @@
 import { Link, createFileRoute, redirect } from '@tanstack/react-router'
+import { pageTitle } from '#/config/app.ts'
 import { LoginForm } from '#/features/auth/components/login-form.tsx'
 import { failureFromSearch } from '#/features/auth/utils/describe-auth-failure.ts'
 import { safeRedirect } from '#/features/auth/utils/safe-redirect.ts'
@@ -25,7 +26,7 @@ export const Route = createFileRoute('/login')({
     if (await getSession()) throw redirect({ href: safeRedirect(search.redirect) })
   },
   loader: () => getSignUpPolicy(),
-  head: () => ({ meta: [{ title: 'Sign in · ProofStack' }, { name: 'robots', content: 'noindex' }] }),
+  head: () => ({ meta: [{ title: pageTitle('Sign in') }, { name: 'robots', content: 'noindex' }] }),
   headers: () => ({ 'cache-control': 'private, no-store' }),
   component: Login,
 })

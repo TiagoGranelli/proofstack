@@ -16,12 +16,12 @@ Test each behavior in the cheapest layer that can observe it:
 ## Running
 
 - `pnpm test:unit|test:api|test:component [filter ...]` runs one fast layer; `pnpm test:fast` runs all three with
-  coverage. `pnpm test:db [filter ...]` runs the `db` layer against a fresh `proofstack_db_<pid>_test` database
+  coverage. `pnpm test:db [filter ...]` runs the `db` layer against a fresh `app_db_<pid>_test` database
   next to `DATABASE_URL` (dropped afterwards; `KEEP_TEST_DB=1` keeps it). It needs Postgres, no build. Creating
   any per-run database also drops those of runs whose pid is gone (stopped with Ctrl-C, killed).
 - `pnpm build && pnpm verify:app [--no-db] [--no-e2e] [--no-integration] [--edge] [filter ...]` runs the `db`
   layer, then starts two built servers (open and closed sign-up) against a fresh per-run
-  `proofstack_<purpose>_<pid>_test` database (dropped afterwards) and runs Vitest (`tests/integration`) and
+  `app_<purpose>_<pid>_test` database (dropped afterwards) and runs Vitest (`tests/integration`) and
   Playwright (`tests/e2e`, projects from `PW_PROJECTS`); app logs go to `test-results/app-server*.log`. After a
   full run (every runner, no filter) it runs the api layer again with its recorder and the contract-coverage
   check. A filter that matches no test is an error; a runner that no filter matches is skipped. `--edge` puts
@@ -58,10 +58,11 @@ Test each behavior in the cheapest layer that can observe it:
   The project sets dummy env values (`vitest.config.ts`) because `src/server/env.ts` validates at import;
   nothing connects to them.
 - **db.** `tests/db` runs against a real, migrated database of its own (`tests/db/global-setup.ts`). A new
-  repository method gets a query budget in `tests/db/query-budget.test.ts`: `withBudget(name, n, call)`
-  counts the statements it sends through a Drizzle logger injected as `Database`, and a list method must send
-  as many for 1 row as for 50 (N+1 fails with the statements listed). A server path that reads rows through
-  Better Auth is counted at pg's `Client` with `statementsOf` (tests/db/helpers.ts).
+  repository method gets a query budget in its feature's `tests/db/<feature>-query-budget.test.ts` (as
+  `posts-query-budget.test.ts`; shared services in `query-budget.test.ts`): `withBudget(name, n, effect)`
+  (`tests/db/helpers.ts`) counts the statements an Effect built on `recordingDatabase` sends, and a list method
+  must send as many for 1 row as for 50 (N+1 fails with the statements listed). A server path that reads rows
+  through Better Auth is counted at pg's `Client` with `statementsOf` (tests/db/helpers.ts).
 - **Contract coverage.** After a full `verify:app`, `scripts/contract-coverage.ts` checks that every
   operation × status in `openapi.json` was answered by some test (the app servers' request logs, plus the
   api layer through the harness's recorder, `CONTRACT_OBSERVATIONS`) and that no operation answered a status it

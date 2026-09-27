@@ -1,6 +1,6 @@
 // A session older than Better Auth's updateAge (1 day of its 7) is renewed on use, and the renewed cookie
 // reaches the client on both paths that read the session: the Effect API's Authentication middleware
-// (/api/me/*) and Better Auth's own /get-session.
+// (/api/me) and Better Auth's own /get-session.
 import { Pool } from 'pg'
 import { afterAll, describe, expect, it } from 'vitest'
 import { appUrl, clientIps, sessionCookie, signIn, users } from './helpers.ts'
@@ -39,7 +39,7 @@ const expectRenewedCookie = (res: Response, cookie: string) => {
 describe('session refresh', () => {
   it('renews an aged session used through the Effect API middleware', async () => {
     const cookie = await agedSession()
-    const res = await fetch(`${appUrl}/api/me/posts`, { headers: { cookie } })
+    const res = await fetch(`${appUrl}/api/me`, { headers: { cookie } })
     expect(res.status).toBe(200)
     expectRenewedCookie(res, cookie)
     expect((await expiresAt(cookie)).getTime()).toBeGreaterThan(Date.now() + 6 * DAY)
@@ -56,7 +56,7 @@ describe('session refresh', () => {
   it('leaves a recent session alone', async () => {
     const cookie = await signIn(users.author, nextIp())
     const before = await expiresAt(cookie)
-    const res = await fetch(`${appUrl}/api/me/posts`, { headers: { cookie } })
+    const res = await fetch(`${appUrl}/api/me`, { headers: { cookie } })
     expect(res.status).toBe(200)
     expect(sessionCookie(res)).toBeUndefined()
     expect(await expiresAt(cookie)).toEqual(before)

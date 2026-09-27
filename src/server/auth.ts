@@ -3,6 +3,7 @@ import { drizzleAdapter } from '@better-auth/drizzle-adapter'
 import { betterAuth } from 'better-auth'
 import { APIError, createAuthMiddleware } from 'better-auth/api'
 import { tanstackStartCookies } from 'better-auth/tanstack-start'
+import { APP_NAME } from '#/config/app.ts'
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '#/contract/limits.ts'
 import { scheduleAuthCleanup } from './auth-cleanup.ts'
 import { postgresRateLimitStorage } from './auth-rate-limit.ts'
@@ -32,7 +33,7 @@ const requirePasswordToDelete = createAuthMiddleware(async (ctx) => {
 })
 
 export const auth = betterAuth({
-  appName: 'ProofStack',
+  appName: APP_NAME,
   baseURL: env.appUrl,
   basePath: AUTH_BASE_PATH,
   secret: env.authSecret,
@@ -59,7 +60,7 @@ export const auth = betterAuth({
     // Following the link verifies the address; signing in stays a separate, rate-limited step.
     autoSignInAfterVerification: false,
   },
-  // Deletion needs the password (requirePasswordToDelete below); posts go with the user (foreign key cascade).
+  // Deletion needs the password (requirePasswordToDelete below); the user's rows go with it (foreign key cascade).
   user: { deleteUser: { enabled: true } },
   hooks: { before: requirePasswordToDelete },
   // AUTH_SIGN_UP=closed (the default) keeps public sign-up off: accounts come from `pnpm user:create`, which

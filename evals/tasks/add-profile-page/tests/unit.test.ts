@@ -9,7 +9,7 @@ describe('eval: add-profile-page wiring', () => {
   it('has the page under the signed-in layout, not indexed', () => {
     expect(existsSync('src/routes/_authed/profile.tsx')).toBe(true)
     const route = read('src/routes/_authed/profile.tsx')
-    expect(route).toContain('Profile · ProofStack')
+    expect(route).toMatch(/pageTitle\(\s*['"]Profile['"]\s*\)/)
     expect(route).toMatch(/noindex/)
   })
 

@@ -10,10 +10,10 @@ describe('ApiErrorAlert', () => {
     [
       'a network failure',
       new TypeError('Failed to fetch'),
-      'Could not save the post. Check your connection and try again.',
+      'Could not save your changes. Check your connection and try again.',
     ],
-    ['a non-JSON body', 'Forbidden', 'Could not save the post. Try again.'],
-    ['an empty body', {}, 'Could not save the post. Try again.'],
+    ['a non-JSON body', 'Forbidden', 'Could not save your changes. Try again.'],
+    ['an empty body', {}, 'Could not save your changes. Try again.'],
     [
       'a ValidationError',
       {
@@ -21,7 +21,7 @@ describe('ApiErrorAlert', () => {
         message: 'Invalid request payload',
         issues: [{ path: ['body'], message: 'Too long.' }],
       },
-      'Could not save the post: Too long.',
+      'Could not save your changes: Too long.',
     ],
     [
       'a PostNotFound',
@@ -36,7 +36,7 @@ describe('ApiErrorAlert', () => {
   ]
 
   it.each(cases)('announces %s without a sign-in link', async (_, error, message) => {
-    await renderInApp(<ApiErrorAlert id="err" error={error} action="save the post" />)
+    await renderInApp(<ApiErrorAlert id="err" error={error} action="save your changes" />)
     const alert = page.getByRole('alert')
     await expect.element(alert).toHaveTextContent(message)
     await expect.element(alert).toHaveAttribute('id', 'err')
@@ -45,7 +45,7 @@ describe('ApiErrorAlert', () => {
 
   it('offers to sign in again, returning to the current page', async () => {
     const { router } = await renderInApp(
-      <ApiErrorAlert error={{ _tag: 'Unauthorized', message: 'Authentication required' }} action="save the post" />,
+      <ApiErrorAlert error={{ _tag: 'Unauthorized', message: 'Authentication required' }} action="save your changes" />,
       { url: '/dashboard?tab=1' },
     )
     await expect

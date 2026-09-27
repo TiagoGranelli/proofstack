@@ -1,5 +1,5 @@
 const DEFAULT_AFTER_SIGN_IN = '/dashboard'
-const PLACEHOLDER_ORIGIN = 'http://proofstack.invalid'
+const PLACEHOLDER_ORIGIN = 'http://app.invalid'
 /** Longer values are not a path this app links to; refusing them keeps the check cheap. */
 const MAX_LENGTH = 2048
 

@@ -3,7 +3,7 @@
   "extends": ["config:recommended", "docker:pinDigests", "helpers:pinGitHubActionDigests"],
   "minimumReleaseAge": "7 days",
   "osvVulnerabilityAlerts": true,
-  "ignoreDeps": ["proofstack", "proofstack-eval"],
+  "ignoreDeps": ["app", "app-eval"],
   "customManagers": [
     {
       "customType": "regex",

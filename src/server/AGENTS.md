@@ -23,7 +23,7 @@ shutdown (`lifecycle.ts`). Read this before you change anything here. The root `
 - A repository takes its client per statement from `Database.client`; a write of several statements runs in
   `Database.transaction(effect)` (`db/client.ts`, proven in `tests/db/transaction.test.ts`).
 - A repository method sends a fixed number of statements, whatever the page size: every new one gets a query
-  budget in `tests/db/query-budget.test.ts` (see `tests/AGENTS.md`).
+  budget in `tests/db/<feature>-query-budget.test.ts` (see `tests/AGENTS.md`).
 - Read settings through `env.ts`, which validates them at import. A new setting goes there, in `.env.example`,
   and in `tests/unit/env.test.ts` (`env.ts` is in the coverage gate). `import.meta.env.VITE_*` ships to the
   browser; the `vite-env` guard rejects it.

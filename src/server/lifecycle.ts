@@ -15,8 +15,8 @@ export type ShutdownStep = (typeof STEPS)[number]
 // Nitro bundles its plugins (src/server/nitro/startup.ts, which runs the steps) apart from the SSR code that
 // registers them, so this module can exist twice in .output/server. The registry and the draining flag live on
 // globalThis, where both copies find the same ones.
-const REGISTRY = Symbol.for('proofstack.shutdown')
-const DRAINING = Symbol.for('proofstack.draining')
+const REGISTRY = Symbol.for('app.shutdown')
+const DRAINING = Symbol.for('app.draining')
 const shared = globalThis as { [REGISTRY]?: Map<ShutdownStep, Cleanup>; [DRAINING]?: boolean }
 const registry = (shared[REGISTRY] ??= new Map<ShutdownStep, Cleanup>())
 

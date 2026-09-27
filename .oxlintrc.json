@@ -291,8 +291,8 @@
           {
             "patterns": [
               {
-                "group": ["*", "!effect", "!effect/**", "!./*", "!\\#/contract/*"],
-                "message": "src/contract is the pure API contract: it may import only `effect` and other src/contract modules."
+                "group": ["*", "!effect", "!effect/**", "!./*", "!\\#/contract/*", "!\\#/config/*"],
+                "message": "src/contract is the pure API contract: it may import only `effect`, other src/contract modules and src/config."
               }
             ]
           }

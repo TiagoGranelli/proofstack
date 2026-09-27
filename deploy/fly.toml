@@ -1,7 +1,7 @@
 # Fly.io, built from the repository's Dockerfile. docs/operations.md, "Fly.io", has the procedure. Copy this
 # file to the repository root as fly.toml, rename the app, then `fly launch --no-deploy` and `fly deploy`.
 # Secrets are not here: `fly secrets set DATABASE_URL=... BETTER_AUTH_SECRET=...` (see the docs).
-app = "proofstack-example"
+app = "your-app"
 primary_region = "ams"
 # SIGTERM starts the drain; the grace period covers SERVER_SHUTDOWN_TIMEOUT (5 s) and the shutdown steps.
 kill_signal = "SIGTERM"
@@ -17,7 +17,7 @@ release_command = "node .output/migrate.mjs"
 strategy = "rolling"
 
 [env]
-APP_URL = "https://proofstack-example.fly.dev"
+APP_URL = "https://your-app.fly.dev"
 AUTH_SIGN_UP = "closed"
 # Fly's proxy appends the client address to X-Forwarded-For and connects from Fly's private network.
 # Check the ranges against Fly's documentation for your organization before relying on per-IP rate limits.

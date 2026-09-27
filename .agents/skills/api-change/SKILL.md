@@ -28,7 +28,7 @@ together and must agree; the running API and the tests must agree with all three
 6. Test, cheapest layer first (read `tests/AGENTS.md`): every handler branch in `tests/api/` through
    `clientAs(...)` (`handlers.ts` is in the 100% coverage gate), including each declared status, because the
    contract-coverage check after a full `verify:app` fails on a declared status no test provoked. A repository
-   method also gets a query budget in `tests/db/query-budget.test.ts`. `tests/api/database-down.test.ts`
+   method also gets a query budget in `tests/db/<feature>-query-budget.test.ts`. `tests/api/database-down.test.ts`
    covers a new operation without edits.
 
 ## Done when

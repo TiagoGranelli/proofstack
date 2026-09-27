@@ -68,6 +68,6 @@ step(
 
 console.log(`
 Ready. Next:
-  pnpm user:create you@example.com "Your Name"   # password via stdin or PROOFSTACK_USER_PASSWORD
+  pnpm user:create you@example.com "Your Name"   # password via stdin or CREATE_USER_PASSWORD
   pnpm dev                                       # http://localhost:3000
   pnpm check                                     # format, lint, types, dead code, drift and boundaries`)

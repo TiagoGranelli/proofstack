@@ -8,7 +8,7 @@ interface SessionUser {
   readonly email: string
 }
 
-export class CurrentUser extends Context.Service<CurrentUser, SessionUser>()('proofstack/CurrentUser') {}
+export class CurrentUser extends Context.Service<CurrentUser, SessionUser>()('app/CurrentUser') {}
 
 const SESSION_COOKIE = 'better-auth.session_token'
 
@@ -26,7 +26,7 @@ const SESSION_COOKIE = 'better-auth.session_token'
  * @effect-expect-leaking HttpServerRequest | ParsedSearchParams | RouteContext
  */
 export class Authentication extends HttpApiMiddleware.Service<Authentication, { provides: CurrentUser }>()(
-  'proofstack/Authentication',
+  'app/Authentication',
   {
     error: Unauthorized,
     security: {
@@ -45,16 +45,16 @@ export class Authentication extends HttpApiMiddleware.Service<Authentication, { 
  * Effect's empty default. Applied only to endpoints that take input, so input-less endpoints do not
  * document a 400 they cannot return.
  */
-export class RequestValidation extends HttpApiMiddleware.Service<RequestValidation>()('proofstack/RequestValidation', {
+export class RequestValidation extends HttpApiMiddleware.Service<RequestValidation>()('app/RequestValidation', {
   error: ValidationError,
 }) {}
 
 /**
- * Caps the writes one signed-in user makes (POST_WRITES_PER_WINDOW per POST_WRITE_WINDOW_SECONDS in
+ * Caps the writes one signed-in user makes (WRITES_PER_WINDOW per WRITE_WINDOW_SECONDS in
  * ./limits.ts, counted before the request body is read); fails with 429 otherwise. Runs inside `Authentication`, whose
  * `CurrentUser` it counts by, so it goes on endpoints of a group that has that middleware.
  */
 export class WriteRateLimit extends HttpApiMiddleware.Service<WriteRateLimit, { requires: CurrentUser }>()(
-  'proofstack/WriteRateLimit',
+  'app/WriteRateLimit',
   { error: RateLimited },
 ) {}

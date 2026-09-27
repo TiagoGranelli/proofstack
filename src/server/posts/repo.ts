@@ -71,9 +71,8 @@ export class PostsRepo extends Context.Service<
     readonly create: (author: Author, body: string) => Effect.Effect<Post, DbError>
     readonly update: (author: Author, id: string, body: string) => Effect.Effect<Post | undefined, DbError>
     readonly remove: (author: Author, id: string) => Effect.Effect<boolean, DbError>
-    readonly ping: Effect.Effect<void, DbError>
   }
->()('proofstack/PostsRepo') {
+>()('app/PostsRepo') {
   static readonly layer = Layer.effect(
     PostsRepo,
     Effect.gen(function* () {
@@ -135,7 +134,6 @@ export class PostsRepo extends Context.Service<
           )
           return rows.length > 0
         }),
-        ping: query((db) => db.execute(sql`select 1`)).pipe(Effect.asVoid),
       }
     }),
   )

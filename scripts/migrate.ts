@@ -98,7 +98,7 @@ const attempt = async (client: Client) => {
 
 const client = new Client({
   connectionString: url,
-  application_name: 'proofstack-migrate',
+  application_name: 'app-migrate',
   connectionTimeoutMillis: 10_000,
 })
 // Postgres NOTICEs ("schema drizzle already exists, skipping") are noise here.

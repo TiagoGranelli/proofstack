@@ -15,7 +15,7 @@
 //           that none of the filters match is skipped. Without filters every selected runner must find tests.
 //   --edge: run both suites through the reference edge (Caddy, deploy/Caddyfile) as in production; its log
 //           is test-results/edge.log. Playwright projects: PW_PROJECTS (see playwright.config.ts).
-// Env: TEST_DATABASE_URL overrides the database (default: proofstack_verify_<pid>_test next to DATABASE_URL,
+// Env: TEST_DATABASE_URL overrides the database (default: app_verify_<pid>_test next to DATABASE_URL,
 //      dropped afterwards unless KEEP_TEST_DB=1). ALLOW_STALE_BUILD=1 skips the build freshness check.
 //      MAILPIT_HOST (default 127.0.0.1), MAILPIT_SMTP_PORT and MAILPIT_HTTP_PORT locate Mailpit.
 import { readdirSync, readFileSync, rmSync } from 'node:fs'
@@ -125,7 +125,7 @@ try {
   }
   const ready = await fetch(`${mailpit.api}/readyz`).catch(() => undefined)
   if (!ready?.ok) throw new Error(`Mailpit is not reachable at ${mailpit.api}. Start it with \`pnpm mail:up\`.`)
-  const mail = { SMTP_URL: mailpit.smtp, MAIL_FROM: 'ProofStack <no-reply@example.test>' }
+  const mail = { SMTP_URL: mailpit.smtp, MAIL_FROM: 'App <no-reply@example.test>' }
   // startApp creates the database: it is dropped in this finally even when a server or create-user fails.
   try {
     const app = await startApp({

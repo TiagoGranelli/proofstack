@@ -4,10 +4,10 @@
 // Isolation. The specs run in parallel against one server and one database, so no spec may depend on data
 // another spec writes:
 // - Every worker signs in as its own `author`, created for it (verified) through scripts/create-user.ts, the
-//   same path an operator uses. A worker runs one test at a time, so a dashboard only ever shows the posts
-//   of tests in that worker, and each test finds its own by a unique body. Tests that change or delete an
+//   same path an operator uses. A worker runs one test at a time, so a dashboard only ever shows the data
+//   of tests in that worker, and each test finds its own by a unique value. Tests that change or delete an
 //   account use a throwaway one from ./accounts.ts instead.
-// - States that need the whole app to look a certain way (no posts at all, an API failure) are reached with
+// - States that need the whole app to look a certain way (an empty list, an API failure) are reached with
 //   `navigateWithApiResponse`, which answers the browser's own API call instead of changing the database.
 // - The public list is shared by definition. The one bulk write, more posts than fit on a page, happens in
 //   the `seed` project (seed.setup.ts) before any spec starts; after that a test publishes at most a post or
@@ -17,6 +17,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import type { APIRequestContext, Page, Route, TestInfo } from '@playwright/test'
+import { APP_NAME } from '#/config/app.ts'
 import { POST_MAX_LENGTH, POSTS_PAGE_DEFAULT } from '#/contract/limits.ts'
 import type { Post, PostPage } from '#/sdk/types.gen.ts'
 // Every spec gets the Content-Security-Policy violation collector from ../fixtures.ts.
@@ -42,7 +43,7 @@ export const createAuthor = async (name: string): Promise<Author> => {
   const author = { email: `e2e-${crypto.randomUUID()}@example.test`, name, password: `pw-${crypto.randomUUID()}` }
   try {
     await promisify(execFile)(process.execPath, [CREATE_USER, author.email, author.name], {
-      env: { ...process.env, PROOFSTACK_USER_PASSWORD: author.password },
+      env: { ...process.env, CREATE_USER_PASSWORD: author.password },
     })
   } catch (error) {
     const { stderr } = error as { stderr?: string }
@@ -128,25 +129,29 @@ export const fakePost = (body: string): Post => ({
 /** A last page (no Load more) holding exactly `posts`, as GET /api/posts and GET /api/me/posts answer. */
 export const lastPage = (...posts: Post[]): PostPage => ({ items: posts, nextCursor: null })
 
-/** The main-navigation link whose client-side navigation fetches each list. */
-const LIST_LINK = { '/api/posts': 'ProofStack', '/api/me/posts': 'Dashboard' } as const
+/** The main-navigation link whose client-side navigation makes the page's loader call each API path. */
+const PAGE_LINK = {
+  '/api/posts': APP_NAME,
+  '/api/me/posts': 'Dashboard',
+} as const
 
 /**
- * Reaches the page that shows `api` by client-side navigation (from /about, through the main navigation)
- * while the browser's request for its first page is answered with `response`: a `PostPage`, or an error
+ * Reaches the page that loads `api` by client-side navigation (from /about, through the main navigation)
+ * while the browser's GET of it is answered with `response`: a success body the contract allows, or an error
  * status with any body. SSR data comes from the in-process API and cannot be intercepted; a client navigation
- * fetches it from the browser, so empty lists and failures can be shown without touching the database.
+ * fetches it from the browser, so empty lists and failures can be shown without touching the database. The
+ * dashboard's paths need a signed-in page.
  */
 export const navigateWithApiResponse = async (
   page: Page,
-  api: keyof typeof LIST_LINK,
-  response: { json: PostPage } | { status: number; json: unknown },
+  api: keyof typeof PAGE_LINK,
+  response: { status?: number; json: unknown },
 ) => {
   await visit(page, '/about')
   await page.route(`**${api}`, (route) =>
     route.request().method() === 'GET' ? route.fulfill(response) : route.fallback(),
   )
-  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: LIST_LINK[api], exact: true }).click()
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: PAGE_LINK[api], exact: true }).click()
 }
 
 /** The dashboard with one new post of the author's own, published through the UI. */

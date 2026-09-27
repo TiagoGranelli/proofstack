@@ -1,4 +1,4 @@
-// scripts/test-db.ts drops the per-run databases (`proofstack_<purpose>_<pid>_test`) of runs that are gone
+// scripts/test-db.ts drops the per-run databases (`app_<purpose>_<pid>_test`) of runs that are gone
 // whenever it creates one: a run stopped with Ctrl-C or killed never reaches the `finally` that drops its own.
 import { spawnSync } from 'node:child_process'
 import { Client } from 'pg'
@@ -33,11 +33,11 @@ const existing = (names: string[]) =>
     return rows.map((row) => row.datname)
   })
 
-const abandoned = `proofstack_sweep_${exitedPid()}_test`
+const abandoned = `app_sweep_${exitedPid()}_test`
 // The Vitest process that started this worker: a run that is still going.
-const running = `proofstack_sweep_${process.ppid}_test`
+const running = `app_sweep_${process.ppid}_test`
 // A fixed name (TEST_DATABASE_URL), which carries no pid.
-const fixed = 'proofstack_fixed_sweep_test'
+const fixed = 'app_fixed_sweep_test'
 
 afterAll(async () => {
   for (const name of [abandoned, running, fixed, new URL(url).pathname.slice(1)]) await dropTestDatabase(named(name))

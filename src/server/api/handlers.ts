@@ -6,19 +6,15 @@ import { ServiceUnavailable } from '#/contract/errors.ts'
 import { POSTS_PAGE_DEFAULT } from '#/contract/limits.ts'
 import { CurrentUser } from '#/contract/middleware.ts'
 import { PostNotFound } from '#/contract/posts.ts'
+import { DatabaseHealth } from '../db/health.ts'
 import { isDraining } from '../lifecycle.ts'
 import { PostsRepo, type PageRequest } from '../posts/repo.ts'
-
-const pageRequest = (query: { readonly cursor?: PageRequest['cursor']; readonly limit?: number }): PageRequest => ({
-  cursor: query.cursor,
-  limit: query.limit ?? POSTS_PAGE_DEFAULT,
-})
 
 export const SystemHandlers = HttpApiBuilder.group(
   Api,
   'system',
   Effect.fn(function* (handlers) {
-    const repo = yield* PostsRepo
+    const database = yield* DatabaseHealth
     return (
       handlers
         .handle('health', () => Effect.succeed({ status: 'ok' as const }))
@@ -28,7 +24,7 @@ export const SystemHandlers = HttpApiBuilder.group(
           Effect.suspend(() =>
             isDraining()
               ? Effect.fail(new ServiceUnavailable({ message: 'Shutting down' }))
-              : repo.ping.pipe(
+              : database.ping.pipe(
                   Effect.as({ status: 'ok' as const }),
                   Effect.catchTag('DbError', () =>
                     Effect.fail(new ServiceUnavailable({ message: 'Database unavailable' })),
@@ -39,6 +35,16 @@ export const SystemHandlers = HttpApiBuilder.group(
     )
   }),
 )
+
+/** The session's user, as the Authentication middleware resolved it: no query of its own. */
+export const MeHandlers = HttpApiBuilder.group(Api, 'me', (handlers) =>
+  handlers.handle('get', () => CurrentUser.use(Effect.succeed)),
+)
+
+const pageRequest = (query: { readonly cursor?: PageRequest['cursor']; readonly limit?: number }): PageRequest => ({
+  cursor: query.cursor,
+  limit: query.limit ?? POSTS_PAGE_DEFAULT,
+})
 
 export const PublicPostsHandlers = HttpApiBuilder.group(
   Api,

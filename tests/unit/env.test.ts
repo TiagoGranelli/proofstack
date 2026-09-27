@@ -132,7 +132,7 @@ describe('env', () => {
   describe('AUTH_SIGN_UP and mail', () => {
     const smtp = {
       SMTP_URL: 'smtps://user:password@smtp.example.com:465',
-      MAIL_FROM: 'ProofStack <no-reply@example.com>',
+      MAIL_FROM: 'Acme <no-reply@example.com>',
     }
 
     it('is closed by default, and open only when asked, trimmed', async () => {
@@ -164,11 +164,7 @@ describe('env', () => {
         { SMTP_URL: 'smtp://smtp.example.com', MAIL_FROM: '' },
         'Missing required environment variable MAIL_FROM',
       ],
-      [
-        'a sender without an address',
-        { SMTP_URL: 'smtp://smtp.example.com', MAIL_FROM: 'ProofStack' },
-        'MAIL_FROM must be',
-      ],
+      ['a sender without an address', { SMTP_URL: 'smtp://smtp.example.com', MAIL_FROM: 'Acme' }, 'MAIL_FROM must be'],
       ['a sender with two @', { SMTP_URL: 'smtp://smtp.example.com', MAIL_FROM: 'a@b@' }, 'MAIL_FROM must be'],
     ])('refuses %s', async (_, overrides, message) => {
       await expect(load(overrides)).rejects.toThrow(message)

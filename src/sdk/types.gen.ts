@@ -14,6 +14,20 @@ export type ServiceUnavailableEncoded = {
 };
 
 /**
+ * The signed-in user, without credentials or session data.
+ */
+export type User = {
+  id: string;
+  name: string;
+  email: string;
+};
+
+export type UnauthorizedEncoded = {
+  _tag: 'Unauthorized';
+  message: string;
+};
+
+/**
  * Opaque cursor from `nextCursor` of the previous page. Omit it for the first page.
  */
 export type PageCursor = string;
@@ -43,11 +57,6 @@ export type ValidationErrorEncoded = {
   _tag: 'ValidationError';
   message: string;
   issues: Array<ValidationIssue>;
-};
-
-export type UnauthorizedEncoded = {
-  _tag: 'Unauthorized';
-  message: string;
 };
 
 export type PostInput = {
@@ -108,6 +117,31 @@ export type SystemReadyResponses = {
 };
 
 export type SystemReadyResponse = SystemReadyResponses[keyof SystemReadyResponses];
+
+export type MeGetData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: '/api/me';
+};
+
+export type MeGetErrors = {
+  /**
+   * Unauthorized
+   */
+  401: UnauthorizedEncoded;
+};
+
+export type MeGetError = MeGetErrors[keyof MeGetErrors];
+
+export type MeGetResponses = {
+  /**
+   * The signed-in user, without credentials or session data.
+   */
+  200: User;
+};
+
+export type MeGetResponse = MeGetResponses[keyof MeGetResponses];
 
 export type PublicPostsListData = {
   body?: never;

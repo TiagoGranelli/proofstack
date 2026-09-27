@@ -6,7 +6,7 @@
 //   database   drizzle/*.sql applied to an empty database == the Drizzle schema (`drizzle-kit push` changes nothing)
 // Usage: pnpm check:drift [contract] [migrations] [auth] [database]   (default: all; database needs Postgres)
 // `pnpm check` runs the first three. The database check uses DRIFT_DATABASE_URL if set, otherwise a
-// throwaway proofstack_drift_<pid>_test next to DATABASE_URL.
+// throwaway app_drift_<pid>_test next to DATABASE_URL.
 import { createHash } from 'node:crypto'
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -22,7 +22,7 @@ if (existsSync('.env')) process.loadEnvFile('.env')
 
 // One directory per process, outside the repository (the pre-commit hook runs this in a copy of the index
 // whose node_modules links to the real one): concurrent runs never touch each other's files.
-const SCRATCH = mkdtempSync(join(tmpdir(), 'proofstack-drift-'))
+const SCRATCH = mkdtempSync(join(tmpdir(), 'check-drift-'))
 const SCHEMA = './src/server/db/schema/index.ts'
 const MIGRATIONS = 'drizzle'
 

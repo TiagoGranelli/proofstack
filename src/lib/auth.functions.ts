@@ -199,7 +199,7 @@ export const signOutEverywhere = createServerFn({ method: 'POST' }).handler(asyn
   return done(await callAuthEndpoint('POST', '/sign-out', { body: {} }))
 })
 
-/** Deletes the account and its posts after checking the password. */
+/** Deletes the account, and through foreign keys what it owns, after checking the password. */
 export const deleteAccount = createServerFn({ method: 'POST' })
   .validator(Schema.toStandardSchemaV1(DeleteAccountInput))
   .handler(async ({ data }) => done(await callAuthEndpoint('POST', '/delete-user', { body: data })))

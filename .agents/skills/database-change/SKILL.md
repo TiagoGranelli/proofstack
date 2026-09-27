@@ -17,7 +17,7 @@ description: Change the Postgres schema of this repo with Drizzle. Use when addi
 4. Apply it: `pnpm db:up`, then `pnpm db:migrate`.
 5. Run `pnpm check:drift migrations` and `pnpm check:migrations` (squawk: no statement that blocks a busy
    table). Waive one statement only with `-- squawk-ignore <rule>` under a comment line giving the reason.
-6. A new or changed repository query gets a query budget in `tests/db/query-budget.test.ts`, then
+6. A new or changed repository query gets a query budget in `tests/db/<feature>-query-budget.test.ts`, then
    `pnpm test:db` (read `tests/AGENTS.md`).
 
 ## Rules

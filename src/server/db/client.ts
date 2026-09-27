@@ -20,7 +20,7 @@ export const pool = new Pool({
   // close. pg sends them as startup parameters, which a pooler refuses ("unsupported startup parameter"), so
   // behind one they are set on the role instead (docs/operations.md, "Connection poolers").
   ...(env.databaseUrlPooled ? {} : { statement_timeout: 15_000, idle_in_transaction_session_timeout: 30_000 }),
-  application_name: 'proofstack',
+  application_name: 'app',
 })
 pool.on('error', (error) => log('error', 'postgres pool error', { error }))
 onShutdown('postgres-pool', () => pool.end())
@@ -43,7 +43,7 @@ class Rollback extends Error {
  * The Drizzle client as an Effect service, so repositories can be built against another database in tests.
  * Repositories take their client per statement from `Database.client`, so a transaction reaches them.
  */
-export class Database extends Context.Service<Database, Db>()('proofstack/Database') {
+export class Database extends Context.Service<Database, Db>()('app/Database') {
   static readonly layer = Layer.succeed(Database, db)
 
   /**

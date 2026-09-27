@@ -1,6 +1,6 @@
 # Operations
 
-How to configure, deploy and run ProofStack in production. The app is a single Node process
+How to configure, deploy and run the app in production. The app is a single Node process
 (Nitro `node-server` output in `.output/`) in front of PostgreSQL.
 
 ## Environment
@@ -23,7 +23,7 @@ without validation: a non-numeric port silently falls back to 3000, and a non-nu
 | `DATABASE_URL_POOLED` | behind a pooler | `true` when `DATABASE_URL` is a connection pooler (PgBouncer, Neon's `-pooler` host, Supabase's pooler). Default `false`. See [Connection poolers](#connection-poolers). |
 | `AUTH_SIGN_UP` | no | `closed` (default): accounts come from `pnpm user:create`. `open`: anyone can sign up at `/sign-up`; needs `SMTP_URL`. See [Accounts and mail](#accounts-and-mail). |
 | `SMTP_URL` | for mail | `smtps://user:password@smtp.example.com:465` (TLS) or `smtp://...:587` (STARTTLS when offered); credentials percent-encoded. Unset: mail is only logged. |
-| `MAIL_FROM` | with `SMTP_URL` | Sender, such as `ProofStack <no-reply@example.com>`. |
+| `MAIL_FROM` | with `SMTP_URL` | Sender, such as `Acme <no-reply@example.com>`. |
 | `PORT`, `HOST` | no | Listen address. Default port 3000 on all interfaces. `NITRO_PORT` and `NITRO_HOST` take precedence when set. |
 | `NITRO_SSL_CERT`, `NITRO_SSL_KEY` | no | Serve HTTPS from Node: PEM text or file paths. Both must be set; with only one, the server silently serves plain HTTP. File paths need an `--allow-fs-read` for each in the image's `CMD` ([ADR 0012](decisions/0012-node-permission-model.md)). |
 | `SERVER_SHUTDOWN_TIMEOUT` | no | Seconds to drain requests on SIGTERM. Default 5. |
@@ -60,7 +60,7 @@ The `Dockerfile` builds with the locked dependencies (`pnpm install --frozen-loc
 image with only `.output/` and `drizzle/`, running as the unprivileged `node` user.
 
 ```sh
-docker build -t proofstack .
+docker build -t app .
 ```
 
 `.output/` contains the server bundle, the public assets, and two operator commands bundled with their
@@ -73,7 +73,7 @@ Three recipes put this sequence together: [one server with Docker Compose](#depl
 1. Build the image (or `pnpm build && node scripts/bundle-cli.ts` outside Docker).
 2. Run the migrations once per deploy, before the new version receives traffic:
    ```sh
-   docker run --rm -e DATABASE_URL=... proofstack node .output/migrate.mjs
+   docker run --rm -e DATABASE_URL=... app node .output/migrate.mjs
    ```
    Several copies may start at once (for example as an init container per replica). Each run is one
    transaction that first takes a transaction-scoped advisory lock (`pg_advisory_xact_lock`), so the
@@ -120,7 +120,7 @@ to run in a transaction (`scripts/migrate.ts`), and three rules off because `scr
 covers them (`prefer-robust-stmts`, `require-lock-timeout`, `require-statement-timeout`; the file says
 why). Migrations 0000 to 0004 were applied before the lint existed and are grandfathered in its
 `excluded_paths`; every later one is linted. squawk is the release binary for the platform, pinned by
-sha256 in `scripts/check-migrations.ts` and cached in `~/.cache/proofstack/` (the first run downloads it,
+sha256 in `scripts/check-migrations.ts` and cached in `~/.cache/squawk/` (the first run downloads it,
 later runs are offline). Each run first checks that squawk still flags a plain `CREATE INDEX`.
 
 When a finding is expected, waive that one statement with `-- squawk-ignore <rule>` directly under a
@@ -152,12 +152,12 @@ Dropping an index works the same way with `DROP INDEX CONCURRENTLY IF EXISTS` an
 
 With the default `AUTH_SIGN_UP=closed`, accounts come from the operator. The image runs the bundled
 command with the app's own environment (`DATABASE_URL`, `APP_URL`, `BETTER_AUTH_SECRET`, and
-`DATABASE_URL_POOLED` behind a pooler). The password comes from `PROOFSTACK_USER_PASSWORD`, otherwise from
+`DATABASE_URL_POOLED` behind a pooler). The password comes from `CREATE_USER_PASSWORD`, otherwise from
 stdin: a hidden prompt, asked twice, with a terminal (`-it`), or the whole input of a pipe (`-i`):
 
 ```sh
-docker run --rm -it --env-file app.env proofstack node .output/create-user.mjs you@example.com "Your Name"
-printf %s "$PASSWORD" | docker run --rm -i --env-file app.env proofstack node .output/create-user.mjs you@example.com "Your Name"
+docker run --rm -it --env-file app.env app node .output/create-user.mjs you@example.com "Your Name"
+printf %s "$PASSWORD" | docker run --rm -i --env-file app.env app node .output/create-user.mjs you@example.com "Your Name"
 ```
 
 Each deploy recipe below shows its form of the command. From a checkout, `pnpm user:create <email> <name>`
@@ -212,22 +212,22 @@ record for your domain pointing at it, and ports 80 and 443 (TCP, and UDP for HT
 2. Once, copy the recipe to a directory on the server and create its settings from the example
    (`$DEPLOY_HOST` is your `user@host`):
    ```sh
-   ssh "$DEPLOY_HOST" mkdir -p proofstack
-   scp deploy/compose.production.yaml deploy/Caddyfile deploy/postgres-init.sh deploy/deploy.env.example "$DEPLOY_HOST":proofstack/
-   ssh "$DEPLOY_HOST" 'cd proofstack && cp deploy.env.example deploy.env && chmod 600 deploy.env'
+   ssh "$DEPLOY_HOST" mkdir -p app
+   scp deploy/compose.production.yaml deploy/Caddyfile deploy/postgres-init.sh deploy/deploy.env.example "$DEPLOY_HOST":app/
+   ssh "$DEPLOY_HOST" 'cd app && cp deploy.env.example deploy.env && chmod 600 deploy.env'
    ```
    Edit `deploy.env` there: `APP_IMAGE`, `DOMAIN`, the two database passwords and `BETTER_AUTH_SECRET`
    (generate them as its comments say), and SMTP. It is gitignored; keep it only on the server.
 3. Deploy, and again for every new image (set its tag in `deploy.env` first):
    ```sh
-   ssh "$DEPLOY_HOST" 'cd proofstack && docker compose -f compose.production.yaml --env-file deploy.env pull && docker compose -f compose.production.yaml --env-file deploy.env up -d'
+   ssh "$DEPLOY_HOST" 'cd app && docker compose -f compose.production.yaml --env-file deploy.env pull && docker compose -f compose.production.yaml --env-file deploy.env up -d'
    ```
    `up -d` runs `migrate` to completion before it starts the new app container, and the app before Caddy.
    The old container stops before the new one starts, so each deploy has a few seconds of 502 from Caddy;
    use Fly.io or Kubernetes for rolling deploys.
 4. Create the first account (a hidden prompt asks for the password):
    ```sh
-   ssh -t "$DEPLOY_HOST" 'cd proofstack && docker compose -f compose.production.yaml --env-file deploy.env run --rm --no-deps app node .output/create-user.mjs you@example.com "Your Name"'
+   ssh -t "$DEPLOY_HOST" 'cd app && docker compose -f compose.production.yaml --env-file deploy.env run --rm --no-deps app node .output/create-user.mjs you@example.com "Your Name"'
    ```
 
 On the first start, `postgres-init.sh` creates the role `app`, which owns the database but is not a
@@ -266,9 +266,9 @@ kubeconform against the Kubernetes 1.33 schemas (strict: an unknown field fails)
 a cluster.
 
 ```sh
-kubectl create secret generic proofstack --from-literal=DATABASE_URL=... --from-literal=BETTER_AUTH_SECRET=...
+kubectl create secret generic app --from-literal=DATABASE_URL=... --from-literal=BETTER_AUTH_SECRET=...
 kubectl apply -f deploy/kubernetes.yaml
-kubectl exec -it deploy/proofstack -c app -- node .output/create-user.mjs you@example.com "Your Name"
+kubectl exec -it deploy/app -c app -- node .output/create-user.mjs you@example.com "Your Name"
 ```
 
 - **Migrations** run in an init container of every pod: concurrent runs queue on the advisory lock, and the
@@ -355,7 +355,7 @@ pgBackRest or WAL-G to object storage.
 
 ```sh
 docker compose -f compose.production.yaml --env-file deploy.env exec -T db \
-  pg_dump -U postgres --format=custom --exclude-extension=pg_stat_statements proofstack >"proofstack-$(date +%F).dump"
+  pg_dump -U postgres --format=custom --exclude-extension=pg_stat_statements app >"app-$(date +%F).dump"
 ```
 
 `pg_stat_statements` stays out of the dump because only a superuser may create it, and the restore runs as
@@ -368,7 +368,7 @@ data:
 ```sh
 dc() { docker compose -f compose.production.yaml --env-file deploy.env "$@"; }
 dc exec -T db psql -U postgres -c 'create database restore_drill owner app'
-dc exec -T db pg_restore -U postgres --dbname=restore_drill --no-owner --role=app <proofstack-2026-09-27.dump
+dc exec -T db pg_restore -U postgres --dbname=restore_drill --no-owner --role=app <app-2026-09-27.dump
 dc exec -T db psql -U postgres -d restore_drill -c 'select count(*) from "user"'
 . ./deploy.env && dc run --rm --no-deps -e "DATABASE_URL=postgres://app:$APP_DB_PASSWORD@db:5432/restore_drill" migrate
 dc exec -T db psql -U postgres -c 'drop database restore_drill'
@@ -520,7 +520,7 @@ start a fresh window. Counters that last at most ten minutes are not worth the W
 
 The business API limits writes per user, not per IP, because with open sign-up anyone can hold a session:
 creating, editing and deleting posts (`POST`, `PATCH` and `DELETE /api/me/posts`) count together against
-60 per 60 seconds per account (`POST_WRITES_PER_WINDOW` in `src/contract/limits.ts`), in every build.
+60 per 60 seconds per account (`WRITES_PER_WINDOW` in `src/contract/limits.ts`), in every build.
 Past that they answer 429 with a `RateLimited` body whose `retryAfter` is the wait in seconds, as the
 contract documents. The Effect middleware `WriteRateLimit` (`src/server/api/rate-limit.ts`) runs after
 authentication and before the body is read, on the same table and upsert with keys `api-write|<user id>`.
@@ -796,7 +796,7 @@ Mailpit (`MAILPIT_HOST=mailpit` for `verify:app`) on a private Docker network. T
 - Reports are copied to `test-results/ci-local/<job>/`. The summary lists every job's time and the
   runner container's peak memory (cgroup `memory.current`, including page cache, and anonymous memory).
 - Containers and the network are named `<prefix>-local-<pid>-*` and removed at the end, also on Ctrl-C.
-  `PROOFSTACK_DOCKER_PREFIX` sets the prefix (default `proofstack-ci`). The runner image
+  `CI_DOCKER_PREFIX` sets the prefix (default `<package name>-ci`). The runner image
   (`<prefix>-runner:<hash>`) and the store volume stay for the next run; remove them with
   `docker image rm` and `docker volume rm`.
 
@@ -868,7 +868,7 @@ What guards the dependencies, the image and the repository, and where each gate 
   use the network, and nothing else (no file writes, child processes, workers or addons;
   [ADR 0012](decisions/0012-node-permission-model.md)). The tests run the server with the same flags.
 - **SBOM.** `pnpm sbom:release` runs pnpm's `pnpm sbom` and writes a CycloneDX document of the production npm
-  dependencies (with their licenses) to `sbom/proofstack.cdx.json`, to attach to a release. Nothing publishes
+  dependencies (with their licenses) to `sbom/npm.cdx.json`, to attach to a release. Nothing publishes
   an image yet; a workflow that does should build it with `docker buildx build --sbom=true
   --provenance=mode=max`, which attaches the image's SBOM (OS packages included) and a SLSA provenance
   attestation to the pushed image.

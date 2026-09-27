@@ -8,7 +8,7 @@ import { AuthForm } from '#/features/auth/components/auth-form.tsx'
 const schema = lazyFormSchema(() => import('#/lib/account-input.ts').then((module) => module.DeleteAccountFields))
 
 /**
- * Deletes the account and its posts. Two confirmations: the password (checked by Better Auth) and an explicit
+ * Deletes the account and everything it owns. Two confirmations: the password (checked by Better Auth) and an explicit
  * checkbox, so neither a stray click nor an unattended signed-in browser is enough.
  */
 export function DeleteAccountForm() {
@@ -45,7 +45,7 @@ export function DeleteAccountForm() {
         {(field) => (
           <field.CheckboxField
             id="delete-confirm"
-            label="I understand that my account and all my posts are deleted for good."
+            label="I understand that my account and all its data are deleted for good."
             className="mt-0.5 size-4 accent-destructive"
             required
           />

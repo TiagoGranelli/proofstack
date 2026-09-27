@@ -34,7 +34,7 @@ MINGW* | MSYS* | CYGWIN*) windows=1 ;;
 *) windows= ;;
 esac
 
-tmp=$(mktemp -d "${TMPDIR:-/tmp}/proofstack-pre-commit.XXXXXX")
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/pre-commit.XXXXXX")
 cleanup() {
   if [ -n "$windows" ] && [ -e "$tmp/tree/node_modules" ]; then
     cmd.exe //c rmdir "$(cygpath -w "$tmp/tree/node_modules")" >/dev/null 2>&1 || true
@@ -66,9 +66,9 @@ if git rev-parse --verify --quiet HEAD:drizzle >/dev/null; then
   tar -x -C "$tmp/base" -f "$tmp/base.tar"
 fi
 git diff --cached --no-color --no-ext-diff --src-prefix=a/ --dst-prefix=b/ >"$tmp/staged.diff"
-PROOFSTACK_BASE_DIR="$tmp/base"
-PROOFSTACK_DIFF_FILE="$tmp/staged.diff"
-export PROOFSTACK_BASE_DIR PROOFSTACK_DIFF_FILE
+CHECK_BASE_DIR="$tmp/base"
+CHECK_DIFF_FILE="$tmp/staged.diff"
+export CHECK_BASE_DIR CHECK_DIFF_FILE
 
 # The gates resolve binaries and packages through this link. They do not depend on git, and none of them
 # writes into the repository (check-drift works in its own temporary directory).

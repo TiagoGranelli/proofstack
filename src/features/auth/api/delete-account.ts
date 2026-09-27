@@ -3,7 +3,7 @@ import { deleteAccount } from '#/lib/auth.functions.ts'
 
 type DeleteAccountInput = DataOf<typeof deleteAccount>
 
-/** Deletes the account and its posts. The cache is cleared before the caller navigates. */
+/** Deletes the account and everything it owns. The cache is cleared before the caller navigates. */
 export function useDeleteAccount({ mutationConfig }: { mutationConfig?: AuthMutationConfig<DeleteAccountInput> } = {}) {
   return useAuthMutation((data: DeleteAccountInput) => deleteAccount({ data }), mutationConfig, { clearsCache: true })
 }

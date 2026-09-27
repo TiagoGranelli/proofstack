@@ -1,4 +1,5 @@
 import { Link, createFileRoute, notFound, redirect } from '@tanstack/react-router'
+import { pageTitle } from '#/config/app.ts'
 import { SignUpForm } from '#/features/auth/components/sign-up-form.tsx'
 import { getSignUpPolicy } from '#/lib/auth.functions.ts'
 import { getSession } from '#/lib/session.functions.ts'
@@ -10,7 +11,7 @@ export const Route = createFileRoute('/sign-up')({
     if (!policy.open) throw notFound()
     if (session) throw redirect({ to: '/dashboard' })
   },
-  head: () => ({ meta: [{ title: 'Create an account · ProofStack' }, { name: 'robots', content: 'noindex' }] }),
+  head: () => ({ meta: [{ title: pageTitle('Create an account') }, { name: 'robots', content: 'noindex' }] }),
   headers: () => ({ 'cache-control': 'private, no-store' }),
   component: SignUp,
 })

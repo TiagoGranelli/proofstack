@@ -79,7 +79,7 @@ export const createUser = async (label: string) => {
     password: `pw-${crypto.randomUUID()}`,
   }
   await promisify(execFile)(process.execPath, [CREATE_USER, account.email, account.name], {
-    env: { ...process.env, PROOFSTACK_USER_PASSWORD: account.password },
+    env: { ...process.env, CREATE_USER_PASSWORD: account.password },
   })
   return account
 }

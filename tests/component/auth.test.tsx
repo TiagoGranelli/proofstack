@@ -238,13 +238,13 @@ describe('sign-out', () => {
     const response = held()
     worker.use(auth.signOut(response))
     const { router, queryClient } = await renderInApp(<SignOut />, { url: '/dashboard' })
-    queryClient.setQueryData(['my posts'], ['private'])
+    queryClient.setQueryData(['my data'], ['private'])
     await signOutButton().click()
     await expect.element(signOutButton()).toBeDisabled()
     await expect.element(signOutButton()).toHaveAttribute('aria-busy', 'true')
     response.release()
     await expect.poll(() => router.state.location.href).toBe('/')
-    expect(queryClient.getQueryData(['my posts'])).toBeUndefined()
+    expect(queryClient.getQueryData(['my data'])).toBeUndefined()
   })
 
   it.each(['failed', 'network'] as const)(
@@ -252,14 +252,14 @@ describe('sign-out', () => {
     async (outcome) => {
       worker.use(auth.signOut(outcome))
       const { router, queryClient } = await renderInApp(<SignOut />, { url: '/dashboard' })
-      queryClient.setQueryData(['my posts'], ['private'])
+      queryClient.setQueryData(['my data'], ['private'])
       await signOutButton().click()
       await expect
         .element(page.getByRole('alert'))
         .toHaveTextContent('Could not sign out. Check your connection and try again.')
       await expect.element(signOutButton()).toBeEnabled()
       expect(router.state.location.pathname).toBe('/dashboard')
-      expect(queryClient.getQueryData(['my posts'])).toEqual(['private'])
+      expect(queryClient.getQueryData(['my data'])).toEqual(['private'])
 
       worker.use(auth.signOut('ok'))
       await signOutButton().click()

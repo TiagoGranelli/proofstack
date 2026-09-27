@@ -1,4 +1,5 @@
 import type { Page } from '@playwright/test'
+import { APP_NAME } from '#/config/app.ts'
 import { signInWithForm } from './support/accounts.ts'
 import { expect, failServerFunctionPosts, signIn, test, visit } from './support/app.ts'
 
@@ -11,7 +12,7 @@ import { expect, failServerFunctionPosts, signIn, test, visit } from './support/
 const expectDashboard = async (page: Page) => {
   await expect(page).toHaveURL(/\/dashboard$/)
   await expect(page.locator('body[data-hydrated="true"]')).toBeAttached()
-  await expect(page.getByLabel('New post')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible()
 }
 
 const exactly = (text: string) => new RegExp(`^${text.replaceAll(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`)
@@ -59,20 +60,20 @@ test('public page hydrates from SSR without refetching or console errors', async
   page.on('request', (r) => r.url().includes('/api/') && apiCalls.push(r.url()))
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()))
   await visit(page, '/')
-  await expect(page.getByRole('heading', { name: 'Latest posts' })).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
   await page.waitForLoadState('networkidle')
   expect(apiCalls).toEqual([])
   expect(errors).toEqual([])
 })
 
-test('dashboard hydrates from SSR without refetching my posts', async ({ page, author }) => {
+test('dashboard hydrates from SSR without refetching its data', async ({ page, author }) => {
   await signIn(page, author)
   const refetches: string[] = []
   const errors: string[] = []
-  page.on('request', (r) => new URL(r.url()).pathname.startsWith('/api/me/posts') && refetches.push(r.url()))
+  page.on('request', (r) => new URL(r.url()).pathname.startsWith('/api/') && refetches.push(r.url()))
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()))
   await visit(page, '/dashboard')
-  await expect(page.getByLabel('New post')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible()
   await page.waitForLoadState('networkidle')
   expect(refetches).toEqual([])
   expect(errors).toEqual([])
@@ -205,24 +206,24 @@ test('client-side navigation shows a post published or edited moments ago, never
   await visit(page, '/')
   await navLink(page, 'Dashboard').click()
   await expect(page.getByLabel('New post')).toBeVisible()
-  await navLink(page, 'ProofStack').hover()
+  await navLink(page, APP_NAME).hover()
 
   const body = `e2e fresh ${Date.now()}`
   await publish(page, body)
   await recordPublicList(page)
-  await navLink(page, 'ProofStack').click()
+  await navLink(page, APP_NAME).click()
   await expect(page.getByTestId('public-posts')).toContainText(body)
   expect((await publicListFrames(page)).filter((text) => !text.includes(body))).toEqual([])
 
   await navLink(page, 'Dashboard').click()
-  await navLink(page, 'ProofStack').hover()
+  await navLink(page, APP_NAME).hover()
   const edited = `${body} (edited)`
   await myPost(page, body).getByRole('button', { name: /^Edit/ }).click()
   await page.getByLabel('Edit post').fill(edited)
   await page.getByRole('button', { name: 'Save' }).click()
   await expect(myPost(page, edited)).toBeVisible()
   await recordPublicList(page)
-  await navLink(page, 'ProofStack').click()
+  await navLink(page, APP_NAME).click()
   await expect(page.getByTestId('public-posts')).toContainText(edited)
   expect((await publicListFrames(page)).filter((text) => !text.includes(edited))).toEqual([])
 
@@ -231,6 +232,20 @@ test('client-side navigation shows a post published or edited moments ago, never
     .getByRole('button', { name: /^Delete/ })
     .click()
   await expect(myPost(page, edited)).toHaveCount(0)
+})
+
+test('signs in through the form and out again', async ({ page, author }) => {
+  await visit(page, '/login')
+  // The session check that guards /dashboard is a GET server function: it must never be cached.
+  const sessionCheck = page.waitForResponse((r) => r.url().includes('/_serverFn/') && r.request().method() === 'GET')
+  await signInWithForm(page, author)
+  await expectDashboard(page)
+  expect(page.url()).not.toContain('password')
+  expect((await sessionCheck).headers()['cache-control']).toContain('no-store')
+  await page.getByRole('button', { name: 'Sign out' }).click()
+  await expect(page).toHaveURL(/\/$/)
+  await page.goto('/dashboard')
+  await expect(page).toHaveURL(/\/login\?redirect=%2Fdashboard$/)
 })
 
 test('a failed sign-out says so and can be retried', async ({ page, author }) => {

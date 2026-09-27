@@ -84,8 +84,7 @@ const readSmtp = (): { url: string; from: string } | undefined => {
   if (!['smtp:', 'smtps:'].includes(parsed.protocol) || !parsed.hostname)
     throw new Error('SMTP_URL must use smtp:// (STARTTLS) or smtps:// (TLS) and name a host')
   const from = read('MAIL_FROM')
-  if (!/@[^@\s>]+>?$/.test(from))
-    throw new Error('MAIL_FROM must be an address such as "ProofStack <no-reply@example.com>"')
+  if (!/@[^@\s>]+>?$/.test(from)) throw new Error('MAIL_FROM must be an address such as "Acme <no-reply@example.com>"')
   return { url, from }
 }
 

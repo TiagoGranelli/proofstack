@@ -4,7 +4,7 @@ The name is Better Auth's `user.name`, changed through its `POST /update-user` e
 ## Acceptance criteria
 
 - A page at `/profile` for signed-in users only (`src/routes/_authed/profile.tsx`), titled
-  "Profile · ProofStack", not indexed by search engines, with the heading "Profile". The site header or the
+  `pageTitle('Profile')` (`src/config/app.ts`), not indexed by search engines, with the heading "Profile". The site header or the
   account page links to it.
 - The form is the component `ProfileNameForm` exported from
   `src/features/auth/components/profile-name-form.tsx`, with the prop `name` (the current display name):

@@ -1,5 +1,5 @@
 // Throwaway *_test databases for verify:app, lighthouse and check:drift. Refuses to touch any other name.
-// Each run gets its own database (`proofstack_<purpose>_<pid>_test`) because a reset drops the database
+// Each run gets its own database (`app_<purpose>_<pid>_test`) because a reset drops the database
 // WITH (FORCE): two runs sharing one name would kill each other's connections.
 import { existsSync } from 'node:fs'
 import { drizzle } from 'drizzle-orm/node-postgres'
@@ -29,12 +29,12 @@ export const baseDatabaseUrl = () => {
 
 /**
  * URL of this process's test database: `override` (an env var such as TEST_DATABASE_URL) when set, otherwise
- * DATABASE_URL with the database name replaced by `proofstack_<purpose>_<pid>_test`.
+ * DATABASE_URL with the database name replaced by `app_<purpose>_<pid>_test`.
  */
 export const testDatabaseUrl = (purpose: string, override?: string) => {
   const url = override?.trim()
     ? new URL(override.trim())
-    : Object.assign(new URL(baseDatabaseUrl()), { pathname: `/proofstack_${purpose}_${process.pid}_test` })
+    : Object.assign(new URL(baseDatabaseUrl()), { pathname: `/app_${purpose}_${process.pid}_test` })
   assertTestName(url.pathname.slice(1))
   return url.toString()
 }
@@ -70,7 +70,7 @@ export const dropTestDatabase = (testUrl: string) =>
   administer(testUrl, (name) => [`drop database if exists "${name}" with (force)`])
 
 /** A per-run database name (`testDatabaseUrl`) and the pid of the run that made it. */
-const RUN_DATABASE = /^proofstack_[a-z]+_(\d+)_test$/
+const RUN_DATABASE = /^app_[a-z]+_(\d+)_test$/
 
 /** Whether process `pid` still runs here: signal 0 only checks, and EPERM means it runs as another user. */
 const isRunning = (pid: number) => {

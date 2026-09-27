@@ -40,9 +40,10 @@ For plugins, user fields and rate-limit storage:
 
 ## Users
 
-`pnpm user:create <email> <name>` creates a verified account. The password comes from
-`PROOFSTACK_USER_PASSWORD`, otherwise from stdin: a hidden prompt (asked twice) in a terminal, or the whole input
-of a pipe. Public sign-up is `AUTH_SIGN_UP=closed` by default
+`pnpm user:create <email> <name>` creates a verified account; in production, the image's bundled copy does
+(`node .output/create-user.mjs <email> <name>`, docs/operations.md, "First account"). The password comes from
+`CREATE_USER_PASSWORD`, otherwise from stdin: a hidden prompt (asked twice) in a terminal, or the whole input of a
+pipe. Public sign-up is `AUTH_SIGN_UP=closed` by default
 ([ADR 0003](../../../docs/decisions/0003-sign-up-policy.md)).
 
 ## Done when

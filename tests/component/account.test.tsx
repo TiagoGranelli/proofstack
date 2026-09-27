@@ -47,7 +47,7 @@ const othersButton = () => page.getByRole('button', { name: 'Sign out other sess
 const everywhereButton = () => page.getByRole('button', { name: 'Sign out everywhere' })
 const deletePassword = () => page.getByLabelText('Password')
 const deleteConfirm = () =>
-  page.getByRole('checkbox', { name: 'I understand that my account and all my posts are deleted for good.' })
+  page.getByRole('checkbox', { name: 'I understand that my account and all its data are deleted for good.' })
 const deleteButton = () => page.getByRole('button', { name: 'Delete account' })
 
 const change = async (typed = 'a brand new password') => {
@@ -218,24 +218,24 @@ describe('SessionList', () => {
     // The list stays mounted here after the cache is cleared (in the app, the page is left), so it reloads.
     worker.use(authFunction('signOutEverywhere', response), listSessions())
     const { router, queryClient } = await renderWithSessions(<SessionList />, listed(thisBrowser, phone))
-    queryClient.setQueryData(['my posts'], ['private'])
+    queryClient.setQueryData(['my data'], ['private'])
     await everywhereButton().click()
     await expect.element(everywhereButton()).toBeDisabled()
     await expect.element(everywhereButton()).toHaveAttribute('aria-busy', 'true')
     response.release()
     await expect.poll(() => router.state.location.href).toBe('/login')
-    expect(queryClient.getQueryData(['my posts'])).toBeUndefined()
+    expect(queryClient.getQueryData(['my data'])).toBeUndefined()
   })
 
   it('stays and says so when signing out everywhere fails', async () => {
     worker.use(authFunction('signOutEverywhere', { ok: false, failure: { code: 'RATE_LIMITED', retryAfter: 10 } }))
     const { router, queryClient } = await renderWithSessions(<SessionList />, listed(thisBrowser, phone))
-    queryClient.setQueryData(['my posts'], ['private'])
+    queryClient.setQueryData(['my data'], ['private'])
     await everywhereButton().click()
     await expect.element(page.getByRole('alert')).toHaveTextContent('Too many attempts. Try again in 10 seconds.')
     await expect.element(everywhereButton()).toBeEnabled()
     expect(router.state.location.pathname).toBe('/account')
-    expect(queryClient.getQueryData(['my posts'])).toEqual(['private'])
+    expect(queryClient.getQueryData(['my data'])).toEqual(['private'])
   })
 
   it('asks for a fresh sign-in, then signs out and returns to the account page after it', async () => {
@@ -334,7 +334,7 @@ describe('DeleteAccountForm', () => {
     const calls = authCalls('deleteAccount')
     worker.use(calls.handler, authFunction('deleteAccount', response))
     const { router, queryClient } = await renderInApp(<DeleteAccountForm />, { url: '/account' })
-    queryClient.setQueryData(['my posts'], ['private'])
+    queryClient.setQueryData(['my data'], ['private'])
     await deletePassword().fill('my password')
     await deleteConfirm().click()
     await deleteButton().click()
@@ -342,7 +342,7 @@ describe('DeleteAccountForm', () => {
     await expect.element(formOf(deleteButton())).toHaveAttribute('aria-busy', 'true')
     response.release()
     await expect.poll(() => router.state.location.href).toBe('/')
-    expect(queryClient.getQueryData(['my posts'])).toBeUndefined()
+    expect(queryClient.getQueryData(['my data'])).toBeUndefined()
     expect(calls.data).toEqual([{ password: 'my password' }])
   })
 
@@ -356,7 +356,7 @@ describe('DeleteAccountForm', () => {
   ])('keeps the account and says so after %s', async (_, answer, message) => {
     worker.use(authFunction('deleteAccount', answer))
     const { router, queryClient } = await renderInApp(<DeleteAccountForm />, { url: '/account' })
-    queryClient.setQueryData(['my posts'], ['private'])
+    queryClient.setQueryData(['my data'], ['private'])
     await deletePassword().fill('my password')
     await deleteConfirm().click()
     await deleteButton().click()
@@ -364,6 +364,6 @@ describe('DeleteAccountForm', () => {
     await expect.element(formOf(deleteButton())).toHaveAccessibleDescription(message)
     await expect.element(deleteButton()).toHaveFocus()
     expect(router.state.location.pathname).toBe('/account')
-    expect(queryClient.getQueryData(['my posts'])).toEqual(['private'])
+    expect(queryClient.getQueryData(['my data'])).toEqual(['private'])
   })
 })

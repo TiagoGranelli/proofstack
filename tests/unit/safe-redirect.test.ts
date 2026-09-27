@@ -72,7 +72,7 @@ describe('safeRedirect', () => {
   })
 })
 
-const ORIGIN = 'http://proofstack.invalid'
+const ORIGIN = 'http://app.invalid'
 
 // The `javascript:` scheme, assembled so that no script URL literal sits in the source (eslint/no-script-url).
 const SCRIPT_SCHEME = ['java', 'script:'].join('')
