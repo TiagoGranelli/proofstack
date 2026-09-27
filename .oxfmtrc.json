@@ -24,13 +24,13 @@
     ".tanstack/**",
     ".fallow/**",
     "drizzle/**",
-    "repos/**",
+    ".repos/**",
     "src/sdk/**",
     "src/routeTree.gen.ts",
     "openapi.json",
     "pnpm-lock.yaml",
     "skills-lock.json",
-    ".agents/**",
+    ".agents/skills/**",
     ".claude/**",
     "**/*.md"
   ]

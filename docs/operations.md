@@ -115,10 +115,10 @@ reverts it and deploy that. When a migration destroyed data, restore from a back
 `pnpm check:migrations` (a gate of `pnpm check`, so of CI's `static` job) runs
 [squawk](https://squawkhq.com/docs/rules) 2.66.0 over `drizzle/*.sql` and fails on any finding: a
 non-concurrent index, a column type change that rewrites the table, a `NOT NULL` or constraint that scans
-it under an exclusive lock, and so on. The configuration is `.squawk.toml`: Postgres 18, every file assumed
-to run in a transaction (`scripts/migrate.ts`), and three rules off because `scripts/migrate.ts` already
-covers them (`prefer-robust-stmts`, `require-lock-timeout`, `require-statement-timeout`; the file says
-why). Migrations 0000 to 0004 were applied before the lint existed and are grandfathered in its
+it under an exclusive lock, and so on. The configuration is `.config/squawk.toml` (the script passes it with
+`--config`): Postgres 18, every file assumed to run in a transaction (`scripts/migrate.ts`), and three rules
+off because `scripts/migrate.ts` already covers them (`prefer-robust-stmts`, `require-lock-timeout`,
+`require-statement-timeout`; the file says why). Migrations 0000 to 0004 were applied before the lint existed and are grandfathered in its
 `excluded_paths`; every later one is linted. squawk comes from npm (`squawk-cli`, its platform binary as an
 optional dependency), so it runs offline.
 
@@ -236,7 +236,7 @@ change both places if the host already routes that range). Logs: `docker compose
 back, set the previous tag and run step 3; migrations stay applied, which is why each must be compatible
 with the version before it ([Build and deploy](#build-and-deploy)).
 
-CI tests this file on every change: `pnpm ci:docker` runs it with the override `compose.smoke.yaml` (the image
+CI tests this file on every change: `pnpm ci:docker` runs it with the override `deploy/compose.smoke.yaml` (the image
 built from the checkout, PgBouncer in front of Postgres, plain HTTP on an ephemeral port, a subnet Docker
 picks) through steps 3 and 4 and a sign-in through Caddy.
 
@@ -773,17 +773,17 @@ browsers, Postgres and (for `verify`) Mailpit, and moves artifacts. The logic li
 | Script | Job |
 | --- | --- |
 | `pnpm ci:workflows` | actionlint 1.7.12 and zizmor 1.30.1 (images pinned by digest, offline, read-only), a check that `compose.yaml`, `deploy/compose.production.yaml`, `ci.yml` and the `Dockerfile` pin the same images as `scripts/images.ts`, and the deploy recipes (`docker compose config` on the production compose file, kubeconform 0.8.0 on `deploy/kubernetes.yaml`, which downloads the schemas). Needs Docker. |
-| `pnpm ci:secrets` | gitleaks 8.30.1 (image pinned by digest, offline, read-only) over every commit reachable from HEAD, with `.gitleaks.toml`. A fake value in the tree follows that file's naming convention; `.gitleaksignore` lists, by fingerprint and with a reason, only findings in history that cannot be rewritten. Needs Docker and a full clone (`fetch-depth: 0`). |
+| `pnpm ci:secrets` | gitleaks 8.30.1 (image pinned by digest, offline, read-only) over every commit reachable from HEAD, with `.config/gitleaks.toml`. A fake value in the tree follows that file's naming convention; `.config/gitleaksignore` lists, by fingerprint and with a reason, only findings in history that cannot be rewritten. Needs Docker and a full clone (`fetch-depth: 0`). |
 | `pnpm ci:static` | `pnpm check` without its drift gate (so with the migration lint and the license gate) |
 | `pnpm ci:supply-chain` | `pnpm audit signatures` (registry signatures of every installed package) and `pnpm audit:check`. The frozen install before it already verified the lockfile against `minimumReleaseAge` and `trustPolicy`. Needs the npm registry. |
 | `pnpm ci:drift` | `pnpm check:drift`, all four checks (`DATABASE_URL`) |
 | `pnpm ci:build` | `pnpm build` with placeholder configuration (the same as the Dockerfile's) |
 | `pnpm ci:verify` | `verify:app` on all five Playwright projects (needs Mailpit: the `mailpit` service) |
 | `pnpm ci:lighthouse` | `pnpm lighthouse --runs=5`, through the edge. Exit 2 means inconclusive (see docs/agents/gates.md) |
-| `pnpm ci:docker` | `scripts/docker-smoke.ts` on the adopters' recipe itself: `deploy/compose.production.yaml` plus `compose.smoke.yaml` (PgBouncer in transaction mode in front of Postgres, the image built from this checkout, the edge on an ephemeral loopback port). Builds the image, scans it with grype (see below), migrates with three runs at once through the pooler and once directly, creates the first account with the bundled `create-user`, brings the stack up, checks pages and a sign-in through the edge, stops the app gracefully, and `down -v` removes everything. Needs Docker. |
+| `pnpm ci:docker` | `scripts/docker-smoke.ts` on the adopters' recipe itself: `deploy/compose.production.yaml` plus `deploy/compose.smoke.yaml` (PgBouncer in transaction mode in front of Postgres, the image built from this checkout, the edge on an ephemeral loopback port). Builds the image, scans it with grype (see below), migrates with three runs at once through the pooler and once directly, creates the first account with the bundled `create-user`, brings the stack up, checks pages and a sign-in through the edge, stops the app gracefully, and `down -v` removes everything. Needs Docker. |
 
 `pnpm ci:local [job ...]` is the faithful local equivalent (default: every job, in CI order). The container jobs
-(`static`, `supply-chain`, `drift`, `build`, `verify`, `lighthouse`) run in `compose.ci.yaml`: a `runner` built
+(`static`, `supply-chain`, `drift`, `build`, `verify`, `lighthouse`) run in `.github/compose.ci.yaml`: a `runner` built
 from the official Playwright image for `@playwright/test` 1.63.0 (Ubuntu 24.04, all browsers including WebKit)
 with pnpm from `packageManager` and the pinned Caddy binary, next to Postgres 18.6 and Mailpit
 (`MAILPIT_HOST=mailpit`). pnpm installs the Node of `devEngines.runtime` there as it does everywhere. The host
@@ -852,14 +852,14 @@ What guards the dependencies, the image and the repository, and where each gate 
 | `pnpm audit:check` | CI `supply-chain` | a high or critical advisory in any package, production or development, not in `auditConfig.ignoreGhsas` (`pnpm-workspace.yaml`) |
 | `pnpm licenses:check` | `pnpm check` | a production dependency whose license is not allowed (`scripts/licenses.ts`) |
 | `pnpm check:migrations` | `pnpm check` | a migration statement that locks or rewrites a busy table ([Migration safety](#migration-safety)) |
-| `pnpm ci:secrets` | CI `secrets`; the pre-commit hook when a `gitleaks` binary is installed | a secret anywhere in the history (`.gitleaks.toml`) |
-| grype in `pnpm ci:docker` | CI `docker` | a high or critical vulnerability with a released fix in the production image (`grype --only-fixed --fail-on high`), unless `.grype.yaml` ignores it |
+| `pnpm ci:secrets` | CI `secrets`; the pre-commit hook when a `gitleaks` binary is installed | a secret anywhere in the history (`.config/gitleaks.toml`) |
+| grype in `pnpm ci:docker` | CI `docker` | a high or critical vulnerability with a released fix in the production image (`grype --only-fixed --fail-on high`), unless `.config/grype.yaml` ignores it |
 
 - **Exceptions.** An advisory goes in `auditConfig.ignoreGhsas` (`pnpm-workspace.yaml`, with a comment giving the
-  reason and a review date), and an image finding in `.grype.yaml` (an `ignore` rule with the package, a
+  reason and a review date), and an image finding in `.config/grype.yaml` (an `ignore` rule with the package, a
   `reason` and a review date in it), only when it cannot apply here. The usual fix is an upgrade, an exact
   `overrides` entry in `pnpm-workspace.yaml` naming the advisory, or a newer base image.
-- **Renovate** (`renovate.json`; install the Renovate GitHub App to turn it on) proposes updates for the npm
+- **Renovate** (`.github/renovate.json`; install the Renovate GitHub App to turn it on) proposes updates for the npm
   packages, pnpm (`packageManager`), Node (`devEngines`), every container image and the GitHub Actions, the
   last two pinned by digest. An image pinned in several files (`scripts/images.ts`, the compose files, `ci.yml`,
   the Dockerfiles) moves in one PR. It waits 7 days after a release, except for a vulnerability fix: its OSV

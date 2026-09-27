@@ -5,8 +5,8 @@ covers and how to make an exception.
 
 ## What `pnpm check` runs
 
-`pnpm check` is `lefthook run pre-commit --all-files`: every job in `lefthook.yml`, one at a time, about 13 s, then a
-summary with each failed job's fix. No database, no build; it needs Playwright's Chromium.
+`pnpm check` is `lefthook run pre-commit --all-files`: every job in `.config/lefthook.yml`, one at a time, about
+13 s, then a summary with each failed job's fix. No database, no build; it needs Playwright's Chromium.
 
 | Job | What fails it |
 | --- | --- |
@@ -22,7 +22,7 @@ summary with each failed job's fix. No database, no build; it needs Playwright's
 | `tests` | `pnpm test:fast`: Vitest projects `unit`, `api` and `component` with the coverage gate ([tests/AGENTS.md](../../tests/AGENTS.md)). Two of the tests are gates themselves: `tests/unit/repo-policy.test.ts` and `tests/api/public-operations.test.ts` (below) |
 | `repo-policy` | `tests/unit/repo-policy.test.ts` alone, on every commit (under a second), so a commit without code runs it too |
 | `drift` | `check:drift contract migrations auth`. `contract` runs `pnpm codegen` in place and fails if it changed `openapi.json` or `src/sdk` (the regenerated files stay, ready to commit) |
-| `migrations` | `squawk drizzle/*.sql` (`squawk-cli` from npm) over the migrations after 0004 (`.squawk.toml`) |
+| `migrations` | `squawk --config .config/squawk.toml drizzle/*.sql` (`squawk-cli` from npm) over the migrations after 0004 |
 | `licenses` | a production dependency whose SPDX expression (`spdx-satisfies`) the list in `scripts/licenses.ts` does not allow |
 
 The pre-commit hook runs the same jobs, but only those whose `glob` matches a staged file: a Markdown-only commit
@@ -76,7 +76,7 @@ gate files to review:
   line giving the reason ([docs/operations.md](../operations.md#migration-safety)). **licenses:** an
   acceptable license goes in `ALLOWED` in `scripts/licenses.ts`, one exact version in `EXCEPTIONS`, each with the
   reason. **audit:check:** an `auditConfig.ignoreGhsas` entry in `pnpm-workspace.yaml` needs a comment with the reason
-  and a review date. The image scan: an `ignore` rule in `.grype.yaml` needs a `reason` with a review date.
+  and a review date. The image scan: an `ignore` rule in `.config/grype.yaml` needs a `reason` with a review date.
 
 ## Claude Code hooks and permissions
 
@@ -96,7 +96,7 @@ the checkout are skipped. About 0.1 to 1 s per edit. Try it:
   `tests/unit/repo-policy.test.ts` instead, because a new migration may still be adjusted before its first commit.
 - Skipping the pre-commit hook: `git commit --no-verify` and `git commit -n` (as the first or a later option),
   `git -c core.hooksPath...`, `LEFTHOOK=0 ...` and `lefthook uninstall` (also through `pnpm exec`).
-- Linters and formatters this repo does not use, whose default scope includes `node_modules` and `repos/`:
+- Linters and formatters this repo does not use, whose default scope includes `node_modules` and `.repos/`:
   `eslint`, `prettier` and `biome`, directly, through `npx` or through `pnpm dlx`.
 - Oxc runs without the ignore lists: any command with `--no-ignore` or `--ignore-path`, and oxlint or oxfmt with
   `-c` or `--config`.
@@ -138,4 +138,4 @@ production (needs Docker); see [ADR 0011](../decisions/0011-lighthouse-over-http
 | `pnpm audit:check` | `pnpm audit --audit-level high` over production and development packages: fails on a high or critical advisory not in `auditConfig.ignoreGhsas` (`pnpm-workspace.yaml`). Needs the npm registry; CI job `supply-chain` |
 | `pnpm sbom:release` | `pnpm sbom`: a CycloneDX 1.7 SBOM of the production npm dependencies, with licenses, in `sbom/npm.cdx.json`, for a release. Needs `node_modules`. Not a gate |
 | `pnpm ci:local [job ...]` | The CI jobs (`workflows secrets static supply-chain drift build verify lighthouse docker`, default all) as `pnpm ci:<job>` scripts in the Playwright Ubuntu container next to Postgres and Mailpit, all five browser projects included. Needs Docker. See [docs/operations.md](../operations.md#ci-and-local-ci) |
-| `harbor run -p evals/tasks -a <agent> -m <model>` | The agent eval ([evals.md](evals.md)): an agent solves each task in a container, graded by `pnpm check`, drift and hidden checks. Needs Docker and Harbor, and runs a paid agent; not a gate |
+| `harbor run -p .agents/evals/tasks -a <agent> -m <model>` | The agent eval ([evals.md](evals.md)): an agent solves each task in a container, graded by `pnpm check`, drift and hidden checks. Needs Docker and Harbor, and runs a paid agent; not a gate |

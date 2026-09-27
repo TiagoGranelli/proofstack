@@ -1,8 +1,8 @@
 # Agent evals
 
 A change to `AGENTS.md`, a skill or a hook changes how coding agents work in this repository. The tasks in
-`evals/tasks/` measure that: an agent gets a realistic task in a fresh container and is graded by the same gates a
-human change must pass, plus hidden checks it never sees. Run them before and after a change to the agent
+`.agents/evals/tasks/` measure that: an agent gets a realistic task in a fresh container and is graded by the same
+gates a human change must pass, plus hidden checks it never sees. Run them before and after a change to the agent
 instructions and compare the rewards.
 
 The tasks use the [Harbor](https://docs.harborframework.com/) task format (the harness behind Terminal-Bench), and
@@ -16,9 +16,9 @@ Needs Docker and Harbor (`uv tool install harbor`). Build the base image from th
 copies the working tree, so commit or stash first), then run the tasks:
 
 ```sh
-docker build -f evals/Dockerfile -t app-eval .
-harbor run -p evals/tasks -a claude-code -m anthropic/<model>
-harbor run -p evals/tasks/add-post-title -a codex -m openai/<model>
+docker build -f .agents/evals/Dockerfile -t app-eval .
+harbor run -p .agents/evals/tasks -a claude-code -m anthropic/<model>
+harbor run -p .agents/evals/tasks/add-post-title -a codex -m openai/<model>
 harbor view jobs
 ```
 
@@ -29,19 +29,19 @@ because the hidden checks fail on the baseline).
 
 ## How a task is built
 
-- `evals/Dockerfile`: the base image. Playwright's Ubuntu image with Node and pnpm, the repository at `/app`
-  without `evals/`, installed, as one fresh commit "Baseline" with the pre-commit hook active. The agent sees
+- `.agents/evals/Dockerfile`: the base image. Playwright's Ubuntu image with Node and pnpm, the repository at `/app`
+  without `.agents/evals/`, installed, as one fresh commit "Baseline" with the pre-commit hook active. The agent sees
   neither the hidden checks nor this repository's history.
-- `evals/tasks/<id>/`:
+- `.agents/evals/tasks/<id>/`:
   - `instruction.md`: the prompt, with acceptance criteria that name every file, export and label the hidden
     checks rely on.
   - `task.toml`: timeouts and resources (4 CPUs, 6 GB).
   - `environment/Dockerfile`: `FROM app-eval`, plus the planted bug for a bug-fix task, folded into the
     baseline commit.
-  - `tests/test.sh` runs `evals/grade.sh` (in the image at `/opt/eval/grade.sh`); the other files in `tests/` are
-    the hidden checks, named `<layer>.test.ts[x]`.
+  - `tests/test.sh` runs `.agents/evals/grade.sh` (in the image at `/opt/eval/grade.sh`); the other files in
+    `tests/` are the hidden checks, named `<layer>.test.ts[x]`.
   - `solution/solve.sh` (optional): the reference solution for Harbor's oracle agent.
-- `evals/grade.sh`, after the agent: measures the diff against the baseline, runs `pnpm check` and
+- `.agents/evals/grade.sh`, after the agent: measures the diff against the baseline, runs `pnpm check` and
   `pnpm check:drift contract migrations auth`, copies each hidden check to `tests/<layer>/eval-hidden.test.ts[x]`
   and runs it with `pnpm test:<layer>`. It writes `/logs/verifier/reward.json`: `reward` (1 when all three pass),
   `check`, `drift`, `hidden`, `files_changed`, `insertions` and `deletions`.
@@ -64,10 +64,10 @@ and hidden 1; one file, +2 −2), and `-a nop` on all four tasks scored reward 0
 
 ## Adding a task
 
-1. Create `evals/tasks/<id>/` with `instruction.md`, `task.toml`, `environment/Dockerfile` and `tests/test.sh`
+1. Create `.agents/evals/tasks/<id>/` with `instruction.md`, `task.toml`, `environment/Dockerfile` and `tests/test.sh`
    (copy them from a task of the same kind).
 2. Write the hidden checks as `tests/<layer>.test.ts[x]` for `unit`, `api` or `component`. They import the
    layer's helpers by the path they will have in `tests/<layer>/` (`./harness.ts`, `./api-mocks.ts`), so Oxlint,
-   Fallow and `tsc` skip `evals/`. Prefer HTTP through `webHandler` over the typed client, so a check does not
+   Fallow and `tsc` skip `.agents/evals/`. Prefer HTTP through `webHandler` over the typed client, so a check does not
    depend on how the agent typed the contract.
-3. Prove them: `harbor run -p evals/tasks/<id> -a nop` must score 0, and `-a oracle` 1 when you add a solution.
+3. Prove them: `harbor run -p .agents/evals/tasks/<id> -a nop` must score 0, and `-a oracle` 1 when you add a solution.

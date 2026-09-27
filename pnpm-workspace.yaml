@@ -19,8 +19,8 @@ savePrefix: ''
 # Release quarantine: no version younger than one day is resolved. Set explicitly, which makes it strict: a
 # release inside the window fails the install (or prompts) instead of being appended silently to
 # minimumReleaseAgeExclude, as pnpm's implicit default does. Renovate waits 7 days before proposing a direct
-# dependency (renovate.json); this day is the floor for everything else: transitive versions, updates by hand
-# and Renovate's security PRs, which skip its wait. `pnpm install --frozen-lockfile` checks every lockfile entry
+# dependency (.github/renovate.json); this day is the floor for everything else: transitive versions, updates by
+# hand and Renovate's security PRs, which skip its wait. `pnpm install --frozen-lockfile` checks every lockfile entry
 # against this and trustPolicy (about 5 s; needs the registry).
 minimumReleaseAge: 1440
 minimumReleaseAgeStrict: true
