@@ -1,11 +1,15 @@
-// Container images the CI scripts run, pinned by digest (tag kept for humans). compose.yaml and
-// .github/workflows/ci.yml repeat some of them; `pnpm ci:workflows` fails when a copy differs from this file.
+// Container images the CI scripts run, pinned by digest (tag kept for humans). compose.yaml,
+// .github/workflows/ci.yml and the Dockerfile repeat some of them; `pnpm ci:workflows` fails when a copy
+// differs from this file.
 // Update a pin: `docker buildx imagetools inspect <name>:<tag>` prints the index digest.
 export const IMAGES = {
   /** Same version as @playwright/test in package.json (browsers match the installed library). */
   playwright:
     'mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27',
-  /** Same version as .node-version; its Node replaces the Playwright image's in the ci:local runner. */
+  /**
+   * Same version as .node-version; its Node replaces the Playwright image's in the ci:local runner. Also the base
+   * of the Dockerfile.
+   */
   node: 'node:26.8.1-slim@sha256:c0753125a3789977aefe869cbebccf70e3cfd7ea84ca48547458f02e4f1d7146',
   postgres: 'postgres:18.6@sha256:5a5a84b19854a9ffaa54082c166ff4ec27473a361e496e5ea167f298f2da9722',
   caddy: 'caddy:2.11.4-alpine@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b',

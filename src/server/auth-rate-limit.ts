@@ -12,7 +12,8 @@ const IDLE_ROW_MS = 10 * 60 * 1000
 let lastPrune = 0
 
 /**
- * Better Auth's rate-limit `consume` on the rate_limit table as one INSERT ... ON CONFLICT DO UPDATE, which
+ * Better Auth's rate-limit `consume` on the rate_limit table (also the business API's write limit, keys
+ * `api-write|<user id>`, ./api/rate-limit.ts) as one INSERT ... ON CONFLICT DO UPDATE, which
  * Postgres runs atomically per key: concurrent requests never both take the last slot. Same rule as Better
  * Auth's own storages: a window starts at the first request and restarts once `window` seconds passed since the
  * last admitted one. `count` counts every request in the window, so it passes `max` exactly when one is refused.

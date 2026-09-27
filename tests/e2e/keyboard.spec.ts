@@ -56,11 +56,12 @@ test.describe('tab order', () => {
       (page) => visit(page, '/forgot-password'),
       [...NAV, 'textbox "Email"', 'button "Send reset link"', 'link "Back to sign in"'],
     ],
+    ['verify email', (page) => visit(page, '/verify-email?token=not-a-token'), [...NAV, 'button "Confirm email"']],
     [
       'account',
       // A new account, so this browser holds its only session and the list has no Sign out buttons.
       async (page) => {
-        await signIn(page, await createAccount(page.request))
+        await signIn(page, await createAccount())
         await visit(page, '/account')
       },
       [

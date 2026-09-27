@@ -1,6 +1,6 @@
 import { Context } from 'effect'
 import { HttpApiMiddleware, HttpApiSecurity, OpenApi } from 'effect/unstable/httpapi'
-import { Unauthorized, ValidationError } from './errors.ts'
+import { RateLimited, Unauthorized, ValidationError } from './errors.ts'
 
 interface SessionUser {
   readonly id: string
@@ -43,3 +43,13 @@ export class Authentication extends HttpApiMiddleware.Service<Authentication, { 
 export class RequestValidation extends HttpApiMiddleware.Service<RequestValidation>()('proofstack/RequestValidation', {
   error: ValidationError,
 }) {}
+
+/**
+ * Caps the writes one signed-in user makes (POST_WRITES_PER_WINDOW per POST_WRITE_WINDOW_SECONDS in
+ * ./limits.ts, counted before the request body is read); fails with 429 otherwise. Runs inside `Authentication`, whose
+ * `CurrentUser` it counts by, so it goes on endpoints of a group that has that middleware.
+ */
+export class WriteRateLimit extends HttpApiMiddleware.Service<WriteRateLimit, { requires: CurrentUser }>()(
+  'proofstack/WriteRateLimit',
+  { error: RateLimited },
+) {}

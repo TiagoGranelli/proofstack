@@ -1,8 +1,8 @@
-// Account lifecycle helpers for E2E specs: throwaway accounts made through open sign-up and confirmed from
-// the mail Mailpit caught, links read from that mail, a second signed-in browser, and form sign-in. The
-// verify:app server under test has AUTH_SIGN_UP=open and sends its mail to Mailpit (MAILPIT_URL).
-import type { APIRequestContext, Browser, BrowserContext, Page, TestInfo } from '@playwright/test'
-import { type Author, expect, nextClientIp } from './app.ts'
+// Account lifecycle helpers for E2E specs: throwaway accounts, links read from the mail Mailpit caught, a second
+// signed-in browser, and form sign-in. The verify:app server under test has AUTH_SIGN_UP=open and sends its mail
+// to Mailpit (MAILPIT_URL).
+import type { Browser, BrowserContext, Page, TestInfo } from '@playwright/test'
+import { type Author, createAuthor, expect, nextClientIp } from './app.ts'
 
 /** Same default as playwright.config.ts. */
 const appUrl = process.env.APP_URL ?? 'http://localhost:3000'
@@ -47,16 +47,12 @@ export const mailLink = async (to: string, subject: string, path: '/verify-email
   return link!
 }
 
-/** Signs up through Better Auth's endpoint and confirms the address from the mail: ready to sign in. */
-export const createAccount = async (request: APIRequestContext): Promise<Author> => {
-  const account = newAccount()
-  const res = await request.post('/api/auth/sign-up/email', { data: account, headers: { origin: appUrl } })
-  expect(res.status()).toBe(200)
-  const link = await mailLink(account.email, 'Confirm your email address', '/verify-email')
-  const token = new URL(link).searchParams.get('token')!
-  expect((await request.get(`/api/auth/verify-email?token=${encodeURIComponent(token)}`)).status()).toBe(200)
-  return account
-}
+/**
+ * A throwaway account, ready to sign in: created verified like the workers' authors (scripts/create-user.ts).
+ * Sign-up and confirmation happen only in the browser, through the UI (auth-lifecycle.spec.ts): Better Auth's
+ * own endpoints for them are not exposed over HTTP.
+ */
+export const createAccount = (): Promise<Author> => createAuthor('E2E Account')
 
 export const signInWithForm = async (page: Page, account: Pick<Author, 'email' | 'password'>) => {
   await page.getByLabel('Email').fill(account.email)

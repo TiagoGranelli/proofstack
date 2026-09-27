@@ -48,6 +48,11 @@ export function describeApiError(error: unknown, action: string): ApiErrorView {
       return { message: 'Your session has ended. Sign in again to continue.', signIn: true }
     case 'PostNotFound':
       return { message: 'This post no longer exists. It may have been deleted elsewhere.', signIn: false }
+    case 'RateLimited':
+      return {
+        message: `Could not ${action}: too many changes in a short time. Try again in ${error.retryAfter} second${error.retryAfter === 1 ? '' : 's'}.`,
+        signIn: false,
+      }
     case 'ServiceUnavailable':
       return { message: 'The service is temporarily unavailable. Try again in a moment.', signIn: false }
     default: {

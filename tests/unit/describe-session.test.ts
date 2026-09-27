@@ -1,6 +1,6 @@
 // How the account page labels a session. Pure functions: no app.
 import { describe, expect, it } from 'vitest'
-import { describeDevice, formatTimestamp } from '#/features/auth/utils/describe-session.ts'
+import { describeAddress, describeDevice, formatTimestamp } from '#/features/auth/utils/describe-session.ts'
 
 describe('describeDevice', () => {
   it.each([
@@ -36,5 +36,12 @@ describe('formatTimestamp', () => {
 
   it('leaves an unparseable value as it is', () => {
     expect(formatTimestamp('yesterday')).toBe('yesterday')
+  })
+})
+
+describe('describeAddress', () => {
+  it('shows an IPv4 address as it is and labels an IPv6 network as one', () => {
+    expect(describeAddress('203.0.113.9')).toBe('203.0.113.9')
+    expect(describeAddress('2001:db8:1:2::/64')).toBe('IPv6 network 2001:db8:1:2::/64')
   })
 })

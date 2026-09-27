@@ -3,14 +3,19 @@
 # Runtime needs only .output/ (server bundle, public assets, migrate.mjs) and drizzle/ (SQL migrations).
 # See docs/operations.md for environment variables, migrations and the deploy sequence.
 
-ARG NODE_IMAGE=node:26.8.1-slim
+# Pinned by digest; the same reference as `node` in scripts/images.ts (`pnpm ci:workflows` checks the copy).
+ARG NODE_IMAGE=node:26.8.1-slim@sha256:c0753125a3789977aefe869cbebccf70e3cfd7ea84ca48547458f02e4f1d7146
 
 FROM ${NODE_IMAGE} AS build
 WORKDIR /app
 ENV CI=true
-# Node 26 no longer ships corepack; pin the pnpm version from package.json#packageManager.
-RUN npm install --global --no-fund --no-audit pnpm@12.3.4 && npm cache clean --force
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+# Node 26 no longer ships corepack. Install the pnpm that package.json#packageManager names (`pnpm@<version>`,
+# optionally followed by `+<hash>`), so the version has one source.
+RUN npm install --global --no-fund --no-audit \
+      "$(node -p "require('./package.json').packageManager.split('+')[0]")" \
+ && npm cache clean --force \
+ && pnpm --version
 RUN --mount=type=cache,id=proofstack-pnpm-store,target=/pnpm-store \
     pnpm install --frozen-lockfile --store-dir /pnpm-store
 COPY . .
@@ -33,8 +38,8 @@ COPY --from=build /app/.output ./.output
 COPY --from=build /app/drizzle ./drizzle
 USER node
 EXPOSE 3000
-# srvx (Nitro's server) drains in-flight requests on SIGTERM, then Nitro's close hook ends the
-# Postgres pool and the Effect runtime (src/server/lifecycle.ts). Graceful timeout: 5 s
+# srvx (Nitro's server) drains in-flight requests on SIGTERM, then Nitro's close hook runs the shutdown
+# steps, the Postgres pool last (src/server/lifecycle.ts). Graceful timeout: 5 s
 # (SERVER_SHUTDOWN_TIMEOUT), below Docker's default 10 s stop timeout.
 STOPSIGNAL SIGTERM
 # The probe runs inside the container and resolves the address the way Nitro's server does: NITRO_PORT or

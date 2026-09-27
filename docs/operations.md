@@ -165,6 +165,12 @@ Better Auth resolves it from `X-Forwarded-For` with `advanced.ipAddress.trustedP
 peer as the last hop of that header before Better Auth sees it, for `/api/auth/*` and for the server
 functions alike.
 
+An IPv6 client is recorded and rate-limited by its /64 network (`advanced.ipAddress.ipv6Subnet: 64`), not
+by its full address: one subscriber usually gets a whole /64 and can pick any address in it, so per-address
+buckets would let one client make unlimited fresh ones. Clients that share a /64 share a bucket. The
+account page shows such a session's address as that network, for example `IPv6 network 2001:db8:1:2::/64`
+(`::/64` for `::1`). IPv4 addresses are kept whole.
+
 - **`TRUSTED_PROXIES` unset:** the TCP peer address is the client IP. Whatever `X-Forwarded-For` the
   client sent is dropped, so clients cannot choose their bucket. Use this only when clients connect to
   the Node process directly.
@@ -191,6 +197,13 @@ own database storage lets concurrent requests past the limit on Postgres (Drizzl
 replaced through `rateLimit.customStorage`. Rows idle for 10 minutes are deleted in the background.
 Requests for endpoints outside the allowlist are not counted and write nothing.
 
+The business API limits writes per user, not per IP, because with open sign-up anyone can hold a session:
+creating, editing and deleting posts (`POST`, `PATCH` and `DELETE /api/me/posts`) count together against
+60 per 60 seconds per account (`POST_WRITES_PER_WINDOW` in `src/contract/limits.ts`), in every build.
+Past that they answer 429 with a `RateLimited` body whose `retryAfter` is the wait in seconds, as the
+contract documents. The Effect middleware `WriteRateLimit` (`src/server/api/rate-limit.ts`) runs after
+authentication and before the body is read, on the same table and upsert with keys `api-write|<user id>`.
+
 ## Accounts and mail
 
 The sign-up policy is `AUTH_SIGN_UP` ([ADR 0003](decisions/0003-sign-up-policy.md)). In both modes an
@@ -199,7 +212,7 @@ change it, list and end their sessions, and delete the account at `/account`.
 
 | Mail | Sent when | Link |
 | --- | --- | --- |
-| Confirm your email address | Sign-up; a sign-in with the right password but an unverified address; `/verify-email` "send a new link" | `/verify-email?token=...`, valid 1 hour |
+| Confirm your email address | Sign-up; a sign-in with the right password but an unverified address; `/verify-email` "send a new link" | `/verify-email?token=...`, valid 1 hour. The page confirms only when its "Confirm email" button is pressed (a POST), so mail scanners that follow links confirm nothing |
 | Reset your password | `/forgot-password` | `/reset-password?token=...`, valid 1 hour, once. Setting the password ends every session |
 | Someone tried to sign up with your email address | Sign-up with an address that already has an account | Links to `/login` and `/forgot-password` |
 
@@ -237,14 +250,15 @@ the address like the server does: `NITRO_PORT`, else `PORT`, else 3000; `NITRO_H
 
 On SIGTERM or SIGINT, srvx (Nitro's HTTP server) stops accepting connections, waits for in-flight
 requests up to `SERVER_SHUTDOWN_TIMEOUT` seconds (default 5) and then force-closes them. Nitro then runs
-its `close` hook, which ends the Postgres pool, disposes the Effect runtime, and waits for pending
-background tasks (mail sends, bounded by the SMTP timeouts of 5 s to connect and 15 s per socket
-operation) before closing the mail transport. Server code registers those cleanups with `onShutdown`
-(`src/server/lifecycle.ts`), which hooks `close` through Nitro's documented `useNitroHooks()` from
-`nitro/app`; the SSR bundle imports it from Nitro's own runtime chunk, so it is the same app instance that
-srvx closes. The log line `shutdown complete` lists the cleanups that ran, and `verify:app` fails when it
-is missing, when `postgres-pool` is not among them, or when a connection to the test database outlives the
-process.
+its `close` hook, where the startup plugin (`src/server/nitro/startup.ts`) runs the shutdown steps one
+after another, in this order: wait for pending background tasks (mail sends, bounded by the SMTP timeouts
+of 5 s to connect and 15 s per socket operation, and rate-limit pruning, which queries Postgres), close
+the mail transport, dispose the Effect runtime, end the Postgres pool. Server code registers each step
+with `onShutdown` (`src/server/lifecycle.ts`), which does not import Nitro, so CLI scripts can load the
+same modules. A failed step is logged (`shutdown cleanup failed`) and the next one still runs. The log
+line `shutdown complete` lists the steps in the order they ran (`cleanups`, with each one's duration in
+`steps`), and `verify:app` fails when it is missing, when `postgres-pool` is not among them, or when a
+connection to the test database outlives the process.
 
 Measured with the Docker image: `docker stop` returns in about 1.2 s with exit code 0, including an idle
 keep-alive connection. Keep the orchestrator's grace period above `SERVER_SHUTDOWN_TIMEOUT` (Docker's
@@ -321,16 +335,21 @@ rejections are logged and the process continues.
   Without it, the `Origin` header (or, if that is missing, the origin of `Referer`) must equal
   `APP_URL`. Anything else, including a request with none of these headers, gets 403 before
   authentication runs.
-- **Auth endpoints:** Better Auth answers only the endpoints the app uses (the plugin in
-  `src/server/http/auth-endpoints.ts`): `GET /get-session`, `POST /sign-in/email`, `POST /sign-out`,
-  `POST /sign-up/email` (with `AUTH_SIGN_UP=open` only), `POST /send-verification-email`,
-  `GET /verify-email`, `POST /request-password-reset`, `POST /reset-password`, `POST /change-password`,
-  `GET /list-sessions`, `POST /revoke-session`, `POST /revoke-other-sessions`, `POST /revoke-sessions` and
-  `POST /delete-user`. Every other Better Auth endpoint returns 404. The UI reaches them through server
-  functions (`src/lib/auth.functions.ts`) that run Better Auth's router in-process, so the allowlist,
-  rate limits and origin check apply to both paths; the browser gets no session tokens (sessions are
-  revoked by id). Signing in again does not revoke a session the browser already held; changing the
-  password ends every other session, and resetting it ends all of them.
+- **Auth endpoints:** `/api/auth/*` answers only `GET /get-session`, `POST /sign-in/email` and
+  `POST /sign-out`: what a client without the UI needs to get, check and end the session cookie that the
+  business API authenticates with. Session tokens are removed from their JSON bodies (the cookie carries
+  the session). Every other path returns 404 before Better Auth runs. The account actions of the UI are
+  server functions (`src/lib/auth.functions.ts`) that run Better Auth's router in-process, where the plugin
+  in `src/server/http/auth-endpoints.ts` additionally allows `POST /sign-up/email` (with
+  `AUTH_SIGN_UP=open` only), `POST /send-verification-email`, `GET /verify-email`,
+  `POST /request-password-reset`, `POST /reset-password`, `POST /change-password`, `GET /list-sessions`,
+  `POST /revoke-session`, `POST /revoke-other-sessions`, `POST /revoke-sessions` and `POST /delete-user`.
+  Rate limits and the origin check apply on both paths. The server functions accept a narrower input than
+  Better Auth: over raw HTTP, `/delete-user` would delete a fresh session's account without the password
+  and `/list-sessions` would hand every session token to page scripts. A `hooks.before` in
+  `src/server/auth.ts` also refuses `/delete-user` without a password, whoever calls it. The browser gets no
+  session tokens (sessions are revoked by id). Signing in again does not revoke a session the browser
+  already held; changing the password ends every other session, and resetting it ends all of them.
 - **Server functions:** an error inside a server function reaches the browser only as
   `Error('Internal error')` (see [Logs](#logs)); expected account failures (wrong password, rate limit)
   are returned as values, not thrown. A request to `/_serverFn/<id>` with an unknown id gets Nitro's bare
@@ -382,7 +401,7 @@ browsers, Postgres and (for `verify`) Mailpit, and moves artifacts. The logic li
 
 | Script | Job |
 | --- | --- |
-| `pnpm ci:workflows` | actionlint 1.7.12 and zizmor 1.30.1 (images pinned by digest, offline, read-only), and a check that `compose.yaml` and `ci.yml` pin the same images as `scripts/images.ts`. Needs Docker. |
+| `pnpm ci:workflows` | actionlint 1.7.12 and zizmor 1.30.1 (images pinned by digest, offline, read-only), and a check that `compose.yaml`, `ci.yml` and the `Dockerfile` pin the same images as `scripts/images.ts`. Needs Docker. |
 | `pnpm ci:static` | `pnpm check` without its drift gate |
 | `pnpm ci:drift` | `pnpm check:drift`, all four checks (`DATABASE_URL`) |
 | `pnpm ci:build` | `pnpm build` with placeholder configuration (the same as the Dockerfile's) |

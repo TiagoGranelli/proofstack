@@ -4,7 +4,7 @@
 import { createAccount, expectSignedOut, mailLink, newAccount, newClient, signInWithForm } from './support/accounts.ts'
 import { expect, signIn, test, visit } from './support/app.ts'
 
-test('signs up, confirms the address from the mail, then signs in', async ({ page }) => {
+test('signs up, confirms the address from the mail, then signs in', async ({ page, request }) => {
   const account = newAccount()
 
   await visit(page, '/login')
@@ -22,7 +22,18 @@ test('signs up, confirms the address from the mail, then signs in', async ({ pag
   await signInWithForm(page, account)
   await expect(page.getByRole('alert')).toContainText('Confirm your email address first')
 
-  await visit(page, await mailLink(account.email, 'Confirm your email address', '/verify-email'))
+  const link = await mailLink(account.email, 'Confirm your email address', '/verify-email')
+  // Following the link, as a mail scanner or a link preview does, confirms nothing.
+  expect((await request.get(link)).status()).toBe(200)
+  const early = await request.post('/api/auth/sign-in/email', {
+    data: { email: account.email, password: account.password },
+  })
+  expect(early.status()).toBe(403)
+  expect(await early.json()).toMatchObject({ code: 'EMAIL_NOT_VERIFIED' })
+
+  // Its owner confirms with the button (a POST).
+  await visit(page, link)
+  await page.getByRole('button', { name: 'Confirm email' }).click()
   await expect(page.getByRole('status')).toContainText('Your email address is confirmed')
   await page.getByRole('link', { name: 'Sign in' }).click()
   await expect(page.locator('body[data-hydrated="true"]')).toBeAttached()
@@ -33,9 +44,8 @@ test('signs up, confirms the address from the mail, then signs in', async ({ pag
 test('resets a forgotten password from the mailed link, which ends every session', async ({
   browser,
   page,
-  request,
 }, testInfo) => {
-  const account = await createAccount(request)
+  const account = await createAccount()
   // Signed in elsewhere before the reset.
   const elsewhere = await newClient(browser, testInfo)
   await signIn(elsewhere.request, account)
@@ -70,12 +80,8 @@ test('resets a forgotten password from the mailed link, which ends every session
   await elsewhere.close()
 })
 
-test('changing the password signs out the other sessions and keeps this one', async ({
-  browser,
-  page,
-  request,
-}, testInfo) => {
-  const account = await createAccount(request)
+test('changing the password signs out the other sessions and keeps this one', async ({ browser, page }, testInfo) => {
+  const account = await createAccount()
   const elsewhere = await newClient(browser, testInfo)
   await Promise.all([signIn(page, account), signIn(elsewhere.request, account)])
 
@@ -93,8 +99,8 @@ test('changing the password signs out the other sessions and keeps this one', as
   await elsewhere.close()
 })
 
-test('lists the sessions and signs out another one', async ({ browser, page, request }, testInfo) => {
-  const account = await createAccount(request)
+test('lists the sessions and signs out another one', async ({ browser, page }, testInfo) => {
+  const account = await createAccount()
   const elsewhere = await newClient(browser, testInfo)
   await Promise.all([signIn(page, account), signIn(elsewhere.request, account)])
 
@@ -118,8 +124,8 @@ test('lists the sessions and signs out another one', async ({ browser, page, req
   await elsewhere.close()
 })
 
-test('deletes the account after the password and an explicit confirmation', async ({ page, request }) => {
-  const account = await createAccount(request)
+test('deletes the account after the password and an explicit confirmation', async ({ page }) => {
+  const account = await createAccount()
   await signIn(page, account)
   await visit(page, '/account')
 

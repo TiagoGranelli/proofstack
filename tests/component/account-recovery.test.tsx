@@ -1,5 +1,5 @@
 // Signing up, confirming the address and recovering a password: the forms, and the /reset-password and
-// /verify-email routes (search validation, loader, every token state).
+// /verify-email routes (search validation, every token state).
 import { describe, expect, it } from 'vitest'
 import { page } from 'vitest/browser'
 import { ForgotPasswordForm } from '#/features/auth/components/forgot-password-form.tsx'
@@ -201,11 +201,21 @@ describe('/reset-password', () => {
 })
 
 describe('/verify-email', () => {
-  it('confirms the address from the link and offers to sign in, without a resend form', async () => {
+  it('confirms the address only when the button is pressed, then offers to sign in', async () => {
+    const response = held()
     const calls = authCalls('verifyEmail')
-    worker.use(calls.handler, authFunction('verifyEmail', { ok: true, value: null }))
+    worker.use(calls.handler, authFunction('verifyEmail', response))
     const { router } = await renderVerify('/verify-email?token=tok-1')
     await expect.element(page.getByRole('heading', { level: 1 })).toHaveTextContent('Confirm your email')
+    // Opening the link (what a mail scanner does too) sends nothing.
+    await expect.element(button('Confirm email')).toBeEnabled()
+    await expect.element(resend()).not.toBeInTheDocument()
+    expect(calls.data).toEqual([])
+
+    await button('Confirm email').click()
+    await expect.element(button('Confirm email')).toBeDisabled()
+    await expect.element(formOf('Confirm email')).toHaveAttribute('aria-busy', 'true')
+    response.release()
     await expect
       .element(page.getByRole('status'))
       .toHaveTextContent('Your email address is confirmed. Sign in to continue.')
@@ -221,6 +231,8 @@ describe('/verify-email', () => {
   ])('says %s link cannot be used, without the code, and offers a new one', async (_, failure) => {
     worker.use(authFunction('verifyEmail', { ok: false, failure }))
     await renderVerify('/verify-email?token=tok-1')
+    await expect.element(resend()).not.toBeInTheDocument()
+    await button('Confirm email').click()
     await expect.element(page.getByRole('alert')).toHaveTextContent(expiredLink)
     expect(document.body.textContent).not.toContain(failure.code)
     await expect.element(resend()).toBeEnabled()
