@@ -1,5 +1,7 @@
 # squawk (`pnpm check:migrations`): lints drizzle/*.sql for statements that lock or rewrite busy tables, and fails
 # on any finding. See docs/operations.md, "Migration safety", for waivers and CONCURRENTLY.
+# squawk only finds a .squawk.toml in the working directory or above it, so the script passes this file with
+# --config. excluded_paths match the paths squawk is given (drizzle/*.sql, from the repository root).
 
 # compose.yaml, CI and production run Postgres 18 (scripts/images.ts).
 pg_version = "18.6"

@@ -15,7 +15,7 @@ sbom/
 .env.*
 !.env.example
 deploy/deploy.env
-# Personal lefthook overrides (lefthook reads it on top of lefthook.yml).
+# Personal lefthook overrides (lefthook reads it on top of .config/lefthook.yml).
 lefthook-local.yml
 .DS_Store
 .claude/worktrees/

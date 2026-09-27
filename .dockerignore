@@ -26,16 +26,13 @@ lefthook-local.yml
 # Not needed to build the image
 .git/
 .github/
-lefthook.yml
+.config/
 .vscode/
 .agents/
 .claude/
 repos/
 docs/
-.grype.yaml
 deploy/
-.gitleaks.toml
-.squawk.toml
 tests/
 Dockerfile
 .dockerignore

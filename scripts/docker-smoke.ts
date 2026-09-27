@@ -77,14 +77,14 @@ const step = async <T>(name: string, run: () => T | Promise<T>): Promise<T> => {
 
 /**
  * grype over the built image, from the Docker daemon: a high or critical vulnerability with a released fix
- * fails, unless an ignore rule in .grype.yaml gives the reason it does not apply. Returns grype's exit code.
+ * fails, unless an ignore rule in .config/grype.yaml gives the reason it does not apply. Returns grype's exit code.
  */
 const scanImage = () =>
   spawnSync(
     'docker',
     ['run', '--rm', '--memory', '2g', '--volume', '/var/run/docker.sock:/var/run/docker.sock']
       .concat(['--volume', `${GRYPE_DB}:/grype-db`, '--env', 'GRYPE_DB_CACHE_DIR=/grype-db'])
-      .concat(['--volume', `${resolve('.grype.yaml')}:/grype.yaml:ro`, IMAGES.grype, `docker:${IMAGE}`])
+      .concat(['--volume', `${resolve('.config/grype.yaml')}:/grype.yaml:ro`, IMAGES.grype, `docker:${IMAGE}`])
       .concat(['--only-fixed', '--fail-on', 'high', '--config', '/grype.yaml']),
     { stdio: 'inherit' },
   ).status
@@ -224,7 +224,7 @@ if (scanStatus !== 0) {
   console.error(
     `\nFAIL image scan (grype exit ${scanStatus}). Move to a base image digest with the fix (Renovate proposes it; ` +
       'by hand, the digest in scripts/images.ts and every copy `pnpm ci:workflows` lists), or add an ignore rule ' +
-      'with its reason and a review date to .grype.yaml.',
+      'with its reason and a review date to .config/grype.yaml.',
   )
 }
 console.log(failed ? '\ndocker smoke test failed' : '\ndocker smoke test passed')

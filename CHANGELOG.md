@@ -14,11 +14,14 @@ repository created from the template.
   `startTestServers` in `scripts/app-server.ts`), so they run directly, from `playwright test --ui` and from the
   editor extensions. `pnpm verify:app` runs the layers one after another and prints a summary; the drain check
   is `tests/integration/shutdown.test.ts`.
-- `pnpm ci:docker` runs `deploy/compose.production.yaml` itself, with `deploy/compose.smoke.yaml` on top, and scans the
-  image with `grype --only-fixed --fail-on high`.
+- `pnpm ci:docker` runs `deploy/compose.production.yaml` itself, with `deploy/compose.smoke.yaml` on top, and
+  scans the image with `grype --only-fixed --fail-on high`.
 - `pnpm ci:local` runs its container jobs in `.github/compose.ci.yaml`.
 - `CONTRIBUTING.md`, `SECURITY.md` and `CODE_OF_CONDUCT.md` live in `.github/`, where GitHub finds them first.
 - The Renovate configuration is `.github/renovate.json`, one of the locations Renovate searches.
+- The lefthook, gitleaks, grype and squawk configurations live in `.config/` (`lefthook.yml`, `gitleaks.toml`,
+  `gitleaksignore`, `grype.yaml`, `squawk.toml`). lefthook finds `.config/lefthook.yml` by itself; the scripts
+  pass the others by flag.
 
 ### Fixed
 
@@ -29,8 +32,11 @@ repository created from the template.
 - `verify:app` takes no arguments: instead of a filter or `--no-db`, `--no-integration`, `--no-e2e`, run that
   runner (`pnpm test:db`, `pnpm test`, `pnpm test:e2e`, each with a filter). `--edge` is `TEST_EDGE=1`.
   `VERIFY_PORT` and `TEST_DATABASE_URL` are gone: every run uses free ports and its own database.
-- Image scan exceptions move from `security/image-allowlist.json` to `ignore` rules in `.grype.yaml`, with the
-  reason and a review date in `reason`; nothing enforces the date any more.
+- Image scan exceptions move from `security/image-allowlist.json` to `ignore` rules in `.config/grype.yaml`, with
+  the reason and a review date in `reason`; nothing enforces the date any more.
+- Move your copies of `lefthook.yml`, `.gitleaks.toml`, `.gitleaksignore`, `.grype.yaml` and `.squawk.toml` into
+  `.config/` under the names above, and `renovate.json` into `.github/`. A personal `lefthook-local.yml` stays at
+  the root.
 
 ## [0.1.0] - 2026-09-27
 

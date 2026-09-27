@@ -53,7 +53,7 @@
     "test:e2e": "playwright test",
     "verify:app": "node scripts/verify-app.ts",
     "check:drift": "node scripts/check-drift.ts",
-    "check:migrations": "squawk drizzle/*.sql",
+    "check:migrations": "squawk --config .config/squawk.toml drizzle/*.sql",
     "sbom:release": "pnpm sbom --sbom-format cyclonedx --sbom-type application --prod --out sbom/npm.cdx.json",
     "audit:check": "pnpm audit --audit-level high",
     "licenses:check": "node scripts/licenses.ts",
