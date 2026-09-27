@@ -11,12 +11,11 @@ import { SignOutAlert, SignOutButton } from '#/features/auth/components/sign-out
 import { SignUpForm } from '#/features/auth/components/sign-up-form.tsx'
 import type { AuthFailure } from '#/lib/auth.functions.ts'
 import { auth, authCalls, authFunction, held, worker } from './api-mocks.ts'
-import { pressAndKeepFocus, renderInApp } from './test-utils.tsx'
+import { formOf, pressAndKeepFocus, renderInApp } from './test-utils.tsx'
 
 const email = () => page.getByLabelText('Email')
 const password = () => page.getByLabelText('Password')
 const signInButton = () => page.getByRole('button', { name: 'Sign in' })
-const formOf = () => page.elementLocator(email().element().closest('form')!)
 
 const signIn = async () => {
   await email().fill('author@example.test')
@@ -53,23 +52,33 @@ describe('LoginForm', () => {
     await expect.element(email()).toBeRequired()
     await expect.element(password()).toBeRequired()
     // A native submit (before hydration) would be a POST to /login, never a GET with the password in the URL.
-    await expect.element(formOf()).toHaveAttribute('method', 'post')
+    await expect.element(formOf(signInButton())).toHaveAttribute('method', 'post')
     await expect.element(signInButton()).toBeEnabled()
   })
 
   it.each([
-    ['empty fields', '', '', 'Enter your email address.', 'Enter your password.'],
-    ['an address without @', 'author.example.test', 'a password', 'Enter a valid email address.', ''],
+    {
+      fields: 'empty fields',
+      typed: { email: '', password: '' },
+      emailMessage: 'Enter your email address.',
+      passwordMessage: 'Enter your password.',
+    },
+    {
+      fields: 'an address without @',
+      typed: { email: 'author.example.test', password: 'a password' },
+      emailMessage: 'Enter a valid email address.',
+      passwordMessage: '',
+    },
   ])(
-    'sends nothing with %s and says why next to each field, focusing the first',
-    async (_, typed, pass, message, passwordMessage) => {
+    'sends nothing with $fields and says why next to each field, focusing the first',
+    async ({ typed, emailMessage, passwordMessage }) => {
       const calls = authCalls('signIn')
       worker.use(calls.handler)
       await renderInApp(<LoginForm />, { url: '/login' })
-      await email().fill(typed)
-      await password().fill(pass)
+      await email().fill(typed.email)
+      await password().fill(typed.password)
       await signInButton().click()
-      await expect.element(email()).toHaveAccessibleDescription(message)
+      await expect.element(email()).toHaveAccessibleDescription(emailMessage)
       await expect.element(email()).toHaveAttribute('aria-invalid', 'true')
       await expect.element(email()).toHaveFocus()
       await expect.element(password()).toHaveAccessibleDescription(passwordMessage)
@@ -95,9 +104,9 @@ describe('LoginForm', () => {
     await renderInApp(<LoginForm />, { url: '/login' })
     await signIn()
     await expect.element(signInButton()).toBeDisabled()
-    await expect.element(formOf()).toHaveAttribute('aria-busy', 'true')
+    await expect.element(formOf(signInButton())).toHaveAttribute('aria-busy', 'true')
     response.release()
-    await expect.element(formOf()).toHaveAttribute('aria-busy', 'false')
+    await expect.element(formOf(signInButton())).toHaveAttribute('aria-busy', 'false')
   })
 
   it.each([
@@ -108,7 +117,7 @@ describe('LoginForm', () => {
     const { router } = await renderInApp(<LoginForm redirectTo="/about" />, { url: '/login' })
     await signIn()
     await expect.element(page.getByRole('alert')).toHaveTextContent(message)
-    await expect.element(formOf()).toHaveAccessibleDescription(message)
+    await expect.element(formOf(signInButton())).toHaveAccessibleDescription(message)
     await expect.element(signInButton()).toBeEnabled()
     // Focus stays on the button, so Enter retries.
     await expect.element(signInButton()).toHaveFocus()
@@ -135,7 +144,7 @@ describe('LoginForm', () => {
     await userEvent.keyboard('{Enter}')
     await signInButton().click({ force: true })
     response.release()
-    await expect.element(formOf()).toHaveAttribute('aria-busy', 'false')
+    await expect.element(formOf(signInButton())).toHaveAttribute('aria-busy', 'false')
     expect(calls.data).toEqual([{ email: 'author@example.test', password: 'a long enough password' }])
   })
 
@@ -158,7 +167,7 @@ describe('LoginForm', () => {
     const { router } = await renderInApp(<LoginForm />, { url: '/login' })
     await signIn()
     await expect.element(page.getByRole('alert')).toHaveTextContent(message)
-    await expect.element(formOf()).toHaveAccessibleDescription(message)
+    await expect.element(formOf(signInButton())).toHaveAccessibleDescription(message)
     expect(document.body.textContent).not.toContain(failure.code)
     expect(router.state.location.pathname).toBe('/login')
   })
@@ -199,7 +208,9 @@ describe('LoginForm', () => {
     worker.use(calls.handler, auth.signIn(held()))
     await renderInApp(<LoginForm failure={{ code: 'RATE_LIMITED', retryAfter: 7 }} />, { url: '/login' })
     await expect.element(page.getByRole('alert')).toHaveTextContent('Too many attempts. Try again in 7 seconds.')
-    await expect.element(formOf()).toHaveAccessibleDescription('Too many attempts. Try again in 7 seconds.')
+    await expect
+      .element(formOf(signInButton()))
+      .toHaveAccessibleDescription('Too many attempts. Try again in 7 seconds.')
     await signIn()
     await expect.element(page.getByRole('alert')).not.toBeInTheDocument()
     await expect.poll(() => calls.data.length).toBe(1)

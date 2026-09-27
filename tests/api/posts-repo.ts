@@ -16,7 +16,10 @@ const view = ({ id, body, authorName, createdAt, updatedAt }: StoredPost): Post 
 })
 
 /** The (createdAt, id) keyset order of src/server/posts/repo.ts, newest first. Postgres compares uuids bytewise, which for lower-case hex is string order. */
-const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
+const compare = (a: string, b: string) => {
+  if (a === b) return 0
+  return a < b ? -1 : 1
+}
 const compareKeys = (a: PageCursor, b: PageCursor) =>
   compare(a.createdAt, b.createdAt) || compare(a.id.toLowerCase(), b.id.toLowerCase())
 const keyOf = (post: StoredPost): PageCursor => ({ createdAt: post.cursorAt, id: post.id })
@@ -28,7 +31,7 @@ const toPage = (list: ReadonlyArray<StoredPost>, { cursor, limit }: PageRequest)
     .toSorted((a, b) => compareKeys(keyOf(b), keyOf(a)))
   const items = after.slice(0, limit)
   const last = items.at(-1)
-  return { items: items.map((item) => view(item)), nextCursor: after.length > limit && last ? keyOf(last) : null }
+  return { items: items.map((post) => view(post)), nextCursor: after.length > limit && last ? keyOf(last) : null }
 }
 
 /**

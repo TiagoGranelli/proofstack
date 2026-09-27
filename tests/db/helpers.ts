@@ -15,11 +15,11 @@ const textOf = (query: unknown) =>
  * included: Drizzle, Better Auth's adapter and the rate-limit storage all go through it). Test-only
  * instrumentation on pg's Client, so production code needs no hook.
  */
-export async function statementsOf<A>(work: () => Promise<A>): Promise<{ result: A; statements: string[] }> {
+export async function statementsOf<A>(work: () => Promise<A>): Promise<{ returned: A; statements: string[] }> {
   const spy = vi.spyOn(Client.prototype, 'query')
   try {
-    const result = await work()
-    return { result, statements: spy.mock.calls.map(([query]) => textOf(query)) }
+    const returned = await work()
+    return { returned, statements: spy.mock.calls.map(([query]) => textOf(query)) }
   } finally {
     spy.mockRestore()
   }
@@ -42,9 +42,9 @@ export const recordingDatabase = Layer.succeed(Database, recordingDb)
 /** Runs `effect`, built on `recordingDatabase`, and checks it sent exactly `budget` statements. */
 export const withBudget = async <A, E>(what: string, budget: number, effect: Effect.Effect<A, E>) => {
   logged.length = 0
-  const result = await Effect.runPromise(effect)
+  const value = await Effect.runPromise(effect)
   expectBudget(what, [...logged], budget)
-  return result
+  return value
 }
 
 /** A verified account with a password, created the way `pnpm user:create` does it. */

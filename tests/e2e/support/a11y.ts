@@ -24,12 +24,12 @@ export async function expectAccessible(page: Page, state: string) {
       await Promise.allSettled(running.map((a) => a.finished))
     }
   })
-  const results = await new AxeBuilder({ page }).withTags(AXE_TAGS).analyze()
+  const scan = await new AxeBuilder({ page }).withTags(AXE_TAGS).analyze()
   await test.info().attach(`axe ${state}.json`, {
-    body: JSON.stringify(results.violations, null, 2),
+    body: JSON.stringify(scan.violations, null, 2),
     contentType: 'application/json',
   })
-  const violations = results.violations.map(
+  const violations = scan.violations.map(
     (v) => `${v.id} (${v.impact}): ${v.help} at ${v.nodes.map((node) => node.target.join(' ')).join(', ')}`,
   )
   expect(violations, `axe violations in "${state}"`).toEqual([])
@@ -61,27 +61,40 @@ export async function tabThrough(page: Page, options: { backwards?: boolean; max
     else document.body.append(sentinel)
   }, backwards)
   try {
-    const stops: TabStop[] = []
-    for (let i = 0; i < max; i++) {
-      await page.keyboard.press(backwards ? 'Shift+Tab' : 'Tab')
-      const focused = page.locator(':focus')
-      if ((await focused.count()) === 0)
-        throw new Error(`focus was lost to the document after ${stops.map((s) => s.name).join(' → ') || 'no stops'}`)
-      if (await focused.evaluate((element) => element.id === 'tab-walk-end')) return stops
-      const snapshot = await focused.ariaSnapshot()
-      // `- button "Sign out"`, or YAML-quoted when the name has a colon: `- 'button "Edit post: First"'`.
-      const [, role, label] = /^- '?([\w-]+)(?: "((?:[^"\\]|\\.)*)")?/.exec(snapshot) ?? []
-      const visibleFocus = await focused.evaluate((element) => {
-        const style = getComputedStyle(element)
-        const outline = style.outlineStyle !== 'none' && Number.parseFloat(style.outlineWidth) > 0
-        return element.matches(':focus-visible') && (outline || style.boxShadow !== 'none')
-      })
-      stops.push({ name: label === undefined ? `${role}` : `${role} "${label}"`, visibleFocus })
-    }
-    throw new Error(`focus did not get past the page after ${max} key presses: ${stops.map((s) => s.name).join(' → ')}`)
+    return await walkToSentinel(page, { backwards, max })
   } finally {
     await page.evaluate(() => document.getElementById('tab-walk-end')?.remove())
   }
+}
+
+/** Presses Tab (or Shift+Tab) until focus reaches the sentinel of `tabThrough`, and returns the stops on the way. */
+const walkToSentinel = async (page: Page, { backwards, max }: { backwards: boolean; max: number }) => {
+  const stops: TabStop[] = []
+  const walked = () => stops.map((stop) => stop.name).join(' → ')
+  for (let i = 0; i < max; i++) {
+    await page.keyboard.press(backwards ? 'Shift+Tab' : 'Tab')
+    const stop = await focusedStop(page)
+    if (stop === 'lost') throw new Error(`focus was lost to the document after ${walked() || 'no stops'}`)
+    if (stop === 'sentinel') return stops
+    stops.push(stop)
+  }
+  throw new Error(`focus did not get past the page after ${max} key presses: ${walked()}`)
+}
+
+/** Where focus is now: a control, as a tab stop; the sentinel of `tabThrough`; or nowhere (lost to the document). */
+const focusedStop = async (page: Page): Promise<TabStop | 'sentinel' | 'lost'> => {
+  const focused = page.locator(':focus')
+  if ((await focused.count()) === 0) return 'lost'
+  if (await focused.evaluate((element) => element.id === 'tab-walk-end')) return 'sentinel'
+  const snapshot = await focused.ariaSnapshot()
+  // `- button "Sign out"`, or YAML-quoted when the name has a colon: `- 'button "Edit post: First"'`.
+  const [, role, label] = /^- '?([\w-]+)(?: "((?:[^"\\]|\\.)*)")?/.exec(snapshot) ?? []
+  const visibleFocus = await focused.evaluate((element) => {
+    const style = getComputedStyle(element)
+    const outline = style.outlineStyle !== 'none' && Number.parseFloat(style.outlineWidth) > 0
+    return element.matches(':focus-visible') && (outline || style.boxShadow !== 'none')
+  })
+  return { name: label === undefined ? `${role}` : `${role} "${label}"`, visibleFocus }
 }
 
 /**

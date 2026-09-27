@@ -11,38 +11,42 @@ const HOUR = 60 * 60 * 1000
 
 afterAll(() => pool.end())
 
+/** A session of `userId` that expires at `expiresAt` (epoch ms), its id prefixed with `label`. */
+const sessionRow = (userId: string, label: string, expiresAt: number) => ({
+  id: `${label}-${crypto.randomUUID()}`,
+  token: crypto.randomUUID(),
+  userId,
+  expiresAt: new Date(expiresAt),
+  updatedAt: new Date(),
+  ipAddress: '192.0.2.1',
+})
+
+/** A password-reset token for `userId` that expires at `expiresAt` (epoch ms), its id prefixed with `label`. */
+const tokenRow = (userId: string, label: string, expiresAt: number) => ({
+  id: `${label}-${crypto.randomUUID()}`,
+  identifier: `reset-password:${crypto.randomUUID()}`,
+  value: userId,
+  expiresAt: new Date(expiresAt),
+})
+
 describe('deleteExpiredAuthRows', () => {
   it('deletes sessions expired longer than the retention and expired verification tokens, nothing else', async () => {
     const now = Date.now()
     const { id: userId } = await createAccount('cleanup')
-    const sessionAt = (label: string, expiresAt: number) => ({
-      id: `${label}-${crypto.randomUUID()}`,
-      token: crypto.randomUUID(),
-      userId,
-      expiresAt: new Date(expiresAt),
-      updatedAt: new Date(now),
-      ipAddress: '192.0.2.1',
-    })
     const sessions = {
-      old: sessionAt('old', now - EXPIRED_SESSION_RETENTION_MS - HOUR),
-      recent: sessionAt('recent', now - HOUR),
-      active: sessionAt('active', now + HOUR),
+      old: sessionRow(userId, 'old', now - EXPIRED_SESSION_RETENTION_MS - HOUR),
+      recent: sessionRow(userId, 'recent', now - HOUR),
+      active: sessionRow(userId, 'active', now + HOUR),
     }
     await db.insert(session).values(Object.values(sessions))
-    const tokenAt = (label: string, expiresAt: number) => ({
-      id: `${label}-${crypto.randomUUID()}`,
-      identifier: `reset-password:${crypto.randomUUID()}`,
-      value: userId,
-      expiresAt: new Date(expiresAt),
-    })
-    const tokens = { expired: tokenAt('expired', now - 1000), valid: tokenAt('valid', now + HOUR) }
+    const tokens = { expired: tokenRow(userId, 'expired', now - 1000), valid: tokenRow(userId, 'valid', now + HOUR) }
     await db.insert(verification).values(Object.values(tokens))
 
-    const { result, statements } = await statementsOf(() => deleteExpiredAuthRows(now))
+    const { returned: deleted, statements } = await statementsOf(() => deleteExpiredAuthRows(now))
     expectBudget('deleteExpiredAuthRows', statements, 2)
     // Other files' rows may expire too, so at least ours.
-    expect(result.sessions).toBeGreaterThanOrEqual(1)
-    expect(result.verifications).toBeGreaterThanOrEqual(1)
+    expect(deleted.sessions).toBeGreaterThanOrEqual(1)
+    expect(deleted.verifications).toBeGreaterThanOrEqual(1)
 
     const left = await db
       .select({ id: session.id })

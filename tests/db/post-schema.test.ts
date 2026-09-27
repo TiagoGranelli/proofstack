@@ -25,13 +25,13 @@ const repoLayer = PostsRepo.layer.pipe(Layer.provide(Layer.succeed(Database, rec
 /** The statement one repository call sends. */
 const statementOf = async <A>(call: (repo: typeof PostsRepo.Service) => Effect.Effect<A, unknown>) => {
   logged.length = 0
-  const result = await Effect.runPromise(
+  const returned = await Effect.runPromise(
     Effect.gen(function* () {
       return yield* call(yield* PostsRepo)
     }).pipe(Effect.provide(repoLayer)),
   )
   expect(logged).toHaveLength(1)
-  return { result, ...logged[0]! }
+  return { returned, ...logged[0]! }
 }
 
 type PlanNode = { 'Node Type': string; 'Index Name'?: string; 'Scan Direction'?: string; Plans?: PlanNode[] }
@@ -68,10 +68,10 @@ describe('keyset list plans', () => {
   it('reads each list backward from its ascending index, without a Sort, on the first page and a deep one', async () => {
     const first = await statementOf((repo) => repo.listByAuthor(author, { limit: 20 }))
     const deep = await statementOf((repo) =>
-      repo.listByAuthor(author, { limit: 20, cursor: first.result.nextCursor ?? undefined }),
+      repo.listByAuthor(author, { limit: 20, cursor: first.returned.nextCursor ?? undefined }),
     )
     const publicDeep = await statementOf((repo) =>
-      repo.listPublic({ limit: 20, cursor: deep.result.nextCursor ?? undefined }),
+      repo.listPublic({ limit: 20, cursor: deep.returned.nextCursor ?? undefined }),
     )
     for (const [statement, index] of [
       [first, 'post_author_keyset_idx'],
@@ -90,8 +90,8 @@ describe('keyset list plans', () => {
       ).toMatchObject({ 'Scan Direction': 'Backward' })
     }
     // The author's posts are every hundredth; the deep public page starts right below their second page.
-    expect(deep.result.items.map((post) => post.body).slice(0, 2)).toEqual(['seeded 8000', 'seeded 7900'])
-    expect(publicDeep.result.items[0]?.body).toBe('seeded 6099')
+    expect(deep.returned.items.map((post) => post.body).slice(0, 2)).toEqual(['seeded 8000', 'seeded 7900'])
+    expect(publicDeep.returned.items[0]?.body).toBe('seeded 6099')
   })
 })
 
@@ -147,12 +147,12 @@ describe('post_body_check', () => {
 describe('updated_at', () => {
   it('comes from the database clock on every edit, like created_at', async () => {
     const created = await statementOf((repo) => repo.create(author, 'clock'))
-    const edit = await statementOf((repo) => repo.update(author, created.result.id, 'clock, edited'))
+    const edit = await statementOf((repo) => repo.update(author, created.returned.id, 'clock, edited'))
     expect(edit.query).toMatch(/"updated_at" = now\(\)/)
     expect(edit.params.some((param) => param instanceof Date)).toBe(false)
     const { rows } = await pool.query<{ ordered: boolean }>(
       'select updated_at >= created_at as ordered from post where id = $1',
-      [created.result.id],
+      [created.returned.id],
     )
     expect(rows).toEqual([{ ordered: true }])
   })

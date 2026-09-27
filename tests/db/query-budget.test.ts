@@ -22,9 +22,13 @@ describe('DatabaseHealth', () => {
   })
 })
 
+/** One of Better Auth's endpoints, by method and path under /api/auth: `POST /revoke-sessions`. */
+type Endpoint = `${'GET' | 'POST'} /${string}`
+
 /** A request to Better Auth's router as a signed-in browser of this app would send it. */
-const request = (path: string, cookie: string, method: 'GET' | 'POST', body: Record<string, unknown> = {}) =>
-  auth.handler(
+const request = (endpoint: Endpoint, cookie: string, body: Record<string, unknown> = {}) => {
+  const [method, path] = endpoint.split(' ') as ['GET' | 'POST', string]
+  return auth.handler(
     new Request(`${env.appUrl}/api/auth${path}`, {
       method,
       headers: {
@@ -35,6 +39,7 @@ const request = (path: string, cookie: string, method: 'GET' | 'POST', body: Rec
       ...(method === 'POST' ? { body: JSON.stringify(body) } : {}),
     }),
   )
+}
 
 /** An account signed in once (the cookie's session), plus `others` more sessions. */
 const signedIn = async (others: number) => {
@@ -86,19 +91,18 @@ describe('session endpoints', () => {
   it('lists the cookie session and the others, so the budgets below count 1 session and 21', async () => {
     for (const others of [0, 20]) {
       const { cookie } = await signedIn(others)
-      expect(await (await request('/list-sessions', cookie, 'GET')).json()).toHaveLength(others + 1)
+      expect(await (await request('GET /list-sessions', cookie)).json()).toHaveLength(others + 1)
     }
   })
 
   it.each(Object.keys(BUDGETS) as Array<keyof typeof BUDGETS>)(
     'answers %s within its budget for 1 session and for 21',
     async (what) => {
-      const [method, path] = what.split(' ') as ['GET' | 'POST', string]
       for (const others of [0, 20]) {
         const { cookie, password } = await signedIn(others)
         const body = bodies[what]?.(password)
-        const { result, statements } = await statementsOf(() => request(path, cookie, method, body))
-        expect(result.status, `${what} with ${others + 1} sessions`).toBe(200)
+        const { returned: response, statements } = await statementsOf(() => request(what, cookie, body))
+        expect(response.status, `${what} with ${others + 1} sessions`).toBe(200)
         expectBudget(`${what} with ${others + 1} sessions`, statements, BUDGETS[what](others))
       }
     },
