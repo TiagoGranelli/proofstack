@@ -1,9 +1,12 @@
 name: Setup
-description: pnpm (version from package.json#packageManager), Node (.node-version), cached store, frozen install.
+description: pnpm (version from package.json#packageManager), Node (.node-version), cached store, frozen install, Playwright browsers.
 inputs:
-  playwright:
-    description: Also install Playwright's Chromium (cached) and, when needed, its system dependencies.
-    default: 'false'
+  install:
+    description: Run `pnpm install --frozen-lockfile`. Jobs whose script needs only Node and Docker skip it.
+    default: 'true'
+  browsers:
+    description: Space-separated Playwright browsers to install (cached), with their system dependencies, e.g. `chromium firefox webkit`.
+    default: ''
 runs:
   using: composite
   steps:
@@ -11,30 +14,43 @@ runs:
     - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
       with:
         node-version-file: .node-version
-        cache: pnpm
-    - shell: bash
+        cache: ${{ inputs.install == 'true' && 'pnpm' || '' }}
+    - if: inputs.install == 'true'
+      shell: bash
       run: pnpm install --frozen-lockfile
     - id: playwright
-      if: inputs.playwright == 'true'
+      if: inputs.browsers != ''
       shell: bash
-      run: echo "version=$(pnpm exec playwright --version | cut -d' ' -f2)" >> "$GITHUB_OUTPUT"
+      env:
+        BROWSERS: ${{ inputs.browsers }}
+      # The cache key names the Playwright version and the browser set, so adding a browser misses the cache.
+      run: |
+        echo "version=$(pnpm exec playwright --version | cut -d' ' -f2)" >> "$GITHUB_OUTPUT"
+        echo "browsers=$(tr -s ' ' '\n' <<< "$BROWSERS" | sort | paste -sd- -)" >> "$GITHUB_OUTPUT"
     - id: playwright-cache
-      if: inputs.playwright == 'true'
+      if: inputs.browsers != ''
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ~/.cache/ms-playwright
-        key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}
-    - if: inputs.playwright == 'true' && steps.playwright-cache.outputs.cache-hit != 'true'
+        key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}-${{ steps.playwright.outputs.browsers }}
+    - if: inputs.browsers != '' && steps.playwright-cache.outputs.cache-hit != 'true'
       shell: bash
-      run: pnpm exec playwright install --with-deps chromium
-    # Cache hit: the browsers are restored, but their system libraries live outside the cache. The
-    # ubuntu-24.04 image ships Google Chrome, whose packages cover what Chromium links against, so apt
-    # (about 30 s) runs only if a library is actually missing.
-    - if: inputs.playwright == 'true' && steps.playwright-cache.outputs.cache-hit == 'true'
-      shell: bash
+      env:
+        BROWSERS: ${{ inputs.browsers }}
       run: |
-        missing=$(find ~/.cache/ms-playwright -type f \( -name chrome -o -name chrome-headless-shell \) -exec ldd {} + | grep 'not found' || true)
+        read -ra browsers <<< "$BROWSERS"
+        pnpm exec playwright install --with-deps "${browsers[@]}"
+    # Cache hit: the browsers are restored, but their system libraries live outside the cache. The
+    # ubuntu-24.04 image ships Google Chrome, whose packages cover what Chromium links against; Firefox and
+    # WebKit need more. apt (30 s or more) runs only if a restored binary or library actually misses one.
+    - if: inputs.browsers != '' && steps.playwright-cache.outputs.cache-hit == 'true'
+      shell: bash
+      env:
+        BROWSERS: ${{ inputs.browsers }}
+      run: |
+        missing=$(find ~/.cache/ms-playwright -type f \( -perm -u+x -o -name '*.so*' \) -exec ldd {} + 2>/dev/null | grep 'not found' | sort -u || true)
         if [ -n "$missing" ]; then
           echo "$missing"
-          pnpm exec playwright install-deps chromium
+          read -ra browsers <<< "$BROWSERS"
+          pnpm exec playwright install-deps "${browsers[@]}"
         fi
