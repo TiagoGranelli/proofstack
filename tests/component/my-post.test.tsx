@@ -1,27 +1,19 @@
-// MyPost: edit mode, focus management, pending states and every failure branch of save and delete.
+// MyPost: edit mode, focus management, pending states and every failure branch of save. Delete: delete-post.test.tsx.
 import { HttpResponse } from 'msw'
 import { describe, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
 import { POST_MAX_LENGTH } from '#/contract/limits.ts'
 import { getMyPostsQueryOptions } from '#/features/posts/api/get-my-posts.ts'
-import { getPublicPostsQueryOptions } from '#/features/posts/api/get-public-posts.ts'
 import { MyPost } from '#/features/posts/components/my-post.tsx'
 import { api, apiError, apiFailure, held, post, postPage, postPages, worker } from './api-mocks.ts'
 import { afterRendering, pressAndKeepFocus, renderInApp } from './test-utils.tsx'
 
 const original = post({ body: 'The original body' })
 const editButton = () => page.getByRole('button', { name: /^Edit/ })
-const deleteButton = () => page.getByRole('button', { name: /^Delete/ })
+const deleteButton = () => page.getByRole('button', { name: /^Delete post/ })
 const field = () => page.getByLabelText('Edit post')
 const save = () => page.getByRole('button', { name: 'Save' })
 const cancel = () => page.getByRole('button', { name: 'Cancel' })
-const card = () =>
-  page.elementLocator(
-    page
-      .getByText(/^Test Author/)
-      .element()
-      .closest('[data-slot="card"]')!,
-  )
 
 const startEditing = async () => {
   await editButton().click()
@@ -217,82 +209,5 @@ describe('MyPost', () => {
       .toHaveTextContent('Could not save the post. Check your connection and try again.')
     await expect.element(save()).toHaveFocus()
     expect(requests).toBe(1)
-  })
-
-  it('keeps focus on Delete while deleting and after a failure, and ignores Edit and Delete meanwhile', async () => {
-    const response = held()
-    let requests = 0
-    worker.use(
-      api.myPostsRemove(async () => {
-        requests++
-        await response.wait()
-        return HttpResponse.error()
-      }),
-    )
-    await renderInApp(<MyPost post={original} />)
-    await pressAndKeepFocus(deleteButton())
-    await expect.element(editButton()).toHaveAttribute('aria-disabled', 'true')
-    await userEvent.keyboard('{Enter}')
-    ;(editButton().element() as HTMLElement).click()
-    await afterRendering()
-    await expect.element(field()).not.toBeInTheDocument()
-    response.release()
-    await expect
-      .element(page.getByRole('alert'))
-      .toHaveTextContent('Could not delete the post. Check your connection and try again.')
-    await expect.element(deleteButton()).toHaveFocus()
-    expect(requests).toBe(1)
-  })
-
-  it('is busy while deleting, then reports it and drops the post from the cached list', async () => {
-    const response = held()
-    worker.use(
-      api.myPostsRemove(async () => {
-        await response.wait()
-        return new HttpResponse(null, { status: 204 })
-      }),
-    )
-    const onDeleted = vi.fn<() => void>()
-    const { queryClient } = await renderInApp(<MyPost post={original} onDeleted={onDeleted} />)
-    queryClient.setQueryData(getMyPostsQueryOptions().queryKey, postPages(postPage([original])))
-    await deleteButton().click()
-    await expect.element(deleteButton()).toBeDisabled()
-    await expect.element(editButton()).toBeDisabled()
-    await expect.element(card()).toHaveAttribute('aria-busy', 'true')
-
-    response.release()
-    await expect.poll(() => onDeleted.mock.calls.length).toBe(1)
-    expect(queryClient.getQueryData(getMyPostsQueryOptions().queryKey)).toEqual(postPages(postPage([])))
-  })
-
-  it('stays quiet when the post was already deleted elsewhere, and refreshes the lists', async () => {
-    worker.use(apiError('myPostsRemove', 404, { _tag: 'PostNotFound', id: original.id }))
-    const onDeleted = vi.fn<() => void>()
-    const { queryClient } = await renderInApp(<MyPost post={original} onDeleted={onDeleted} />)
-    queryClient.setQueryData(getPublicPostsQueryOptions().queryKey, postPages(postPage([original])))
-    await deleteButton().click()
-    await expect.poll(() => queryClient.getQueryState(getPublicPostsQueryOptions().queryKey)?.isInvalidated).toBe(true)
-    await expect.element(deleteButton()).toBeEnabled()
-    await expect.element(page.getByRole('alert')).not.toBeInTheDocument()
-    expect(onDeleted).not.toHaveBeenCalled()
-  })
-
-  it.each([
-    [
-      'an outage',
-      () => apiFailure('myPostsRemove', { status: 503, text: '' }),
-      'Could not delete the post. Try again.',
-    ],
-    [
-      'an ended session',
-      () => apiError('myPostsRemove', 401, { _tag: 'Unauthorized', message: 'Authentication required' }),
-      'Your session has ended. Sign in again to continue. Sign in',
-    ],
-  ])('shows a delete failure caused by %s in the card', async (_, handler, message) => {
-    worker.use(handler())
-    await renderInApp(<MyPost post={original} />)
-    await deleteButton().click()
-    await expect.element(page.getByRole('alert')).toHaveTextContent(message)
-    await expect.element(deleteButton()).toBeEnabled()
   })
 })

@@ -1,4 +1,5 @@
 import { revalidateLogic } from '@tanstack/react-form'
+import { useRef } from 'react'
 import { ApiErrorAlert } from '#/components/errors/api-error-alert.tsx'
 import { useAppForm } from '#/components/form/app-form.ts'
 import { describedBy, fieldErrorMessage } from '#/components/form/field-messages.ts'
@@ -15,12 +16,17 @@ import { fieldIssue } from '#/lib/api-error.ts'
 /**
  * Writes a new post. The draft is checked in the browser with the API's own rules before it is sent; a
  * ValidationError the API still answers lands next to the field it names, any other failure under the form.
+ * After publishing, focus returns to the emptied field, ready for the next post: Publish, which had it, is
+ * disabled until there is text again, and a disabled button drops focus to <body>. The page announces the
+ * success (`onPublished`).
  */
 export function PostComposer(props: { onPublished?: () => void }) {
+  const textarea = useRef<HTMLTextAreaElement>(null)
   const create = useCreatePost({
     mutationConfig: {
       onSuccess: () => {
         form.reset()
+        textarea.current?.focus()
         props.onPublished?.()
       },
     },
@@ -56,6 +62,7 @@ export function PostComposer(props: { onPublished?: () => void }) {
               <Label htmlFor="post-body">New post</Label>
               <Textarea
                 id="post-body"
+                ref={textarea}
                 name={field.name}
                 value={body}
                 onChange={(event) => field.handleChange(event.target.value)}

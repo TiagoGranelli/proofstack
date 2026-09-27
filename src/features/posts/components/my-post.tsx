@@ -11,6 +11,7 @@ import { Textarea } from '#/components/ui/textarea.tsx'
 import { isPostNotFound, useDeletePost } from '#/features/posts/api/delete-post.ts'
 import { useUpdatePost } from '#/features/posts/api/update-post.ts'
 import { CharacterCount, isTooLong } from '#/features/posts/components/character-count.tsx'
+import { DeletePostButton } from '#/features/posts/components/delete-post-button.tsx'
 import { PostCard } from '#/features/posts/components/post-card.tsx'
 import { postDraftSchema } from '#/features/posts/utils/post-draft-schema.ts'
 import { fieldIssue } from '#/lib/api-error.ts'
@@ -18,7 +19,7 @@ import type { Post } from '#/sdk/types.gen.ts'
 
 /**
  * One of the author's posts, with Edit and Delete. Edit swaps the body for a form; focus moves into the
- * textarea and returns to the Edit button on Save or Cancel.
+ * textarea and returns to the Edit button on Save or Cancel. Delete asks first (DeletePostButton).
  */
 export function MyPost(props: { post: Post; onUpdated?: () => void; onDeleted?: () => void }) {
   const { post } = props
@@ -47,7 +48,6 @@ export function MyPost(props: { post: Post; onUpdated?: () => void; onDeleted?: 
     )
   }
 
-  const label = <span className="sr-only"> post: {post.body.slice(0, 40)}</span>
   return (
     <PostCard
       post={post}
@@ -64,19 +64,13 @@ export function MyPost(props: { post: Post; onUpdated?: () => void; onDeleted?: 
               if (!remove.isPending) setEditing(true)
             }}
           >
-            Edit{label}
+            Edit<span className="sr-only"> post: {post.body.slice(0, 40)}</span>
           </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            aria-disabled={remove.isPending || undefined}
-            onClick={() => {
-              if (!remove.isPending) remove.mutate({ path: { id: post.id } })
-            }}
-          >
-            Delete{label}
-          </Button>
+          <DeletePostButton
+            body={post.body}
+            pending={remove.isPending}
+            onConfirm={() => remove.mutate({ path: { id: post.id } })}
+          />
         </>
       }
       alert={
