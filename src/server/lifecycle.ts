@@ -4,21 +4,30 @@ import { log } from './log.ts'
 type Cleanup = () => Promise<void> | void
 
 /**
- * What shutdown releases, in the order it runs, one step at a time: pending background tasks (mail sends,
- * rate-limit pruning) still query the database or use the mail transport, so they finish before the mail
+ * What shutdown releases, in the order it runs, one step at a time: the periodic auth cleanup stops scheduling
+ * passes, pending background tasks (mail sends, rate-limit pruning, a running cleanup pass, and Better Auth work
+ * whose client disconnected) still query the database or use the mail transport, so they finish before the mail
  * transport closes, and the Effect runtime and the Postgres pool go last.
  */
-const STEPS = ['background-tasks', 'mailer', 'effect-api', 'postgres-pool'] as const
+const STEPS = ['auth-cleanup', 'background-tasks', 'mailer', 'effect-api', 'postgres-pool'] as const
 export type ShutdownStep = (typeof STEPS)[number]
 
 // Nitro bundles its plugins (src/server/nitro/startup.ts, which runs the steps) apart from the SSR code that
-// registers them, so this module can exist twice in .output/server. The registry lives on globalThis, where
-// both copies find the same one.
+// registers them, so this module can exist twice in .output/server. The registry and the draining flag live on
+// globalThis, where both copies find the same ones.
 const REGISTRY = Symbol.for('proofstack.shutdown')
-const registry = ((globalThis as { [REGISTRY]?: Map<ShutdownStep, Cleanup> })[REGISTRY] ??= new Map<
-  ShutdownStep,
-  Cleanup
->())
+const DRAINING = Symbol.for('proofstack.draining')
+const shared = globalThis as { [REGISTRY]?: Map<ShutdownStep, Cleanup>; [DRAINING]?: boolean }
+const registry = (shared[REGISTRY] ??= new Map<ShutdownStep, Cleanup>())
+
+/**
+ * Whether the process is shutting down: set when SIGTERM or SIGINT arrives (src/server/nitro/startup.ts), before
+ * srvx drains. `/api/ready` then answers 503, and every response closes its connection (src/server/nitro/http.ts).
+ */
+export const isDraining = () => shared[DRAINING] === true
+export const setDraining = (draining: boolean) => {
+  shared[DRAINING] = draining
+}
 
 /**
  * Registers the cleanup of one shutdown step; a second registration of the same step replaces the first.

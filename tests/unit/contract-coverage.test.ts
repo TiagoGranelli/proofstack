@@ -55,12 +55,13 @@ describe('contractCoverageProblems', () => {
 })
 
 describe('logObservations', () => {
-  it('reads request lines of the app log and skips everything else', () => {
+  it('reads request lines of the app log and skips everything else, aborted requests included', () => {
     const log = [
       'Listening on http://localhost:3000',
       '{"time":"t","level":"info","msg":"request","method":"GET","path":"/api/posts","status":200,"ms":3}',
       '{"time":"t","level":"error","msg":"api defect","method":"GET","path":"/api/posts"}',
       '{"time":"t","level":"error","msg":"request","method":"GET","path":"/api/posts","status":500}',
+      '{"time":"t","level":"info","msg":"request","method":"GET","path":"/api/posts","status":499,"aborted":true}',
       '{not json',
     ].join('\n')
     expect(logObservations(log)).toEqual([seen('GET', '/api/posts', 200), seen('GET', '/api/posts', 500)])

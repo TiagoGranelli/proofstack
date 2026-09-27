@@ -52,6 +52,25 @@ jobs:
           browsers: chromium
       - run: pnpm ci:static
 
+  # The same static gates on Windows, so a script that only works on Linux and macOS (a `.cmd` shim started
+  # without a shell, a path joined with `/`) shows up. Not a gate yet: it has not had a green run, and Windows
+  # minutes cost more, so it runs on main and on demand, not on every pull request.
+  static-windows:
+    name: Static gates on Windows (not blocking)
+    if: github.event_name != 'pull_request'
+    runs-on: windows-2025
+    timeout-minutes: 30
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - uses: ./.github/actions/setup
+        with:
+          browsers: chromium
+      - run: pnpm ci:static
+
   supply-chain:
     name: Supply chain (release age, trust, signatures, advisories)
     runs-on: ubuntu-24.04

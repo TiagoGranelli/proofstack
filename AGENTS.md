@@ -87,10 +87,8 @@ A misconfigured lint once reached 17 GB and crashed the maintainer's laptop.
   `.oxfmtrc.json` list all three in `ignorePatterns`, `tsconfig.json` includes only `src`, `scripts`,
   `tests`, and `*.config.ts` (and excludes `node_modules`, `.output`, and `repos`), and `.fallowrc.json`
   lists all three in `ignorePatterns`. A new tool or config needs the same exclusions.
-- Run heavy commands one at a time under a memory cap. For example: `pnpm build` (about 1.9 GB peak),
-  type-aware lint (about 1.5–1.7 GB peak, measured as cgroup memory including page cache), `verify:app`,
-  and `lighthouse`:
-  `systemd-run --user --scope -p MemoryMax=4G -p MemorySwapMax=0 -- pnpm build`.
+- Run heavy commands one at a time (`pnpm build`, type-aware lint, `verify:app`, `lighthouse`); on Linux
+  under a memory cap, see [docs/operations.md](docs/operations.md#linux-memory-caps).
 - Read upstream code with `gh api` or `node scripts/vendor-source.ts`, not by cloning repositories.
 
 ## Generated and vendored files

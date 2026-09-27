@@ -4,9 +4,9 @@
 // the returned url and APP_URL are the edge's, and the Node server trusts X-Forwarded-For only from the edge.
 import { type ChildProcess, spawn } from 'node:child_process'
 import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, statSync } from 'node:fs'
-import { createServer } from 'node:net'
-import { dirname, join } from 'node:path'
-import { type RunningEdge, startEdge } from './edge.ts'
+import { connect, createServer, type Socket } from 'node:net'
+import { dirname, join, resolve as resolvePath } from 'node:path'
+import { edgePeers, type RunningEdge, startEdge } from './edge.ts'
 import { resetTestDatabase } from './test-db.ts'
 
 if (existsSync('.env')) process.loadEnvFile('.env')
@@ -29,7 +29,7 @@ export type RunningApp = {
   stop: () => Promise<{ ms: number; code: number | null; signal: NodeJS.Signals | null }>
 }
 
-/** Where the edge (and the test runners, without one) connect from. */
+/** Where the test runners connect from when no edge sits in front. */
 export const LOOPBACK = '127.0.0.1/32,::1/128'
 
 const password = () => `pw-${crypto.randomUUID()}`
@@ -95,7 +95,7 @@ type StartAppOptions = {
   port?: string
   /**
    * TRUSTED_PROXIES for the server: trusting loopback lets each test suite pick its client IP (X-Forwarded-For).
-   * Ignored with `edge`: the server then trusts only the edge, which connects from loopback.
+   * Ignored with `edge`: the server then trusts only the edge (`edgePeers`, scripts/edge.ts).
    */
   trustedProxies?: string
   /** More server settings, such as AUTH_SIGN_UP, SMTP_URL and MAIL_FROM. */
@@ -105,7 +105,7 @@ type StartAppOptions = {
   /**
    * Put the reference edge in front. `trustedProxies` becomes the edge's EDGE_TRUSTED_PROXIES: the test
    * runners send their own X-Forwarded-For per suite, so they pass `private_ranges`. The edge replaces
-   * X-Forwarded-For with the client IP it resolved, and the server trusts only the edge (loopback).
+   * X-Forwarded-For with the client IP it resolved, and the server trusts only the edge (`edgePeers`).
    */
   edge?: {
     trustedProxies?: string
@@ -131,6 +131,17 @@ const seedDatabase = async (databaseUrl: string, env: NodeJS.ProcessEnv, users: 
   )
 }
 
+/**
+ * The production image's flags (Dockerfile CMD, docs/decisions/0012-node-permission-model.md), so every test runs
+ * the server under Node's permission model: it may read its bundle and use the network, nothing else.
+ */
+const SERVER_FLAGS = [
+  '--permission',
+  `--allow-fs-read=${resolvePath('.output')}`,
+  '--allow-net',
+  '--disable-warning=ExperimentalWarning',
+]
+
 /** Starts the built server, logging to `logFile`. `stop` ends it (SIGKILL after 10 s) and says how it exited. */
 const spawnServer = (env: NodeJS.ProcessEnv, logFile: string) => {
   mkdirSync(dirname(logFile), { recursive: true })
@@ -138,7 +149,10 @@ const spawnServer = (env: NodeJS.ProcessEnv, logFile: string) => {
   // srvx skips its graceful shutdown (drain, then Nitro's close hook) when CI or TEST is set, and GitHub
   // Actions sets CI=true. The server runs as it would in production; the test runners keep both variables.
   const { CI: _ci, TEST: _test, ...serverEnv } = env
-  const server = spawn('node', ['.output/server/index.mjs'], { stdio: ['ignore', log, log], env: serverEnv })
+  const server = spawn(process.execPath, [...SERVER_FLAGS, '.output/server/index.mjs'], {
+    stdio: ['ignore', log, log],
+    env: serverEnv,
+  })
   closeSync(log)
   const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) =>
     server.once('exit', (code, signal) => resolve({ code, signal })),
@@ -193,7 +207,7 @@ export const startApp = async (options: StartAppOptions): Promise<RunningApp> =>
     NODE_ENV: 'production',
     BETTER_AUTH_SECRET:
       options.alongside?.env.BETTER_AUTH_SECRET || process.env.BETTER_AUTH_SECRET || crypto.randomUUID().repeat(2),
-    TRUSTED_PROXIES: options.edge ? LOOPBACK : (options.trustedProxies ?? ''),
+    TRUSTED_PROXIES: options.edge ? edgePeers() : (options.trustedProxies ?? ''),
     ...options.settings,
   }
   if (!options.alongside) await seedDatabase(databaseUrl, env, [user, otherUser])
@@ -230,4 +244,69 @@ export const assertChromium = async () => {
   if (!existsSync(path))
     throw new Error(`Chromium for Playwright is not installed (${path}). Run: pnpm exec playwright install chromium`)
   return path
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+/** A raw HTTP/1.1 connection to the Node server, so a test controls when each byte of a request leaves. */
+const rawConnection = async (directUrl: string) => {
+  const socket: Socket = connect(Number(new URL(directUrl).port), '127.0.0.1')
+  await new Promise((resolve, reject) => socket.once('connect', resolve).once('error', reject))
+  let received = ''
+  socket.on('data', (chunk: Buffer) => (received += chunk.toString()))
+  const closed = new Promise<string>((resolve) => socket.once('close', () => resolve(received)))
+  socket.on('error', () => {})
+  return { socket, closed }
+}
+
+/**
+ * Stops the server with SIGTERM while two requests show what a drain must handle, and returns how it stopped
+ * with the problems found:
+ * - A load balancer's request that arrives on an open connection right at SIGTERM: `/api/ready` must answer 503
+ *   with `Connection: close`, so the balancer stops routing here and does not reuse the connection.
+ * - A sign-in whose client disconnects just before SIGTERM: srvx's drain does not wait for its handler, which
+ *   still hashes the password and writes a session. It must finish, logged as 499, before the pool closes.
+ */
+export const stopWhileDraining = async (app: RunningApp) => {
+  const ready = await rawConnection(app.directUrl)
+  // Headers begun but not ended: the connection is busy, so the drain does not close it as idle.
+  ready.socket.write('GET /api/ready HTTP/1.1\r\nHost: localhost\r\n')
+  const abandoned = await rawConnection(app.directUrl)
+  const body = JSON.stringify({ email: app.user.email, password: app.user.password })
+  abandoned.socket.write(
+    [
+      'POST /api/auth/sign-in/email HTTP/1.1',
+      'Host: localhost',
+      `Origin: ${app.url}`,
+      'Content-Type: application/json',
+      `Content-Length: ${Buffer.byteLength(body)}`,
+      // Its own rate-limit bucket (the server trusts this process, or the edge, as a proxy).
+      'X-Forwarded-For: 198.51.100.99',
+      '',
+      body,
+    ].join('\r\n'),
+  )
+  await sleep(10)
+  abandoned.socket.destroy()
+  const stopping = app.stop()
+  // With an edge in front, stop() ends the edge first: wait until the server itself has the signal.
+  for (let i = 0; i < 1000 && !readFileSync(app.logFile, 'utf8').includes('"msg":"draining"'); i++) await sleep(10)
+  ready.socket.write('\r\n')
+  const [response, stopped] = await Promise.all([ready.closed, stopping])
+  const log = readFileSync(app.logFile, 'utf8').split('\n')
+  const complete = log.findIndex((line) => line.includes('"shutdown complete"'))
+  const signIn = log.findIndex((line) => line.includes('"/api/auth/sign-in/email"') && line.includes('"aborted":true'))
+  const problems = [
+    response.startsWith('HTTP/1.1 503 ')
+      ? ''
+      : `/api/ready during the drain answered ${JSON.stringify(response.split('\r\n', 1)[0])}, expected 503`,
+    /^connection: close\r$/im.test(response) ? '' : '/api/ready during the drain did not close its connection',
+    signIn !== -1 && signIn < complete
+      ? ''
+      : 'the abandoned sign-in was not logged (499, aborted) before "shutdown complete"',
+    ...log
+      .filter((line) => /Failed query|Cannot use a pool after calling end/.test(line))
+      .map((line) => `during shutdown: ${line.slice(0, 200)}`),
+  ].filter(Boolean)
+  return { stopped, problems }
 }

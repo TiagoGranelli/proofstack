@@ -4,7 +4,7 @@
 // be one of the exact versions in EXCEPTIONS. Anything else fails, including copyleft licenses (GPL, LGPL,
 // AGPL, SSPL, BUSL) and packages without a license.
 // Usage: pnpm licenses:check   (a gate of `pnpm check`)
-import { spawnSync } from 'node:child_process'
+import { pnpmInvocation, runSync } from './spawn.ts'
 
 /** Licenses any production package may carry. `onlyFor` limits one to the packages named there. */
 const ALLOWED: Record<string, { why: string; onlyFor?: string[] }> = {
@@ -36,7 +36,7 @@ const EXCEPTIONS: Record<string, string> = {}
 
 type Package = { name: string; versions: string[]; license: string }
 
-const listed = spawnSync('pnpm', ['licenses', 'list', '--json', '--prod'], {
+const listed = runSync(pnpmInvocation(['licenses', 'list', '--json', '--prod']), {
   encoding: 'utf8',
   maxBuffer: 64 * 1024 * 1024,
 })

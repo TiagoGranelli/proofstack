@@ -9,6 +9,7 @@ const BASE = {
   BETTER_AUTH_SECRET: 'x'.repeat(32),
   TRUSTED_PROXIES: '',
   DATABASE_POOL_MAX: '',
+  DATABASE_URL_POOLED: '',
   SMTP_URL: '',
   MAIL_FROM: '',
   AUTH_SIGN_UP: '',
@@ -31,6 +32,7 @@ describe('env', () => {
     expect(await load()).toEqual({
       databaseUrl: BASE.DATABASE_URL,
       databasePoolMax: 10,
+      databaseUrlPooled: false,
       appUrl: 'https://app.example.com',
       authSecret: BASE.BETTER_AUTH_SECRET,
       trustedProxies: [],
@@ -68,9 +70,20 @@ describe('env', () => {
       { AUTH_SIGN_UP: 'invite' },
       'AUTH_SIGN_UP must be one of closed, open (got "invite")',
     ],
+    [
+      'a DATABASE_URL_POOLED that is not a boolean',
+      { DATABASE_URL_POOLED: 'yes' },
+      'DATABASE_URL_POOLED must be one of false, true',
+    ],
     ['the replaced TRUSTED_IP_HEADER', { TRUSTED_IP_HEADER: 'x-real-ip' }, 'TRUSTED_IP_HEADER was replaced by'],
   ])('refuses %s', async (_, overrides, message) => {
     await expect(load(overrides)).rejects.toThrow(message)
+  })
+
+  it('knows a pooled DATABASE_URL only when told, trimmed', async () => {
+    expect((await load({ DATABASE_URL_POOLED: undefined })).databaseUrlPooled).toBe(false)
+    expect((await load({ DATABASE_URL_POOLED: 'false' })).databaseUrlPooled).toBe(false)
+    expect((await load({ DATABASE_URL_POOLED: ' true ' })).databaseUrlPooled).toBe(true)
   })
 
   it('reads the pool size within its bounds', async () => {

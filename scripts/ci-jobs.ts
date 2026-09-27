@@ -1,8 +1,8 @@
 // Every CI job's logic, one function per job. .github/workflows/ci.yml only installs tooling, starts
 // services and calls `pnpm ci:<job>`; `pnpm ci:local` runs the same commands in the Playwright Ubuntu image.
 // Usage: node scripts/ci-jobs.ts <job> [args for the job's script]
-//   workflows   actionlint + zizmor on .github, and image pins (compose.yaml, ci.yml, Dockerfile) consistent
-//               with scripts/images.ts (Docker)
+//   workflows   actionlint + zizmor on .github, image pins (compose files, ci.yml, Dockerfile) consistent with
+//               scripts/images.ts, and the deploy recipes in deploy/ valid (Docker)
 //   static      pnpm check without its drift gate (the drift job runs every drift check)
 //   supply-chain registry signatures of every installed package, and the vulnerability gate (scripts/audit.ts)
 //   secrets     gitleaks over every commit of HEAD's history (.gitleaks.toml; Docker, a full clone)
@@ -15,10 +15,11 @@ import { spawnSync } from 'node:child_process'
 import { relative, resolve } from 'node:path'
 import { pinProblems } from './image-pins.ts'
 import { IMAGES } from './images.ts'
+import { type Invocation, pnpmInvocation, runSync } from './spawn.ts'
 
-const run = (command: string, args: string[], env: NodeJS.ProcessEnv = {}) => {
-  const result = spawnSync(command, args, { stdio: 'inherit', env: { ...process.env, ...env } })
-  return result.status ?? 1
+const run = (command: string | Invocation, args: string[] = [], env: NodeJS.ProcessEnv = {}) => {
+  const invocation = typeof command === 'string' ? { command, args, shell: false } : command
+  return runSync(invocation, { stdio: 'inherit', env: { ...process.env, ...env } }).status ?? 1
 }
 
 // GitHub Actions tests the build job's artifact: its file times say nothing about the checkout's.
@@ -56,9 +57,45 @@ const workflows = () => {
         ]),
     ],
     ['image pins', imagePins],
+    ['deploy recipes', deployRecipes],
   ]
   return sequence(steps)
 }
+
+/**
+ * The production compose file resolves with the example settings, and the Kubernetes manifests match the
+ * Kubernetes 1.33 schemas (kubeconform, strict: an unknown field fails). kubeconform downloads the schemas.
+ */
+const deployRecipes = () =>
+  sequence([
+    [
+      'compose.production.yaml',
+      () =>
+        run(
+          'docker',
+          ['compose', '-f', 'deploy/compose.production.yaml', '--env-file', 'deploy/deploy.env.example'].concat([
+            'config',
+            '--quiet',
+          ]),
+        ),
+    ],
+    [
+      'kubernetes.yaml',
+      () =>
+        run(
+          'docker',
+          [
+            'run',
+            '--rm',
+            '--memory',
+            '256m',
+            '--volume',
+            `${process.cwd()}/deploy:/deploy:ro`,
+            IMAGES.kubeconform,
+          ].concat(['-strict', '-summary', '-kubernetes-version', '1.33.0', '/deploy/kubernetes.yaml']),
+        ),
+    ],
+  ])
 
 /**
  * gitleaks from its pinned image, offline and read-only, over every commit reachable from HEAD: a secret that
@@ -103,7 +140,7 @@ const JOBS: Record<string, (args: string[]) => number> = {
   // The install before it already verified the lockfile against minimumReleaseAge and trustPolicy.
   'supply-chain': () =>
     sequence([
-      ['registry signatures', () => run('pnpm', ['audit', 'signatures'])],
+      ['registry signatures', () => run(pnpmInvocation(['audit', 'signatures']))],
       ['vulnerabilities', () => run('node', ['scripts/audit.ts'])],
     ]),
   secrets,
@@ -111,7 +148,7 @@ const JOBS: Record<string, (args: string[]) => number> = {
   // Nitro prerenders /about during the build, which loads the server configuration. The placeholders only
   // satisfy its validation (the same ones as the Dockerfile); nothing connects, nothing lands in .output.
   build: (args) =>
-    run('pnpm', ['build', ...args], {
+    run(pnpmInvocation(['build', ...args]), [], {
       DATABASE_URL: 'postgres://build:build@127.0.0.1:1/build',
       APP_URL: 'http://localhost:3000',
       BETTER_AUTH_SECRET: 'ci-build-placeholder-secret-not-used-at-runtime',

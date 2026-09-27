@@ -1,7 +1,7 @@
 // The shutdown steps (src/server/lifecycle.ts): one at a time, in a fixed order whatever the registration order,
 // so the Postgres pool never closes under a background task that still queries it.
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { onShutdown, runShutdown } from '#/server/lifecycle.ts'
+import { isDraining, onShutdown, runShutdown, setDraining } from '#/server/lifecycle.ts'
 
 const logged = () => {
   const lines: Array<Record<string, unknown>> = []
@@ -32,10 +32,13 @@ describe('runShutdown', () => {
     onShutdown('effect-api', step('effect-api', 0))
     onShutdown('mailer', step('mailer', 5))
     onShutdown('background-tasks', step('background-tasks', 10))
+    onShutdown('auth-cleanup', step('auth-cleanup', 0))
 
     await runShutdown()
 
     expect(events).toEqual([
+      'auth-cleanup start',
+      'auth-cleanup end',
       'background-tasks start',
       'background-tasks end',
       'mailer start',
@@ -47,7 +50,7 @@ describe('runShutdown', () => {
     ])
     expect(lines.at(-1)).toMatchObject({
       msg: 'shutdown complete',
-      cleanups: ['background-tasks', 'mailer', 'effect-api', 'postgres-pool'],
+      cleanups: ['auth-cleanup', 'background-tasks', 'mailer', 'effect-api', 'postgres-pool'],
     })
   })
 
@@ -66,5 +69,18 @@ describe('runShutdown', () => {
     expect(lines[0]).toMatchObject({ level: 'error', msg: 'shutdown cleanup failed', cleanup: 'mailer' })
     expect(lines[1]).toMatchObject({ msg: 'shutdown complete', cleanups: ['mailer', 'postgres-pool'] })
     expect(lines[2]).toMatchObject({ msg: 'shutdown complete', cleanups: [] })
+  })
+})
+
+describe('draining', () => {
+  afterEach(() => {
+    setDraining(false)
+  })
+
+  it('is off until the signal handler turns it on, on the shared flag both bundle copies read', () => {
+    expect(isDraining()).toBe(false)
+    setDraining(true)
+    expect(isDraining()).toBe(true)
+    expect((globalThis as Record<symbol, unknown>)[Symbol.for('proofstack.draining')]).toBe(true)
   })
 })

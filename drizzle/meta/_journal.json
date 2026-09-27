@@ -36,6 +36,13 @@
       "when": 1790509278025,
       "tag": "0004_auth_timestamptz",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790519477058,
+      "tag": "0005_session_expires_at_idx",
+      "breakpoints": true
     }
   ]
 }

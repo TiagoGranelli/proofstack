@@ -1,5 +1,6 @@
 // Runs the built app against a fresh test database and exercises it end to end: SDK integration tests
-// (Vitest, tests/integration), browser flows (Playwright, tests/e2e) and a graceful-shutdown check. Before the
+// (Vitest, tests/integration), browser flows (Playwright, tests/e2e) and a graceful-shutdown check that stops the
+// main server while it drains (stopWhileDraining in scripts/app-server.ts). Before the
 // app starts, the `db` Vitest project (tests/db: the rate-limit storage and query budgets) runs against its own
 // fresh database. Every runner always runs; the exit code is non-zero if any (or the shutdown check) fails.
 // Two servers share the database: APP_URL with AUTH_SIGN_UP=open, and CLOSED_APP_URL with the shipped defaults
@@ -17,9 +18,9 @@
 // Env: TEST_DATABASE_URL overrides the database (default: proofstack_verify_<pid>_test next to DATABASE_URL,
 //      dropped afterwards unless KEEP_TEST_DB=1). ALLOW_STALE_BUILD=1 skips the build freshness check.
 //      MAILPIT_HOST (default 127.0.0.1), MAILPIT_SMTP_PORT and MAILPIT_HTTP_PORT locate Mailpit.
-import { spawnSync } from 'node:child_process'
 import { readdirSync, readFileSync, rmSync } from 'node:fs'
-import { assertChromium, LOOPBACK, startApp, tail } from './app-server.ts'
+import { assertChromium, LOOPBACK, startApp, stopWhileDraining, tail } from './app-server.ts'
+import { type Invocation, pnpmInvocation, runSync } from './spawn.ts'
 import { dropTestDatabase, openConnections, testDatabaseUrl } from './test-db.ts'
 
 const LOG_FILE = 'test-results/app-server.log'
@@ -45,7 +46,7 @@ const e2e = !flags.has('--no-e2e')
 const edge = flags.has('--edge')
 
 const listed = (command: string[], line: RegExp) => {
-  const { status, stdout, stderr } = spawnSync('pnpm', ['exec', ...command], { encoding: 'utf8' })
+  const { status, stdout, stderr } = runSync(pnpmInvocation(['exec', ...command]), { encoding: 'utf8' })
   // Vitest lists nothing and exits 0 when nothing matches, Playwright exits 1 with "No tests found"; any other
   // failure is a broken config or test file.
   if (status !== 0 && !/^Error: No tests found\./m.test(`${stdout}${stderr}`)) {
@@ -81,9 +82,9 @@ if (filters.length) {
 
 type Result = { name: string; ok: boolean; detail: string }
 const results: Result[] = []
-const timed = (name: string, command: string, commandArgs: string[], env: NodeJS.ProcessEnv) => {
+const timed = (name: string, invocation: Invocation, env: NodeJS.ProcessEnv) => {
   const started = performance.now()
-  const { status, signal } = spawnSync(command, commandArgs, { stdio: 'inherit', env })
+  const { status, signal } = runSync(invocation, { stdio: 'inherit', env })
   const seconds = ((performance.now() - started) / 1000).toFixed(1)
   results.push({
     name,
@@ -103,14 +104,14 @@ try {
   if (e2e) await assertChromium()
   if (contractCoverage) {
     rmSync(CONTRACT_OBSERVATIONS, { recursive: true, force: true })
-    timed('api (vitest, recorded)', 'pnpm', ['exec', 'vitest', 'run', '--project', 'api'], {
+    timed('api (vitest, recorded)', pnpmInvocation(['exec', 'vitest', 'run', '--project', 'api']), {
       ...process.env,
       CONTRACT_OBSERVATIONS,
     })
   }
   // No app needed: the project creates and drops its own database (tests/db/global-setup.ts).
   if (runs.has('db'))
-    timed('db (vitest)', 'pnpm', ['exec', 'vitest', 'run', '--project', 'db', ...filters], process.env)
+    timed('db (vitest)', pnpmInvocation(['exec', 'vitest', 'run', '--project', 'db', ...filters]), process.env)
   else if (dbTests) results.push({ name: 'db (vitest)', ok: true, detail: 'skipped: no file matches' })
   const databaseUrl = testDatabaseUrl('verify', process.env.TEST_DATABASE_URL)
   // Mail goes to Mailpit (`pnpm mail:up`); the E2E tests read the links from its API. MAILPIT_HOST is for
@@ -167,12 +168,16 @@ try {
     }
     // Neither runner may pass with no tests: every runner started here has matching tests (see `runs`).
     if (runs.has('integration'))
-      timed('integration (vitest)', 'pnpm', ['exec', 'vitest', 'run', '--project', 'integration', ...filters], testEnv)
+      timed(
+        'integration (vitest)',
+        pnpmInvocation(['exec', 'vitest', 'run', '--project', 'integration', ...filters]),
+        testEnv,
+      )
     else if (integration) results.push({ name: 'integration (vitest)', ok: true, detail: 'skipped: no file matches' })
-    if (runs.has('e2e')) timed('e2e (playwright)', 'pnpm', ['exec', 'playwright', 'test', ...filters], testEnv)
+    if (runs.has('e2e')) timed('e2e (playwright)', pnpmInvocation(['exec', 'playwright', 'test', ...filters]), testEnv)
     else if (e2e) results.push({ name: 'e2e (playwright)', ok: true, detail: 'skipped: no test matches' })
   } finally {
-    const [stopped] = await Promise.all([app.stop(), closed.stop()])
+    const [{ stopped, problems: drain }] = await Promise.all([stopWhileDraining(app), closed.stop()])
     // The process exited, so its sockets are gone; Postgres may take a moment to reap the backends.
     let leftover = await openConnections(databaseUrl)
     for (let i = 0; i < 10 && leftover.length; i++) {
@@ -184,6 +189,9 @@ try {
       .split('\n')
       .some((line) => line.includes('"shutdown complete"') && line.includes('postgres-pool'))
     const problems = [
+      ...drain,
+      // Every suite ran against a server under Node's permission model, as the image runs it.
+      log.includes('"permissionModel":true') ? '' : 'the server did not run under the permission model',
       stopped.ms > MAX_SHUTDOWN_MS ? `took ${stopped.ms} ms (max ${MAX_SHUTDOWN_MS})` : '',
       stopped.code === 0 ? '' : `exit ${stopped.code ?? stopped.signal}`,
       closedPool ? '' : 'no "shutdown complete" log line listing postgres-pool',
@@ -202,7 +210,15 @@ try {
     const logs = readdirSync('test-results')
       .filter((name) => /^app-server.*\.log$/.test(name))
       .map((name) => `test-results/${name}`)
-    timed('contract coverage', 'node', ['scripts/contract-coverage.ts', CONTRACT_OBSERVATIONS, ...logs], process.env)
+    timed(
+      'contract coverage',
+      {
+        command: process.execPath,
+        args: ['scripts/contract-coverage.ts', CONTRACT_OBSERVATIONS, ...logs],
+        shell: false,
+      },
+      process.env,
+    )
   } else results.push({ name: 'contract coverage', ok: true, detail: 'skipped: needs a full run' })
   exitCode = results.every((r) => r.ok) ? 0 : 1
 } catch (error) {

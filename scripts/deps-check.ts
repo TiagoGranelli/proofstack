@@ -6,9 +6,9 @@
 //   `latest`, which is the wrong line for them, so they are compared with their own dist-tag instead
 //   (`npm view <pkg> dist-tags time`).
 // Usage: pnpm deps:check   (needs the npm registry)
-import { spawnSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { table } from './report-table.ts'
+import { npmInvocation, pnpmInvocation, runSync } from './spawn.ts'
 
 /** Packages pinned from a dist-tag other than `latest`, and why. */
 const CHANNELS: Record<string, { tag: string; why: string }> = {
@@ -23,7 +23,7 @@ const problems: string[] = []
 
 // pnpm outdated exits 1 when it finds something; its JSON is on stdout either way.
 type Outdated = Record<string, { current?: string; wanted?: string; latest?: string; dependencyType?: string }>
-const outdatedRun = spawnSync('pnpm', ['outdated', '--format', 'json'], { encoding: 'utf8' })
+const outdatedRun = runSync(pnpmInvocation(['outdated', '--format', 'json']), { encoding: 'utf8' })
 let outdated: Outdated | undefined
 try {
   outdated = JSON.parse(outdatedRun.stdout || '{}') as Outdated
@@ -48,7 +48,7 @@ const pinned = (name: string) =>
   manifest.dependencies?.[name] ?? manifest.devDependencies?.[name] ?? '(not a dependency)'
 
 const channelRows = Object.entries(CHANNELS).map(([name, { tag, why }]) => {
-  const view = spawnSync('npm', ['view', name, 'dist-tags', 'time', '--json'], { encoding: 'utf8' })
+  const view = runSync(npmInvocation(['view', name, 'dist-tags', 'time', '--json']), { encoding: 'utf8' })
   let info: { 'dist-tags'?: Record<string, string>; time?: Record<string, string> } | undefined
   try {
     info = JSON.parse(view.stdout) as typeof info

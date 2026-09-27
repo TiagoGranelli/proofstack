@@ -99,6 +99,13 @@ export const env = {
   databaseUrl: readDatabaseUrl('DATABASE_URL'),
   /** Maximum connections per process. Keep instances × this below Postgres `max_connections`. */
   databasePoolMax: readInt('DATABASE_POOL_MAX', 10, 1, 100),
+  /**
+   * DATABASE_URL points at a connection pooler (PgBouncer, Neon's `-pooler` host, Supabase's pooler). Poolers
+   * refuse startup parameters they do not track, so the pool then sends no `statement_timeout` and
+   * `idle_in_transaction_session_timeout`; set them on the app's role instead (docs/operations.md, "Connection
+   * poolers").
+   */
+  databaseUrlPooled: readChoice('DATABASE_URL_POOLED', ['false', 'true']) === 'true',
   /** Public origin of the app, e.g. https://app.example.com. Used for auth cookies, CSRF and SSR API calls. */
   appUrl: readOrigin('APP_URL'),
   authSecret: readSecret('BETTER_AUTH_SECRET'),

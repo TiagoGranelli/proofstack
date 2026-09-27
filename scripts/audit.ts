@@ -1,3 +1,4 @@
+import { readAllowlist } from './allowlist.ts'
 // Vulnerability gate over every installed package, production and development: `pnpm audit --json`
 // (the npm advisory database, GitHub advisories). Fails on a high or critical advisory unless
 // security/audit-allowlist.json accepts it; lists moderate and low ones without failing. Also fails on an
@@ -5,8 +6,7 @@
 // decisions that still apply. GitHub's dependency graph cannot read pnpm 12 lockfiles yet
 // (dependabot/dependabot-core#15904), so Dependabot security alerts miss this project: this is the gate.
 // Usage: pnpm audit:check   (needs the npm registry; CI job `supply-chain`)
-import { spawnSync } from 'node:child_process'
-import { readAllowlist } from './allowlist.ts'
+import { pnpmInvocation, runSync } from './spawn.ts'
 
 const ALLOWLIST = 'security/audit-allowlist.json'
 const BLOCKING = new Set(['high', 'critical'])
@@ -23,7 +23,7 @@ type Advisory = {
 
 const { entries, problems } = readAllowlist(ALLOWLIST, 'advisories', 'ghsa', /^GHSA(-[23456789cfghjmpqrvwx]{4}){3}$/)
 
-const audit = spawnSync('pnpm', ['audit', '--json'], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
+const audit = runSync(pnpmInvocation(['audit', '--json']), { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
 let advisories: Advisory[] = []
 try {
   // pnpm audit exits 1 when it finds anything; the report is on stdout either way.

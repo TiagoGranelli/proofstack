@@ -40,6 +40,10 @@ const ASSETS: Record<string, { file: string; sha256: string }> = {
     file: 'squawk-darwin-x64',
     sha256: 'e361365762a6bf11abbef746d29ff46ac0b4feba43df2f0570595f06c67d7daf',
   },
+  'win32-x64': {
+    file: 'squawk-windows-x64.exe',
+    sha256: '36824c446ba3348c4037a33f9ab10427de03d553ea67b482ac3a098248203dc2',
+  },
 }
 const MIGRATIONS = 'drizzle'
 const CONFIG = '.squawk.toml'

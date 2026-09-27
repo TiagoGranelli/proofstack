@@ -1,7 +1,10 @@
 // Starts the reference edge (Caddy with deploy/Caddyfile) in front of an app on this machine, for
 // `pnpm lighthouse` and `pnpm verify:app --edge`. Two ways to run it (EDGE_RUNTIME):
-//   docker (default)  the pinned Caddy image with --network host, so it reaches the app on 127.0.0.1 and
-//                     listens on a host port (Linux; Docker Desktop's host networking differs).
+//   docker (default)  the pinned Caddy image. EDGE_DOCKER_NETWORK chooses how it reaches the app:
+//                     host (default on Linux): --network host, so the app is on 127.0.0.1 and the edge listens
+//                     on a host port; bridge (default on macOS and Windows, where Docker Desktop's host
+//                     networking differs): Docker's default network with the ports published on 127.0.0.1,
+//                     reaching the app at host.docker.internal.
 //   binary            a `caddy` executable (CADDY_BIN, default `caddy` on PATH); the ci:local runner image
 //                     ships the pinned one.
 // With `tls`, the edge serves https://localhost:<port> with a certificate from Caddy's internal CA, over
@@ -31,20 +34,52 @@ const ROOT_CERTIFICATE = 'caddy/pki/authorities/local/root.crt'
 
 type EdgeEnv = Record<'EDGE_ADDRESS' | 'EDGE_UPSTREAM' | 'EDGE_TRUSTED_PROXIES' | 'EDGE_HTTP_PORT', string>
 
-/** How EDGE_RUNTIME runs Caddy: a local binary, or the pinned image on the host network (pulled if missing). */
-const edgeCommand = (runtime: string, container: string, env: EdgeEnv) => {
+const LOOPBACK = '127.0.0.1/32,::1/128'
+/** How the edge reaches the app: from this machine (a binary, or a container on the host network), or through
+ * Docker's bridge, from a container address the app cannot know in advance. */
+type Reach = 'host' | 'bridge'
+
+const reach = (): Reach => {
+  if ((process.env.EDGE_RUNTIME ?? 'docker') !== 'docker') return 'host'
+  const network = process.env.EDGE_DOCKER_NETWORK || (process.platform === 'linux' ? 'host' : 'bridge')
+  if (network !== 'host' && network !== 'bridge')
+    throw new Error(`EDGE_DOCKER_NETWORK must be host or bridge, not ${network}`)
+  return network
+}
+
+/**
+ * TRUSTED_PROXIES for an app behind the edge: where the edge connects from. Loopback, or with the bridge network
+ * any private address, because Docker picks the bridge's subnet (and Docker Desktop proxies through its VM).
+ */
+export const edgePeers = () => (reach() === 'host' ? LOOPBACK : `${LOOPBACK},10.0.0.0/8,172.16.0.0/12,192.168.0.0/16`)
+
+/** How EDGE_RUNTIME runs Caddy: a local binary, or the pinned image (pulled if missing). */
+const edgeCommand = (runtime: string, container: string, env: EdgeEnv, ports: string[]) => {
   if (runtime === 'binary')
     return { command: process.env.CADDY_BIN || 'caddy', args: ['run', '--adapter', 'caddyfile', '--config', CADDYFILE] }
   if (runtime !== 'docker') throw new Error(`EDGE_RUNTIME must be docker or binary, not ${runtime}`)
   if (spawnSync('docker', ['image', 'inspect', IMAGES.caddy], { stdio: 'ignore' }).status !== 0)
     spawnSync('docker', ['pull', '--quiet', IMAGES.caddy], { stdio: 'inherit' })
+  // host.docker.internal is built into Docker Desktop; Docker Engine on Linux maps it with host-gateway.
+  const network =
+    reach() === 'host'
+      ? ['--network', 'host']
+      : [
+          '--add-host',
+          'host.docker.internal:host-gateway',
+          ...ports.flatMap((port) => [
+            '--publish',
+            `127.0.0.1:${port}:${port}`,
+            '--publish',
+            `127.0.0.1:${port}:${port}/udp`,
+          ]),
+        ]
   const args = [
     'run',
     '--rm',
     '--name',
     container,
-    '--network',
-    'host',
+    ...network,
     '--memory',
     '256m',
     '--read-only',
@@ -121,7 +156,7 @@ const waitForEdge = async (edge: {
 export const startEdge = async (options: {
   /** Port the edge listens on (all interfaces, like the app). */
   port: string
-  /** Port of the app on 127.0.0.1. */
+  /** Port of the app on this machine; it must listen on every interface for the bridge network. */
   upstreamPort: string
   /** EDGE_TRUSTED_PROXIES, e.g. `private_ranges` when the test runner sends its own X-Forwarded-For. */
   trustedProxies?: string
@@ -134,13 +169,14 @@ export const startEdge = async (options: {
 }): Promise<RunningEdge> => {
   const env: EdgeEnv = {
     EDGE_ADDRESS: options.tls ? `https://localhost:${options.port}` : `:${options.port}`,
-    EDGE_UPSTREAM: `127.0.0.1:${options.upstreamPort}`,
+    EDGE_UPSTREAM: `${reach() === 'host' ? '127.0.0.1' : 'host.docker.internal'}:${options.upstreamPort}`,
     EDGE_TRUSTED_PROXIES: options.trustedProxies ?? '',
     EDGE_HTTP_PORT: options.tls?.httpPort ?? '80',
   }
   const runtime = process.env.EDGE_RUNTIME ?? 'docker'
   const name = `${dockerPrefix()}-edge-${process.pid}-${options.port}`
-  const { command, args } = edgeCommand(runtime, name, env)
+  const ports = [options.port, ...(options.tls ? [options.tls.httpPort] : [])]
+  const { command, args } = edgeCommand(runtime, name, env, ports)
   // The binary keeps its CA and certificates here (XDG_DATA_HOME); the container in its /data tmpfs.
   const dataHome = runtime === 'binary' ? mkdtempSync(join(tmpdir(), 'proofstack-edge-')) : undefined
 

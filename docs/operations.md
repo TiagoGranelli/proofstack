@@ -7,7 +7,7 @@ How to configure, deploy and run ProofStack in production. The app is a single N
 
 The server validates the variables read by `src/server/env.ts` while it starts (loaded by the Nitro
 plugin `src/server/nitro/startup.ts`): `DATABASE_URL`, `APP_URL`, `BETTER_AUTH_SECRET`,
-`TRUSTED_PROXIES`, `DATABASE_POOL_MAX`, `AUTH_SIGN_UP`, `SMTP_URL` and `MAIL_FROM`. An invalid value stops
+`TRUSTED_PROXIES`, `DATABASE_POOL_MAX`, `DATABASE_URL_POOLED`, `AUTH_SIGN_UP`, `SMTP_URL` and `MAIL_FROM`. An invalid value stops
 the process with exit code 1 and a message naming the variable, before the port opens. So does the removed
 `TRUSTED_IP_HEADER`, with a pointer to `TRUSTED_PROXIES`. The other variables are read by Nitro and srvx
 without validation: a non-numeric port silently falls back to 3000, and a non-numeric
@@ -19,19 +19,21 @@ without validation: a non-numeric port silently falls back to 3000, and a non-nu
 | `APP_URL` | yes | Public origin as browsers see it: scheme, host and port, no path (`https://app.example.com`). |
 | `BETTER_AUTH_SECRET` | yes | At least 32 characters; signs session cookies. Generate with `openssl rand -base64 32`. |
 | `TRUSTED_PROXIES` | behind a proxy | Addresses or CIDR ranges of your reverse proxies, comma-separated (`127.0.0.1/32`, `10.0.0.0/8`). See [Client IP](#client-ip-and-rate-limiting). |
-| `DATABASE_POOL_MAX` | no | Postgres connections per process, 1 to 100. Default 10. |
+| `DATABASE_POOL_MAX` | no | Postgres connections per process, 1 to 100. Default 10. See [Connection math](#connection-math). |
+| `DATABASE_URL_POOLED` | behind a pooler | `true` when `DATABASE_URL` is a connection pooler (PgBouncer, Neon's `-pooler` host, Supabase's pooler). Default `false`. See [Connection poolers](#connection-poolers). |
 | `AUTH_SIGN_UP` | no | `closed` (default): accounts come from `pnpm user:create`. `open`: anyone can sign up at `/sign-up`; needs `SMTP_URL`. See [Accounts and mail](#accounts-and-mail). |
 | `SMTP_URL` | for mail | `smtps://user:password@smtp.example.com:465` (TLS) or `smtp://...:587` (STARTTLS when offered); credentials percent-encoded. Unset: mail is only logged. |
 | `MAIL_FROM` | with `SMTP_URL` | Sender, such as `ProofStack <no-reply@example.com>`. |
 | `PORT`, `HOST` | no | Listen address. Default port 3000 on all interfaces. `NITRO_PORT` and `NITRO_HOST` take precedence when set. |
-| `NITRO_SSL_CERT`, `NITRO_SSL_KEY` | no | Serve HTTPS from Node: PEM text or file paths. Both must be set; with only one, the server silently serves plain HTTP. |
+| `NITRO_SSL_CERT`, `NITRO_SSL_KEY` | no | Serve HTTPS from Node: PEM text or file paths. Both must be set; with only one, the server silently serves plain HTTP. File paths need an `--allow-fs-read` for each in the image's `CMD` ([ADR 0012](decisions/0012-node-permission-model.md)). |
 | `SERVER_SHUTDOWN_TIMEOUT` | no | Seconds to drain requests on SIGTERM. Default 5. |
 | `NODE_ENV` | no | The production build behaves as production regardless; the Docker image sets it anyway. |
 
-The migration script (`node .output/migrate.mjs`, `pnpm db:migrate`) reads `DATABASE_URL` and:
+The migration script (`node .output/migrate.mjs`, `pnpm db:migrate`) reads:
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
+| `MIGRATION_DATABASE_URL` | `DATABASE_URL` | Where to migrate. Set it to a direct connection when `DATABASE_URL` goes through a pooler. |
 | `MIGRATIONS_FOLDER` | `drizzle` | Folder with the SQL files and `meta/_journal.json`, relative to the working directory. |
 | `MIGRATE_LOCK_TIMEOUT` | `5min` | Longest wait for another instance's migration run (Postgres `lock_timeout` syntax). |
 | `MIGRATE_DDL_LOCK_TIMEOUT` | `5s` | Longest wait for each table lock the DDL takes. See [Build and deploy](#build-and-deploy). |
@@ -61,32 +63,52 @@ image with only `.output/` and `drizzle/`, running as the unprivileged `node` us
 docker build -t proofstack .
 ```
 
-`.output/` contains the server bundle, the public assets, and `migrate.mjs`, a self-contained bundle of
-`scripts/migrate.ts` (built by `scripts/migrate-bundle.ts`). No `node_modules` are needed at runtime.
+`.output/` contains the server bundle, the public assets, and two operator commands bundled with their
+dependencies by `scripts/bundle-cli.ts`: `migrate.mjs` (`scripts/migrate.ts`) and `create-user.mjs`
+(`scripts/create-user.ts`). No `node_modules` are needed at runtime.
 
-Deploy sequence:
+Three recipes put this sequence together: [one server with Docker Compose](#deploy-on-one-server-with-docker-compose)
+(the simplest), [Fly.io](#deploy-on-flyio) and [Kubernetes](#deploy-on-kubernetes). Deploy sequence:
 
-1. Build the image (or `pnpm build && node scripts/migrate-bundle.ts` outside Docker).
+1. Build the image (or `pnpm build && node scripts/bundle-cli.ts` outside Docker).
 2. Run the migrations once per deploy, before the new version receives traffic:
    ```sh
    docker run --rm -e DATABASE_URL=... proofstack node .output/migrate.mjs
    ```
-   Several copies may start at once (for example as an init container per replica): a Postgres
-   advisory lock serializes them, and migrations already recorded in `drizzle.__drizzle_migrations` are
-   skipped. Without the lock, concurrent runs fail with duplicate-object errors. The script waits up to
-   `MIGRATE_LOCK_TIMEOUT` (default `5min`) for the lock and exits non-zero on failure.
+   Several copies may start at once (for example as an init container per replica). Each run is one
+   transaction that first takes a transaction-scoped advisory lock (`pg_advisory_xact_lock`), so the
+   runs queue, and each reads `drizzle.__drizzle_migrations` only once it holds the lock: migrations
+   already recorded there are skipped. Without the lock, concurrent runs fail with duplicate-object
+   errors. The script waits up to `MIGRATE_LOCK_TIMEOUT` (default `5min`) for the lock and exits
+   non-zero on failure. Its settings are `SET LOCAL`, so the run also works through a pooler in
+   transaction mode (see [Connection poolers](#connection-poolers)); `tests/db/migrate.test.ts` starts
+   three runs at once, and `pnpm ci:docker` does the same through PgBouncer.
    While it runs DDL, every table lock it waits for is bounded by `MIGRATE_DDL_LOCK_TIMEOUT` (default
    `5s`): a migration stuck behind a long query on a busy table would otherwise make every later query
    on that table queue behind it. On a lock timeout the run rolls back (all pending migrations share
-   one transaction) and is retried: up to 5 attempts in total, with pauses of 1, 2, 3 and 4 s between
-   them, then it fails.
+   one transaction, which also releases the advisory lock) and is retried: up to 5 attempts in total,
+   with pauses of 1, 2, 3 and 4 s between them, then it fails. The run turns off `statement_timeout` and
+   `idle_in_transaction_session_timeout` for its transaction (`SET LOCAL ... = 0`), so the role-level
+   timeouts meant for the app (see [Connection poolers](#connection-poolers)) cut short neither the wait
+   for another run nor a long migration.
 3. Start the new version. Route traffic when `GET /api/ready` returns 200.
 4. Stop the old version with SIGTERM.
 
 Migrations must stay backward compatible with the version still running during the rollout: add
-columns and tables first, and remove them in a later deploy. Drizzle runs them inside a transaction, so
-`CREATE INDEX` is not `CONCURRENTLY` and blocks writes to that table while the index builds; on a large
-table, create the index by hand with `CREATE INDEX CONCURRENTLY` before the deploy (see below).
+columns and tables first, and remove them in a later deploy (expand, then contract). All pending
+migrations run in one transaction, which has consequences:
+
+- `CREATE INDEX CONCURRENTLY` cannot run in a transaction, and a plain `CREATE INDEX` blocks writes to the
+  table while it builds. On a large table, build the index by hand before the deploy (see below).
+- `ADD CONSTRAINT ... NOT VALID` followed by `VALIDATE CONSTRAINT` in the same run gains nothing: the
+  validation scan runs while the transaction still holds the exclusive lock the `ADD` took. Put the
+  `VALIDATE` in a migration of the next deploy.
+- A data backfill in the same transaction as the DDL holds the DDL's locks for the whole backfill. Backfill
+  large tables in batches between two deploys.
+
+Migrations are forward only: there are no down migrations. To undo a change, write a new migration that
+reverts it and deploy that. When a migration destroyed data, restore from a backup
+([Backups and restore](#backups-and-restore)).
 
 ### Migration safety
 
@@ -126,11 +148,236 @@ and the migration only records it:
 Dropping an index works the same way with `DROP INDEX CONCURRENTLY IF EXISTS` and
 `require-concurrent-index-deletion`.
 
-Create the first account with `pnpm user:create <email> <name>` from a checkout of the repository with
-its dependencies installed. The script loads the server's auth configuration, so `src/server/env.ts`
-requires `DATABASE_URL`, `APP_URL` and `BETTER_AUTH_SECRET`; use the production values. It cannot run
-from the Docker image, which contains only `.output/` and `drizzle/`. Accounts it creates have a verified
-address and can sign in at once ([ADR 0003](decisions/0003-sign-up-policy.md)).
+### First account
+
+With the default `AUTH_SIGN_UP=closed`, accounts come from the operator. The image runs the bundled
+command with the app's own environment (`DATABASE_URL`, `APP_URL`, `BETTER_AUTH_SECRET`, and
+`DATABASE_URL_POOLED` behind a pooler). The password comes from `PROOFSTACK_USER_PASSWORD`, otherwise from
+stdin: a hidden prompt, asked twice, with a terminal (`-it`), or the whole input of a pipe (`-i`):
+
+```sh
+docker run --rm -it --env-file app.env proofstack node .output/create-user.mjs you@example.com "Your Name"
+printf %s "$PASSWORD" | docker run --rm -i --env-file app.env proofstack node .output/create-user.mjs you@example.com "Your Name"
+```
+
+Each deploy recipe below shows its form of the command. From a checkout, `pnpm user:create <email> <name>`
+does the same. Accounts it creates have a verified address and can sign in at once
+([ADR 0003](decisions/0003-sign-up-policy.md)); `pnpm ci:docker` creates one from the image and signs in
+with it through the edge.
+
+### Connection poolers
+
+Managed Postgres often hands out two connection strings: a direct one and one through a pooler in
+transaction mode (PgBouncer, Neon's `-pooler` host, Supabase's pooler on port 6543). In transaction mode
+each transaction may run on a different server connection, so session state does not work: `SET`, session
+advisory locks, `LISTEN` and SQL `PREPARE` ([PgBouncer's feature table](https://www.pgbouncer.org/features.html)).
+PgBouncer also refuses startup parameters it does not track
+([`ignore_startup_parameters`](https://www.pgbouncer.org/config.html#ignore_startup_parameters)), and Neon
+recommends a direct connection for schema migrations.
+
+- **The app** uses no session state: every query is a single statement or a Drizzle transaction, and pg
+  uses unnamed protocol-level statements. It sends two startup parameters PgBouncer does not track:
+  `statement_timeout` (15 s) and `idle_in_transaction_session_timeout` (30 s). With
+  `DATABASE_URL_POOLED=true` it leaves both out; put them on the app's role instead, where every server
+  connection the pooler opens picks them up (a pooler configured with `ignore_startup_parameters` would
+  otherwise drop them silently):
+  ```sql
+  ALTER ROLE app_user SET statement_timeout = '15s';
+  ALTER ROLE app_user SET idle_in_transaction_session_timeout = '30s';
+  ```
+  Do the same on a direct connection: the role setting also bounds a `psql` session as that role, and the
+  startup parameters then only repeat it. Without the flag, every connection through PgBouncer fails with
+  `unsupported startup parameter: statement_timeout`, and `/api/ready` answers 503.
+- **Migrations** work through a transaction pooler (see step 2 above), but prefer a direct connection:
+  set `MIGRATION_DATABASE_URL`. A migration that must run outside a transaction (`CREATE INDEX
+  CONCURRENTLY`) is run by hand anyway ([Migration safety](#migration-safety)).
+- **`user:create`** loads the app's database client, so it follows `DATABASE_URL` and
+  `DATABASE_URL_POOLED` like the app, in the image too (`node .output/create-user.mjs`).
+
+`pnpm ci:docker` runs three migrators at once through PgBouncer 1.25 in transaction mode (two server
+connections, the timeouts on the role), then creates the first account and serves the app through it
+with `DATABASE_URL_POOLED=true`.
+
+## Deploy on one server with Docker Compose
+
+The simplest production setup: one host with Docker, `deploy/compose.production.yaml` running Postgres, the
+migrations (a one-shot service), the app and Caddy with automatic HTTPS. Every service has `restart: always`
+and the data lives in named volumes. It needs a server with Docker Engine and the Compose plugin, a DNS
+record for your domain pointing at it, and ports 80 and 443 (TCP, and UDP for HTTP/3) open.
+
+1. On your machine, build and push an image with its own tag (a version or the commit, never `latest`):
+   ```sh
+   docker build -t "$APP_IMAGE" . && docker push "$APP_IMAGE"
+   ```
+2. Once, copy the recipe to a directory on the server and create its settings from the example
+   (`$DEPLOY_HOST` is your `user@host`):
+   ```sh
+   ssh "$DEPLOY_HOST" mkdir -p proofstack
+   scp deploy/compose.production.yaml deploy/Caddyfile deploy/postgres-init.sh deploy/deploy.env.example "$DEPLOY_HOST":proofstack/
+   ssh "$DEPLOY_HOST" 'cd proofstack && cp deploy.env.example deploy.env && chmod 600 deploy.env'
+   ```
+   Edit `deploy.env` there: `APP_IMAGE`, `DOMAIN`, the two database passwords and `BETTER_AUTH_SECRET`
+   (generate them as its comments say), and SMTP. It is gitignored; keep it only on the server.
+3. Deploy, and again for every new image (set its tag in `deploy.env` first):
+   ```sh
+   ssh "$DEPLOY_HOST" 'cd proofstack && docker compose -f compose.production.yaml --env-file deploy.env pull && docker compose -f compose.production.yaml --env-file deploy.env up -d'
+   ```
+   `up -d` runs `migrate` to completion before it starts the new app container, and the app before Caddy.
+   The old container stops before the new one starts, so each deploy has a few seconds of 502 from Caddy;
+   use Fly.io or Kubernetes for rolling deploys.
+4. Create the first account (a hidden prompt asks for the password):
+   ```sh
+   ssh -t "$DEPLOY_HOST" 'cd proofstack && docker compose -f compose.production.yaml --env-file deploy.env run --rm --no-deps app node .output/create-user.mjs you@example.com "Your Name"'
+   ```
+
+On the first start, `postgres-init.sh` creates the role `app`, which owns the database but is not a
+superuser, puts the statement and idle-transaction timeouts on it, and creates `pg_stat_statements`. The app
+trusts `X-Forwarded-For` only from Caddy, at a fixed address on the stack's own network (`10.254.254.0/24`;
+change both places if the host already routes that range). Logs: `docker compose ... logs -f app`. To roll
+back, set the previous tag and run step 3; migrations stay applied, which is why each must be compatible
+with the version before it ([Build and deploy](#build-and-deploy)).
+
+Tested locally with `DOMAIN=localhost`, where Caddy uses its internal CA, on ports 58080 and 58443: HTTPS
+with HTTP/2 and the redirect from HTTP, the migrations, `create-user` through the command above, a sign-in
+through Caddy (the session records the client's address, not Caddy's), the role's settings, and the backup
+and restore drill below.
+
+## Deploy on Fly.io
+
+`deploy/fly.toml` builds the image from the `Dockerfile` and runs the migrations as the `release_command`,
+once per deploy in a temporary machine, before the rolling update starts; a failed migration stops the
+deploy. The health check is `/api/ready`, and `kill_timeout` (30 s) covers the drain and the shutdown steps.
+
+1. `cp deploy/fly.toml fly.toml`, then set `app`, `primary_region` and `APP_URL`.
+2. `fly launch --no-deploy` to create the app. Take Postgres from Fly, Neon or Supabase. With a pooled URL,
+   set `DATABASE_URL_POOLED=true` and a direct `MIGRATION_DATABASE_URL` ([Connection poolers](#connection-poolers)).
+3. `fly secrets set DATABASE_URL=... BETTER_AUTH_SECRET=... SMTP_URL=... MAIL_FROM=...`
+4. `fly deploy`
+5. First account: `fly ssh console --pty -C 'node .output/create-user.mjs you@example.com "Your Name"'`
+
+Not deployed to Fly yet. Before relying on per-IP rate limits, check that `TRUSTED_PROXIES` in `fly.toml`
+matches the addresses Fly's proxy connects from.
+
+## Deploy on Kubernetes
+
+`deploy/kubernetes.yaml` holds a Deployment (two replicas, rolling with no unavailable pod), a Service and a
+PodDisruptionBudget; bring your own Ingress or Gateway for TLS. `pnpm ci:workflows` validates it with
+kubeconform against the Kubernetes 1.33 schemas (strict: an unknown field fails). It has not been applied to
+a cluster.
+
+```sh
+kubectl create secret generic proofstack --from-literal=DATABASE_URL=... --from-literal=BETTER_AUTH_SECRET=...
+kubectl apply -f deploy/kubernetes.yaml
+kubectl exec -it deploy/proofstack -c app -- node .output/create-user.mjs you@example.com "Your Name"
+```
+
+- **Migrations** run in an init container of every pod: concurrent runs queue on the advisory lock, and the
+  later ones apply nothing. For long migrations, run them as a Job per release before rolling the
+  Deployment instead.
+- **Probes:** startup and liveness on `/api/health`, readiness on `/api/ready`. Liveness never checks the
+  database.
+- **Termination:** when a pod starts terminating, Kubernetes removes it from the Service's endpoints, but
+  load balancers and kube-proxy notice at their own pace. The `preStop` sleep (5 s) keeps it serving
+  meanwhile. Then SIGTERM starts the drain: `/api/ready` answers 503, responses close their connections,
+  srvx waits up to `SERVER_SHUTDOWN_TIMEOUT` (5 s) for in-flight requests, and the shutdown steps finish
+  pending mail and Better Auth work before the pool closes ([Shutdown](#shutdown)).
+  `terminationGracePeriodSeconds` (35) covers all of it; after that, the kubelet sends SIGKILL.
+- **Hardening:** non-root (`node`, uid 1000), no privilege escalation, every capability dropped, and a
+  read-only root file system, which works because the server writes nothing (checked with
+  `docker run --read-only --user 1000 --cap-drop ALL` on the image: migrations, pages, `/api/ready` and a
+  clean stop).
+- **Client IP:** set `TRUSTED_PROXIES` to the addresses your ingress controller's pods connect from, and make
+  the controller append the client to `X-Forwarded-For`.
+
+## Secrets
+
+The secrets are `BETTER_AUTH_SECRET`, `DATABASE_URL` and `MIGRATION_DATABASE_URL` (they hold the database
+password), `SMTP_URL` (its credentials) and, on the Compose recipe, the two database passwords. Keep them in
+the platform's secret store: `deploy.env` with mode 600 on the server, `fly secrets`, a Kubernetes Secret
+(with encryption at rest, or an external secrets operator). Never put them in the image (the Dockerfile's
+build uses placeholders only), in `fly.toml`, in a manifest or in the repository. Anyone who can run
+`docker inspect` or read the pod spec can read them, so treat that access as access to the secrets.
+Rotating `BETTER_AUTH_SECRET` signs everyone out ([Rotating `BETTER_AUTH_SECRET`](#rotating-better_auth_secret)).
+Rotating the database password: `ALTER ROLE app PASSWORD '...'`, update the secret, restart the app.
+
+## Database operations
+
+### Connection math
+
+Each app process opens up to `DATABASE_POOL_MAX` connections (default 10). Postgres allows
+`max_connections` (100 by default, 3 of them reserved for superusers; managed plans are often lower). Add
+up everything that connects at the busiest moment:
+
+```
+replicas × DATABASE_POOL_MAX
++ surge during a rolling deploy (maxSurge × DATABASE_POOL_MAX)
++ 1 per migrator running (init containers start with the pods)
++ admin sessions, backups, other services
+≤ max_connections − superuser_reserved_connections
+```
+
+Four replicas with the default pool and a surge of one need 50, plus a few: fine on 100. When the sum gets
+close, lower `DATABASE_POOL_MAX` (a request holds a connection only for its queries), or put a pooler in
+transaction mode in front ([Connection poolers](#connection-poolers)): then the pooler's own pool size is
+what Postgres sees, and the app's pools only bound the clients. Autoscaling and serverless platforms need
+the pooler.
+
+### TLS to Postgres
+
+The driver's connection-string parser (pg-connection-string 2.14) treats `sslmode=require`, `prefer` and
+`verify-ca` as `verify-full` and warns once: the server certificate must chain to a trusted CA and match the
+host. That works as is with providers whose certificates chain to a public CA. With a private CA (AWS RDS,
+Google Cloud SQL, DigitalOcean and others), download the provider's CA bundle, put it in the image or a
+volume, and name it in the URL (`sslrootcert=/path/ca.pem`); the driver reads that file when it connects, so
+add `--allow-fs-read=/path/ca.pem` to the image's `CMD` as well
+([ADR 0012](decisions/0012-node-permission-model.md)). `uselibpqcompat=true&sslmode=require` gives libpq's
+meaning (encrypted, but no certificate check); avoid it outside a private network.
+
+### Query statistics
+
+`pg_stat_statements` is preloaded in both compose files. In production, `postgres-init.sh` creates the
+extension; locally, run `create extension pg_stat_statements` once. Managed providers include it (enable
+the extension in their console if needed). The slowest statements in total:
+
+```sql
+select calls, round(total_exec_time) as total_ms, round(mean_exec_time, 1) as mean_ms, query
+from pg_stat_statements order by total_exec_time desc limit 20;
+```
+
+## Backups and restore
+
+**Managed Postgres:** use the provider's point-in-time recovery (Neon's history retention, Supabase's PITR,
+RDS automated backups), set the retention you need, and practice restoring to a new branch or instance.
+
+**Self-hosted (the Compose recipe):** take a logical dump every night and copy it off the host, encrypted
+(with restic, for example). A nightly dump loses up to a day; for point-in-time recovery, archive WAL with
+pgBackRest or WAL-G to object storage.
+
+```sh
+docker compose -f compose.production.yaml --env-file deploy.env exec -T db \
+  pg_dump -U postgres --format=custom --exclude-extension=pg_stat_statements proofstack >"proofstack-$(date +%F).dump"
+```
+
+`pg_stat_statements` stays out of the dump because only a superuser may create it, and the restore runs as
+`app`; `postgres-init.sh` recreates it on a new server.
+
+**Restore drill.** A backup counts only once it has been restored. Monthly, restore the latest dump into a
+scratch database next to production, run the migrator against it (it must apply nothing), and look at the
+data:
+
+```sh
+dc() { docker compose -f compose.production.yaml --env-file deploy.env "$@"; }
+dc exec -T db psql -U postgres -c 'create database restore_drill owner app'
+dc exec -T db pg_restore -U postgres --dbname=restore_drill --no-owner --role=app <proofstack-2026-09-27.dump
+dc exec -T db psql -U postgres -d restore_drill -c 'select count(*) from "user"'
+. ./deploy.env && dc run --rm --no-deps -e "DATABASE_URL=postgres://app:$APP_DB_PASSWORD@db:5432/restore_drill" migrate
+dc exec -T db psql -U postgres -c 'drop database restore_drill'
+```
+
+The same steps ran against the local test of the recipe. To restore for real, stop the
+app (`dc stop app`), restore into a new database the same way, point `DATABASE_URL` at it (or rename the
+databases), and start the app. Deleted accounts come back with a restore; see
+[Data retention](#data-retention) for what that means for erasure.
 
 ## Reverse proxy
 
@@ -192,9 +439,12 @@ docker compose --profile edge down
 
 The profile keeps `pnpm dev` and `pnpm db:up` to Postgres only. In front of a locally running build
 (`pnpm lighthouse`, `pnpm verify:app --edge`), `scripts/edge.ts` starts the same Caddyfile, either from
-the pinned image with `--network host` (`EDGE_RUNTIME=docker`, the default; Linux, because Docker
-Desktop's host networking differs) or from a `caddy` binary (`EDGE_RUNTIME=binary`, `CADDY_BIN`), which
-is what `pnpm ci:local` uses inside its container. The edge log goes next to the app log
+the pinned image (`EDGE_RUNTIME=docker`, the default) or from a `caddy` binary (`EDGE_RUNTIME=binary`,
+`CADDY_BIN`), which is what `pnpm ci:local` uses inside its container. The image runs on the host network
+on Linux; on macOS and Windows, where Docker Desktop's host networking differs, it runs on Docker's bridge
+network with its ports published on `127.0.0.1` and reaches the app at `host.docker.internal`
+(`EDGE_DOCKER_NETWORK=host|bridge` overrides the choice). The app then trusts the private ranges as the
+edge's address, because Docker picks them. The edge log goes next to the app log
 (`test-results/edge.log`, `lighthouse-report/edge.log`).
 
 ### Lighthouse through the edge
@@ -297,12 +547,37 @@ Locally, `pnpm mail:up` (also run by `pnpm bootstrap`) starts Mailpit from `comp
 digest: SMTP on `MAILPIT_SMTP_PORT` (54325), the inbox and its API on `MAILPIT_HTTP_PORT` (54380). Nothing
 leaves the machine. `pnpm verify:app` needs it: the E2E tests read links from its API.
 
+## Data retention
+
+What the database keeps about people, and for how long:
+
+| Rows | Hold | Deleted |
+| --- | --- | --- |
+| `user`, `account`, `post` | Email, name, password hash, posts | With the account (`/account`, "Delete account"): `session`, `account` and `post` rows cascade |
+| `session` | Client IP (IPv6 as its /64), user agent, times | On sign-out or revocation; a session expires 7 days after its last refresh, and the periodic cleanup deletes it 7 days after that |
+| `verification` | Email-confirmation and password-reset tokens, keyed by the address or user | Once used; the periodic cleanup deletes expired ones (they are valid for 1 hour) |
+| `rate_limit` | Client IP (auth limits) or user id (`api-write\|<id>`), a counter and a time | 10 minutes after the key's last request, when a later request prunes |
+
+Better Auth (1.7.6) deletes an expired session only when its token is presented again, so without a
+cleanup a user who never returns would leave their IP address and user agent behind indefinitely. Each
+server process therefore runs `deleteExpiredAuthRows` (`src/server/auth-cleanup.ts`) every 10 minutes as
+a background task: sessions that expired more than 7 days ago (`EXPIRED_SESSION_RETENTION_MS`, index
+`session_expires_at_idx`) and expired verification tokens. It starts when the auth module loads (the first
+request that reads a session) and stops at shutdown. `tests/db/auth-cleanup.test.ts` covers what it deletes
+and keeps.
+
+After an account is deleted, its unused verification tokens stay until they expire (at most an hour, then
+the next cleanup) and its `rate_limit` rows until they are pruned. Backups keep everything for as long as
+they are retained: that is the real erasure horizon, so state it in your privacy notice and keep backups no
+longer than you need ([Backups and restore](#backups-and-restore)). Production logs hold no email addresses
+or tokens ([Logs](#logs)), but request logs hold paths and times.
+
 ## Health checks
 
 | Endpoint | Meaning | Use for |
 | --- | --- | --- |
 | `GET /api/health` | The process answers HTTP. No dependencies are checked. | Liveness, the Docker `HEALTHCHECK` (see below) |
-| `GET /api/ready` | Postgres answers `select 1`. Otherwise 503 with a JSON body carrying `"_tag":"ServiceUnavailable"` and `"message":"Database unavailable"`. | Readiness, load balancer routing |
+| `GET /api/ready` | Postgres answers `select 1` and the process is not shutting down. Otherwise 503 with a JSON body carrying `"_tag":"ServiceUnavailable"` and `"message":"Database unavailable"` or `"Shutting down"`. | Readiness, load balancer routing |
 
 Postgres connection attempts time out after 5 s, so `/api/ready` answers 503 within about 5 s even when
 the database host does not respond. Do not use `/api/ready` for liveness: a database outage would restart
@@ -315,17 +590,31 @@ the address like the server does: `NITRO_PORT`, else `PORT`, else 3000; `NITRO_H
 
 ## Shutdown
 
-On SIGTERM or SIGINT, srvx (Nitro's HTTP server) stops accepting connections, waits for in-flight
-requests up to `SERVER_SHUTDOWN_TIMEOUT` seconds (default 5) and then force-closes them. Nitro then runs
-its `close` hook, where the startup plugin (`src/server/nitro/startup.ts`) runs the shutdown steps one
-after another, in this order: wait for pending background tasks (mail sends, bounded by the SMTP timeouts
-of 5 s to connect and 15 s per socket operation, and rate-limit pruning, which queries Postgres), close
-the mail transport, dispose the Effect runtime, end the Postgres pool. Server code registers each step
-with `onShutdown` (`src/server/lifecycle.ts`), which does not import Nitro, so CLI scripts can load the
-same modules. A failed step is logged (`shutdown cleanup failed`) and the next one still runs. The log
-line `shutdown complete` lists the steps in the order they ran (`cleanups`, with each one's duration in
-`steps`), and `verify:app` fails when it is missing, when `postgres-pool` is not among them, or when a
-connection to the test database outlives the process.
+On SIGTERM or SIGINT the process logs `draining` and, from then on, `/api/ready` answers 503
+(`Shutting down`) and every response carries `Connection: close`, so a load balancer stops routing here
+and does not reuse a keep-alive connection. srvx (Nitro's HTTP server) stops accepting connections,
+closes idle ones, waits for in-flight requests up to `SERVER_SHUTDOWN_TIMEOUT` seconds (default 5) and
+then force-closes them. Nitro then runs its `close` hook, where the startup plugin
+(`src/server/nitro/startup.ts`) runs the shutdown steps one after another, in this order: stop the
+periodic auth cleanup, wait for pending background tasks (mail sends, bounded by the SMTP timeouts of 5 s
+to connect and 15 s per socket operation; rate-limit pruning and a running cleanup pass; and Better Auth
+requests whose client disconnected, see below), close the mail transport, dispose the Effect runtime, end
+the Postgres pool. Server code registers each step with `onShutdown` (`src/server/lifecycle.ts`), which
+does not import Nitro, so CLI scripts can load the same modules. A failed step is logged (`shutdown
+cleanup failed`) and the next one still runs. The log line `shutdown complete` lists the steps in the
+order they ran (`cleanups`, with each one's duration in `steps`).
+
+srvx's drain waits for connections, not for the work behind them. When a client disconnects during a
+sign-in, its response settles at once (logged as 499), but Better Auth goes on hashing the password and
+then writes the session; a load test found such writes failing with `Failed query` after the pool had
+closed. Every Better Auth call therefore counts as a background task until it finishes
+(`finishBeforeShutdown`, `src/server/background-tasks.ts`).
+
+`verify:app` stops its main server the hard way (`stopWhileDraining` in `scripts/app-server.ts`): a
+request to `/api/ready` that arrives at the moment of SIGTERM must get 503 with `Connection: close`, and a
+sign-in abandoned just before it must be logged as 499 before `shutdown complete`, with no failed query
+after. It also fails when `shutdown complete` is missing or lacks `postgres-pool`, or when a connection to
+the test database outlives the process.
 
 Measured with the Docker image: `docker stop` returns in about 1.2 s with exit code 0, including an idle
 keep-alive connection. Keep the orchestrator's grace period above `SERVER_SHUTDOWN_TIMEOUT` (Docker's
@@ -349,7 +638,11 @@ entry can appear on the same line in a log collector. `node .output/migrate.mjs`
 
 - `request`: `method`, `path` (without the query string), `status`, `ms`, for every response including
   static files. `/api/health`, `/api/ready`, `/assets/*` and `/favicon*` are logged only when they
-  answer 400 or above. 5xx responses are logged at `error` level.
+  answer 400 or above. 5xx responses are logged at `error` level. A request whose client disconnected
+  before the response is logged at `info` with `status: 499` and `aborted: true`, whatever the unsent
+  response was (usually a 500 from the aborted body or render), so load-test endings and impatient
+  clients do not trip 5xx alerts. The contract-coverage check ignores these lines.
+- `draining`: SIGTERM or SIGINT arrived (`signal`); see [Shutdown](#shutdown).
 - `api defect`: an unexpected failure inside the Effect API, with the error chain. This includes a
   response that does not match its own schema (`ResponseSchemaError`, with the field paths but not the
   values). The client gets an empty 500.
@@ -362,8 +655,11 @@ entry can appear on the same line in a log collector. `node .output/migrate.mjs`
 - `request error`: an error that reached Nitro's `error` hook from the request pipeline (`tags`,
   `method`, `path`). Nitro answers it with a bare JSON 500.
 - `starting` and `shutdown complete` bracket the process lifetime. `starting` records `appUrl`,
-  `trustedProxies` and `databasePoolMax`; `shutdown complete` lists the cleanups that ran (the Postgres
-  pool, the Effect runtime, pending background tasks and the mailer).
+  `trustedProxies`, `databasePoolMax`, `databaseUrlPooled` and `permissionModel`; `shutdown complete` lists the cleanups
+  that ran (the auth cleanup timer, pending background tasks, the mailer, the Effect runtime and the
+  Postgres pool).
+- `expired auth rows deleted`: the periodic cleanup removed expired sessions or verification tokens
+  (`sessions`, `verifications`: how many). See [Data retention](#data-retention).
 - `shutdown cleanup failed`: a cleanup (`cleanup` field) rejected during shutdown.
 - `uncaught exception, exiting` and `unhandled rejection`: see below.
 - `postgres pool error`: an idle Postgres connection failed (for example, the database restarted).
@@ -468,7 +764,7 @@ browsers, Postgres and (for `verify`) Mailpit, and moves artifacts. The logic li
 
 | Script | Job |
 | --- | --- |
-| `pnpm ci:workflows` | actionlint 1.7.12 and zizmor 1.30.1 (images pinned by digest, offline, read-only), and a check that `compose.yaml`, `ci.yml` and the `Dockerfile` pin the same images as `scripts/images.ts`. Needs Docker. |
+| `pnpm ci:workflows` | actionlint 1.7.12 and zizmor 1.30.1 (images pinned by digest, offline, read-only), a check that `compose.yaml`, `deploy/compose.production.yaml`, `ci.yml` and the `Dockerfile` pin the same images as `scripts/images.ts`, and the deploy recipes (`docker compose config` on the production compose file, kubeconform 0.8.0 on `deploy/kubernetes.yaml`, which downloads the schemas). Needs Docker. |
 | `pnpm ci:secrets` | gitleaks 8.30.1 (image pinned by digest, offline, read-only) over every commit reachable from HEAD, with `.gitleaks.toml`. Needs Docker and a full clone (`fetch-depth: 0`). |
 | `pnpm ci:static` | `pnpm check` without its drift gate (so with the migration lint and the license gate) |
 | `pnpm ci:supply-chain` | `pnpm audit signatures` (registry signatures of every installed package) and `pnpm audit:check`. The frozen install before it already verified the lockfile against `minimumReleaseAge` and `trustPolicy`. Needs the npm registry. |
@@ -476,7 +772,7 @@ browsers, Postgres and (for `verify`) Mailpit, and moves artifacts. The logic li
 | `pnpm ci:build` | `pnpm build` with placeholder configuration (the same as the Dockerfile's) |
 | `pnpm ci:verify` | `verify:app` on all five Playwright projects (needs Mailpit: the `mailpit` service) |
 | `pnpm ci:lighthouse` | `pnpm lighthouse --runs=5`, through the edge. Exit 2 means inconclusive (see docs/agents/gates.md) |
-| `pnpm ci:docker` | `scripts/docker-smoke.ts`: builds the image, scans it with grype (see below), migrates twice, serves it behind Caddy on a private network, checks pages through the edge, stops it gracefully. Brings its own Postgres. Needs Docker. |
+| `pnpm ci:docker` | `scripts/docker-smoke.ts`: builds the image, scans it with grype (see below), migrates with three runs at once through PgBouncer (transaction mode) and once directly, serves it through the pooler and behind Caddy on a private network, checks pages through the edge, stops it gracefully. Brings its own Postgres and PgBouncer. Needs Docker. |
 
 `pnpm ci:local [job ...]` is the faithful local equivalent (default: every job, in CI order). It runs the
 container jobs (`static`, `supply-chain`, `drift`, `build`, `verify`, `lighthouse`) in the official Playwright image
@@ -504,6 +800,40 @@ Mailpit (`MAILPIT_HOST=mailpit` for `verify:app`) on a private Docker network. T
 replacement: `actions/upload-artifact` v7 fails under act (nektos/act#6022).
 The grype database volume (`<prefix>-grype-db`, about 200 MB) also stays between `ci:docker` runs.
 
+## Development platforms
+
+The tooling targets Linux, macOS and Windows; CI runs everything on Linux and `pnpm check` on Windows
+(`static-windows`, not blocking yet, on main and on demand).
+
+- **Starting pnpm and tools.** On Windows, `pnpm`, `npm` and the files in `node_modules/.bin` are `.cmd`
+  shims, which Node refuses to start without a shell (CVE-2024-27980). The scripts start them through
+  `scripts/spawn.ts`: pnpm itself when pnpm runs the script (`npm_execpath`), the `.bin` tools through
+  `pnpm exec` on Windows, and a shim through `cmd.exe` only as the last resort, with every argument quoted
+  and one that `cmd.exe` could still expand (`"`, `%`) refused.
+- **Line endings.** `.gitattributes` keeps text files LF on every platform; with the CRLF that Git for
+  Windows checks out by default, the format check would fail.
+- **The pre-commit hook** is POSIX `sh`. Git for Windows runs it with its own `sh`; there it links
+  `node_modules` into the temporary tree with a directory junction, because its `ln -s` copies without
+  Developer Mode. The Windows path has not been run yet; `git commit --no-verify` skips the hook if it fails.
+- **The edge** runs on the bridge network on macOS and Windows ([Edge proxy](#edge-proxy-caddy)). This
+  path is written for Docker Desktop and has not been run there yet. On Linux it needs a host firewall that
+  lets containers reach the host (it timed out on the maintainer's machine), which is why Linux keeps the
+  host network by default.
+- **`pnpm ci:local` and `pnpm ci:docker`** need Docker; `ci:local` samples memory from the cgroup, which
+  exists on Linux only.
+
+### Linux: memory caps
+
+The type-aware lint, `pnpm build` (about 1.9 GB peak), `verify:app` and `lighthouse` are heavy. A
+misconfigured lint once reached 17 GB and took a laptop down. On Linux, run heavy commands one at a time
+under a cgroup limit, so a runaway process is killed alone:
+
+```sh
+systemd-run --user --scope -p MemoryMax=4G -p MemorySwapMax=0 -- pnpm build
+```
+
+On macOS and Windows, watch Activity Monitor or Task Manager, and give Docker Desktop a memory limit.
+
 ## Supply chain
 
 What guards the dependencies, the image and the repository, and where each gate runs:
@@ -529,6 +859,8 @@ What guards the dependencies, the image and the repository, and where each gate 
   `scripts/images.ts`, `pnpm images:sync` rewrites the copies. A grype failure in `ci:docker` is usually fixed
   by a rebuilt base image digest.
 - **Runtime image.** Only `node`, `.output/` and `drizzle/`: the runtime stage deletes npm and npx, and the
-  process runs as the unprivileged `node` user.
+  process runs as the unprivileged `node` user, under Node's permission model: it may read `.output/` and
+  use the network, and nothing else (no file writes, child processes, workers or addons;
+  [ADR 0012](decisions/0012-node-permission-model.md)). The tests run the server with the same flags.
 - **SBOM.** `pnpm sbom:release` writes CycloneDX documents for the production npm dependencies and for the
   whole image (syft) into `sbom/`, to attach to a release.

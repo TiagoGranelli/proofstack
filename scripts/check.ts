@@ -11,12 +11,14 @@ import { spawnSync } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, sep } from 'node:path'
 import { routeCoverage } from './route-coverage.ts'
+import { binInvocation, pnpmInvocation, runSync } from './spawn.ts'
 
 type Gate = { name: string; run: () => boolean; fix: string }
 
-const script = (name: string) => () => spawnSync('pnpm', ['run', '--silent', name], { stdio: 'inherit' }).status === 0
-const bin = (name: string) => join('node_modules', '.bin', name)
-const tool = (name: string, args: string[]) => () => spawnSync(bin(name), args, { stdio: 'inherit' }).status === 0
+const script = (name: string) => () =>
+  runSync(pnpmInvocation(['run', '--silent', name]), { stdio: 'inherit' }).status === 0
+const tool = (name: string, args: string[]) => () =>
+  runSync(binInvocation(name, args), { stdio: 'inherit' }).status === 0
 
 const ON_CI = process.env.GITHUB_ACTIONS === 'true'
 const BASE_REF = process.env.PROOFSTACK_BASE_REF ?? (ON_CI ? 'HEAD^' : 'HEAD')
@@ -34,10 +36,13 @@ const NO_BASE = ON_CI
  * with the JSDoc tag or `@effect-diagnostics` comment its message names, with the reason next to it.
  */
 const effect = () => {
-  const result = spawnSync(bin('effect-tsgo'), ['diagnostics', '--project', 'tsconfig.json', '--format', 'text'], {
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'inherit'],
-  })
+  const result = runSync(
+    binInvocation('effect-tsgo', ['diagnostics', '--project', 'tsconfig.json', '--format', 'text']),
+    {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'inherit'],
+    },
+  )
   const output = result.stdout
   const counts = /(\d+) errors?, (\d+) warnings? and (\d+) messages?/.exec(output)
   const clean = result.status === 0 && counts?.slice(1).every((count) => count === '0') === true
@@ -82,7 +87,7 @@ const security = () => {
     console.log(NO_BASE ?? 'security: skipped, no git history to compare with')
     return NO_BASE === undefined
   }
-  const result = spawnSync(bin('fallow'), ['security', '--gate', 'new', '--diff-stdin', 'src'], {
+  const result = runSync(binInvocation('fallow', ['security', '--gate', 'new', '--diff-stdin', 'src']), {
     input: handWrittenSrc(diff),
     stdio: ['pipe', 'inherit', 'inherit'],
   })
@@ -94,7 +99,7 @@ const security = () => {
  * duplication percentage, which a new 20-line copy in a growing code base would never reach.
  */
 const dupes = () => {
-  const result = spawnSync(bin('fallow'), ['dupes', '--format', 'json', '--no-fragments'], {
+  const result = runSync(binInvocation('fallow', ['dupes', '--format', 'json', '--no-fragments']), {
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'inherit'],
     maxBuffer: 64 * 1024 * 1024,

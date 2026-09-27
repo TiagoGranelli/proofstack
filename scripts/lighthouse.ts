@@ -1,3 +1,11 @@
+import { appendFileSync, copyFileSync, mkdirSync, readFileSync, rmSync, statfsSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { eq } from 'drizzle-orm'
+import { drizzle } from 'drizzle-orm/node-postgres'
+import { computeMedianRun } from 'lighthouse/core/lib/median-run.js'
+import { Pool } from 'pg'
+import { post, user } from '#/server/db/schema/index.ts'
+import { assertChromium, startApp } from './app-server.ts'
 // Lighthouse gate. Boots the built app against a fresh database with seeded posts and a signed-in author,
 // puts the reference edge in front of it (deploy/Caddyfile: HTTPS, HTTP/2, compression, as in production),
 // runs Lighthouse several times per page and form factor with Playwright's Chromium, and applies POLICY.
@@ -11,15 +19,7 @@
 // Env: LIGHTHOUSE_DATABASE_URL overrides the database (default: proofstack_lighthouse_<pid>_test next to
 //      DATABASE_URL, dropped afterwards). Logs: lighthouse-report/{app-server,edge}.log. EDGE_RUNTIME: see
 //      scripts/edge.ts.
-import { spawnSync } from 'node:child_process'
-import { appendFileSync, copyFileSync, mkdirSync, readFileSync, rmSync, statfsSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
-import { eq } from 'drizzle-orm'
-import { drizzle } from 'drizzle-orm/node-postgres'
-import { computeMedianRun } from 'lighthouse/core/lib/median-run.js'
-import { Pool } from 'pg'
-import { post, user } from '#/server/db/schema/index.ts'
-import { assertChromium, startApp } from './app-server.ts'
+import { pnpmInvocation, runSync } from './spawn.ts'
 import { dropTestDatabase, testDatabaseUrl } from './test-db.ts'
 
 type Category = 'performance' | 'accessibility' | 'best-practices' | 'seo' | 'agentic-browsing'
@@ -172,7 +172,7 @@ const lighthouse = (url: string, formFactor: FormFactor, outputBase: string, coo
     ...(formFactor === 'desktop' ? ['--preset=desktop'] : []),
     ...(cookie ? [`--extra-headers=${JSON.stringify({ cookie })}`] : []),
   ]
-  const result = spawnSync('pnpm', args, {
+  const result = runSync(pnpmInvocation(args), {
     stdio: 'inherit',
     env: { ...process.env, CHROME_PATH: chromePath },
     timeout: 180_000,
