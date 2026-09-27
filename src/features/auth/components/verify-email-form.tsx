@@ -1,6 +1,7 @@
 import { Link } from '@tanstack/react-router'
 import { useVerifyEmail } from '#/features/auth/api/verify-email.ts'
 import { AuthForm } from '#/features/auth/components/auth-form.tsx'
+import { AuthStatus } from '#/features/auth/components/auth-status.tsx'
 import { ResendVerificationForm } from '#/features/auth/components/resend-verification-form.tsx'
 
 /**
@@ -11,13 +12,13 @@ export function VerifyEmailForm(props: { token: string }) {
   const verify = useVerifyEmail()
   if (verify.isSuccess)
     return (
-      <output className="block">
+      <AuthStatus title="Email confirmed">
         Your email address is confirmed.{' '}
         <Link to="/login" className="underline underline-offset-4">
           Sign in
         </Link>{' '}
         to continue.
-      </output>
+      </AuthStatus>
     )
   return (
     <>

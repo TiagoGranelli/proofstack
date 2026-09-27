@@ -12,7 +12,9 @@ import {
   RouterProvider,
 } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
+import { expect } from 'vitest'
 import { render } from 'vitest-browser-react'
+import { page } from 'vitest/browser'
 
 /** The app's page paths, so that links and redirects under test land on a route. */
 const PATHS = [
@@ -49,15 +51,15 @@ export async function renderInApp(
       </>
     ),
   })
-  const page = options.route
+  const mounted = options.route
   // Attached the way src/routeTree.gen.ts attaches it, under this test's root.
-  page?.route.update({ id: page.path, path: page.path, getParentRoute: () => rootRoute } as never)
+  mounted?.route.update({ id: mounted.path, path: mounted.path, getParentRoute: () => rootRoute } as never)
   const router = createRouter({
     routeTree: rootRoute.addChildren([
-      ...PATHS.filter((path) => path !== page?.path).map((path) =>
+      ...PATHS.filter((path) => path !== mounted?.path).map((path) =>
         createRoute({ getParentRoute: () => rootRoute, path, component: () => null }),
       ),
-      ...(page ? [page.route] : []),
+      ...(mounted ? [mounted.route] : []),
     ]),
     history: createMemoryHistory({ initialEntries: [options.url ?? '/'] }),
     context: { queryClient },
@@ -69,4 +71,17 @@ export async function renderInApp(
     </QueryClientProvider>,
   )
   return { ...screen, router, queryClient }
+}
+
+/** The text of an account form's success message (a status named by its heading `title`), without the heading. */
+export const statusText = (title: string) => page.getByRole('status', { name: title }).getByRole('paragraph')
+
+/**
+ * After an account form succeeds, its button is gone: focus must land on the success message (a status named
+ * by its heading), not fall back to <body>, so a keyboard user continues from there.
+ */
+export async function expectFocusedStatus(title: string) {
+  const status = page.getByRole('status', { name: title })
+  await expect.element(status).toHaveFocus()
+  expect(document.activeElement).toBe(status.element())
 }

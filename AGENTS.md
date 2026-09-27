@@ -13,7 +13,7 @@ changes to the contract, database, auth, or UI flows.
 | `src/server/` | Server-only: Effect handlers (`api/`), Better Auth (`auth.ts`), Drizzle (`db/`), repositories, `env.ts`, shutdown `lifecycle.ts` | contract, sdk |
 | `src/sdk/` | Hey API client and TanStack Query options (generated) | nothing |
 | `src/lib/` | Shared plumbing: `api-client.ts` (isomorphic SDK client), `api-error.ts`, `utils.ts`. `*.functions.ts` are server functions (`createServerFn`): `session.functions.ts` (route guards), `auth.functions.ts` (every account action) | contract, sdk. The server adapters (`*.functions.ts`, `api-client.ts`) also import server and lib |
-| `src/components/` | Shared UI that knows no feature: `ui/` (shadcn primitives, Radix, style `radix-nova`), `errors/` (router error and not-found states, `ApiErrorAlert`), `layouts/` (site header, pending state) | lib, contract, sdk |
+| `src/components/` | Shared UI that knows no feature: `ui/` (shadcn primitives, Radix, style `radix-nova`), `errors/` (router error and not-found states, `SectionErrorBoundary`, `ApiErrorAlert`), `layouts/` (site header, pending state) | lib, contract, sdk |
 | `src/features/<name>/` | One feature each (`posts`, `auth`): `api/` (query options and mutation hooks), `components/`, `utils/` | components, lib, server adapters, contract, sdk. Never another feature |
 | `src/routes/`, `router.tsx`, `start.ts`, `styles/` | The app layer. Page routes define the route (loader, guards, head) and compose features. `api/$.ts` hands requests to the Effect API; `api/auth/$.ts` to Better Auth | Page routes: features, components, lib, server adapters, contract, sdk. `api/**` is a server adapter: server, contract, sdk, lib |
 
@@ -48,13 +48,19 @@ The UI follows [Bulletproof React](https://github.com/alan2207/bulletproof-react
   - Data access for a feature: `features/<name>/api/<verb>-<noun>.ts`. Queries export
     `get<Noun>QueryOptions()` bound to `client: apiClient()` over `#/sdk/@tanstack/react-query.gen.ts`.
     Mutations export a `use<Verb><Noun>({ mutationConfig })` hook that owns cache updates and invalidation
-    and runs the caller's `onSuccess` before invalidating. Components never spread a generated
-    `*Mutation()` themselves. Cache helpers shared by a feature's hooks go in `api/<noun>-cache.ts`.
+    and runs the caller's `onSuccess` before invalidating (`useCreatePost`, `useSignIn`, `useSignOut`). Where
+    the user goes afterwards is the caller's `onSuccess`, never the hook's. Components never spread a generated
+    `*Mutation()` themselves, and component files export components, not hooks. Cache helpers shared by a
+    feature's hooks go in `api/<noun>-cache.ts`.
   - Feature UI: `features/<name>/components/`; pure helpers: `features/<name>/utils/`.
   - UI shared by several features and free of feature knowledge: `components/` (`ui/`, `errors/`,
     `layouts/`). shadcn primitives go in `components/ui/` through `pnpm exec shadcn add`.
   - Route files hold the route definition (loader, `beforeLoad`, `head`, `headers`, `validateSearch`) and a
     small page component that composes features. Forms, buttons with behavior and lists live in features.
+  - Errors: a route with a loader sets `errorComponent` to `RouteError` with its own `title` and `action`
+    (`/dashboard`, `/account`); the router's default covers the rest. Page sections that can fail on their
+    own (a list next to a form) are wrapped in `SectionErrorBoundary`, and a section that reads a suspense
+    query reads it inside the boundary (`MyPostList`), not in the page component.
 - Naming: files and folders are kebab-case (Oxlint `unicorn/filename-case`; folders by the `guards` gate
   in `scripts/check.ts`). TanStack route names keep their prefixes (`__root.tsx`, `_authed.tsx`, `$.ts`,
   `-private/`, `(group)/`). `src/sdk/` is generated and exempt.
@@ -111,12 +117,13 @@ Postgres and Mailpit (`pnpm mail:up`, the local inbox for account emails), and a
 
 | Command | Covers |
 | --- | --- |
-| `pnpm check` | `format:check`, `lint` (warnings are counted in the summary but do not fail), `typecheck`, `deadcode`, `tests` (`pnpm test:fast`: Vitest projects `unit`, `api` and `component` with the coverage gate, see [Tests](#tests)), the database-free drift checks (contract, migrations, auth) and repo guards (including kebab-case folder names). No database, no build, about 9 s. Needs Playwright's Chromium. Run it before every hand-off. |
+| `pnpm check` | `format:check`, `lint` (zero warnings: `--deny-warnings`, every rule is error or off), `typecheck`, `deadcode` (Fallow with `--fail-on-issues`: unused files, exports, types and dependencies, zones), `tests` (`pnpm test:fast`: Vitest projects `unit`, `api` and `component` with the coverage gate, see [Tests](#tests)), the database-free drift checks (contract, migrations, auth) and repo guards (including kebab-case folder names). No database, no build, about 9 s. Needs Playwright's Chromium. Run it before every hand-off. |
 | `pnpm test:unit\|test:api\|test:component [filter ...]` | One fast layer (see [Tests](#tests)); `pnpm test:fast` runs all three with coverage |
 | `pnpm format`, `pnpm lint:fix` | Autofixes |
 | `pnpm check:drift [contract\|migrations\|auth\|database]` | Checks that generated files match their sources and that the auth schema holds what Better Auth writes; `database` needs Postgres |
-| `pnpm build && pnpm verify:app [--no-e2e] [--no-integration] [--edge] [filter ...]` | Starts two built servers (open and closed sign-up) against a fresh per-run `proofstack_<purpose>_<pid>_test` database (dropped afterwards) and runs Vitest (`tests/integration`) and Playwright (`tests/e2e`, projects from `PW_PROJECTS`); app logs go to `test-results/app-server*.log`. Needs Mailpit (`pnpm mail:up`). `--edge` puts the Caddy edge in front of the open one. Refuses a stale `.output` |
+| `pnpm build && pnpm verify:app [--no-e2e] [--no-integration] [--edge] [filter ...]` | Starts two built servers (open and closed sign-up) against a fresh per-run `proofstack_<purpose>_<pid>_test` database (dropped afterwards) and runs Vitest (`tests/integration`) and Playwright (`tests/e2e`, projects from `PW_PROJECTS`); app logs go to `test-results/app-server*.log`. A filter that matches no test is an error; a runner that no filter matches is skipped. Needs Mailpit (`pnpm mail:up`). `--edge` puts the Caddy edge in front of the open one. Refuses a stale `.output` |
 | `pnpm build && pnpm lighthouse [--runs=3] [--page=<name>] [--form-factor=mobile\|desktop] [--direct]` | Lighthouse gate on the built app behind the Caddy edge (needs Docker); see the policy below |
+| `pnpm deps:check` | Report only, always exit 0: `pnpm outdated` (the release quarantine applies) and, for packages pinned from another dist-tag (`effect` and `@effect/vitest` on `rc`, `@hey-api/openapi-ts` on `next`), the pinned version against that tag. Needs the npm registry |
 | `pnpm ci:local [job ...]` | The CI jobs (`workflows static drift build verify lighthouse docker`, default all) as `pnpm ci:<job>` scripts in the Playwright Ubuntu container next to Postgres and Mailpit, all five browser projects included. Needs Docker. See [docs/operations.md](docs/operations.md#ci-and-local-ci) |
 
 `pnpm test` (Vitest project `integration`) and `pnpm test:e2e` expect an app that is already running at
@@ -243,11 +250,14 @@ Regenerate these files; never edit them by hand:
 
 ## Version policy
 
-- `package.json` uses exact versions, and `pnpm-lock.yaml` is meant to be committed (no commits exist
-  yet). pnpm 12 blocks dependency build scripts (`allowBuilds`) and quarantines fresh releases
+- `package.json` uses exact versions, and `pnpm-lock.yaml` is committed with them. pnpm 12 blocks dependency build scripts (`allowBuilds`) and quarantines fresh releases
   (`minimumReleaseAge`). Each exception names an exact version in `pnpm-workspace.yaml`.
-- Upgrade RC and beta packages (`effect`, `@tanstack/react-start`, `nitro`, `oxfmt`) in their own PR,
-  with `check`, `check:drift`, and `verify:app` passing.
+- Pre-release packages, pinned exactly: `effect` and `@effect/vitest` (4.0.0 RCs from the `rc` dist-tag;
+  npm `latest` is v3), `nitro` (its npm `latest` is a `-beta` build), `@tanstack/react-start` (npm `latest`
+  is a 1.x release, but Start's docs still call it a Release Candidate), `oxfmt` (0.x, announced as beta) and
+  `@hey-api/openapi-ts` (a `next` snapshot, see "TypeScript" below).
+  Upgrade each in its own PR, with `check`, `check:drift`, and `verify:app` passing. `pnpm deps:check`
+  reports what is newer.
 - Skills are pinned to a commit (`skills-lock.json`). Docs shipped inside packages are pinned by the
   lockfile.
 

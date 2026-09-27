@@ -24,8 +24,9 @@ export function getRouter() {
     routeTree,
     context: { queryClient },
     // Navigation is stale-while-revalidate (the router default): a revisited route renders its cached data
-    // at once and refetches in the background. A route whose data this tab just changed waits for the new
-    // data in its beforeLoad instead (src/routes/index.tsx), so no global blocking reload is needed.
+    // at once and refetches in the background. Data this tab changed is already fresh by then: every post
+    // write refetches the lists it changed before it finishes (invalidatePosts in
+    // src/features/posts/api/posts-cache.ts), so no global blocking reload is needed.
     defaultPreload: 'intent',
     defaultErrorComponent: RouteError,
     defaultPendingComponent: RoutePending,

@@ -28,7 +28,7 @@ pnpm user:create you@example.com "Your Name"   # prompts for the password withou
 pnpm dev                            # http://localhost:3000
 ```
 
-Public sign-up is closed by default (`AUTH_SIGN_UP=open` enables it, with email verification); accounts are created with `pnpm user:create`. Before handing off a change, run `pnpm check`. Contract, database, auth, and UI changes also need `pnpm check:drift` and `pnpm build && pnpm verify:app` (needs Mailpit, `pnpm mail:up`; install the test browsers once with `pnpm exec playwright install chromium firefox`).
+Public sign-up is closed by default: accounts are created with `pnpm user:create`, and `AUTH_SIGN_UP=open` in `.env` opens `/sign-up` with email verification ([ADR 0003](docs/decisions/0003-sign-up-policy.md)). Account email (confirmation links, password resets) goes to Mailpit, which `pnpm bootstrap` starts (`pnpm mail:up` restarts it): read it at http://localhost:54380 (`MAILPIT_HTTP_PORT`). Before handing off a change, run `pnpm check`. Contract, database, auth, and UI changes also need `pnpm check:drift` and `pnpm build && pnpm verify:app` (needs Mailpit, `pnpm mail:up`; install the test browsers once with `pnpm exec playwright install chromium firefox`).
 
 - [AGENTS.md](AGENTS.md): architecture, workflows, and rules for coding agents and humans.
 - [docs/operations.md](docs/operations.md): configuration, deployment, and security notes.

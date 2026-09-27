@@ -19,8 +19,9 @@ accounts are created.
     (`createUser` and `linkAccount` with Better Auth's password hash) and marks the address verified,
     because the operator vouches for it; no confirmation mail is sent. Over HTTP, `/sign-up/email` is in
     `disabledPaths` (404 before rate limiting) and outside the endpoint allowlist; the `/sign-up` page answers
-    404 and no page links to it. A repo guard in `pnpm check` keeps
-    `disabledPaths: env.authSignUp === 'open' ? [] : ['/sign-up/email']`.
+    404 and no page links to it. `pnpm check` tests the default through Better Auth's router, the path
+    server functions take (`tests/api/sign-up-policy.test.ts`), and `verify:app` through the `signUp` server
+    function on a closed server (`tests/integration/auth-sign-up.test.ts`).
   - `open`: anyone can create an account at `/sign-up`. The server refuses to start without `SMTP_URL`
     and `MAIL_FROM`, because every new account must verify its address.
 - In both modes, `requireEmailVerification` is on: no session before the address is verified. A sign-in

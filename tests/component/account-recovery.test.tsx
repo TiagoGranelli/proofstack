@@ -8,7 +8,7 @@ import type { AuthFailure } from '#/lib/auth.functions.ts'
 import { Route as ResetPasswordRoute } from '#/routes/reset-password.tsx'
 import { Route as VerifyEmailRoute } from '#/routes/verify-email.tsx'
 import { authCalls, authFunction, held, worker } from './api-mocks.ts'
-import { renderInApp } from './test-utils.tsx'
+import { expectFocusedStatus, renderInApp, statusText } from './test-utils.tsx'
 
 const unreachable = 'Could not reach the server. Check your connection and try again.'
 const expiredLink = 'This link is invalid or has expired. Ask for a new one.'
@@ -63,10 +63,11 @@ describe('SignUpForm', () => {
     await button('Create account').click({ force: true })
     response.release()
     await expect
-      .element(page.getByRole('status'))
+      .element(statusText('Confirm your email'))
       .toHaveTextContent(
         'Check your inbox at ada@example.test: open the link we sent to confirm your address, then sign in.',
       )
+    await expectFocusedStatus('Confirm your email')
     await expect.element(password()).not.toBeInTheDocument()
     expect(calls.data).toEqual([
       { name: 'Ada Lovelace', email: 'ada@example.test', password: 'a long enough password' },
@@ -104,10 +105,11 @@ describe('ForgotPasswordForm', () => {
     await expect.element(formOf('Send reset link')).toHaveAttribute('aria-busy', 'true')
     response.release()
     await expect
-      .element(page.getByRole('status'))
+      .element(statusText('Check your inbox'))
       .toHaveTextContent(
         'If someone@example.test belongs to an account, we sent it a link to choose a new password. The link works for one hour.',
       )
+    await expectFocusedStatus('Check your inbox')
     expect(calls.data).toEqual([{ email: 'someone@example.test' }])
   })
 
@@ -157,10 +159,11 @@ describe('/reset-password', () => {
     await expect.element(formOf('Set new password')).toHaveAttribute('aria-busy', 'true')
     response.release()
     await expect
-      .element(page.getByRole('status'))
+      .element(statusText('Password changed'))
       .toHaveTextContent(
         'Your password is changed, and every session of your account was signed out. Sign in with the new password.',
       )
+    await expectFocusedStatus('Password changed')
     await expect
       .element(page.getByRole('status').getByRole('link', { name: 'Sign in' }))
       .toHaveAttribute('href', '/login')
@@ -214,8 +217,9 @@ describe('/verify-email', () => {
     await expect.element(formOf('Confirm email')).toHaveAttribute('aria-busy', 'true')
     response.release()
     await expect
-      .element(page.getByRole('status'))
+      .element(statusText('Email confirmed'))
       .toHaveTextContent('Your email address is confirmed. Sign in to continue.')
+    await expectFocusedStatus('Email confirmed')
     await expect.element(resend()).not.toBeInTheDocument()
     expect(calls.data).toEqual([{ token: 'tok-1' }])
     await page.getByRole('link', { name: 'Sign in' }).click()
@@ -259,8 +263,9 @@ describe('/verify-email', () => {
     await expect.element(formOf('Send a new link')).toHaveAttribute('aria-busy', 'true')
     response.release()
     await expect
-      .element(page.getByRole('status'))
+      .element(statusText('Check your inbox'))
       .toHaveTextContent('If new@example.test has an account waiting for confirmation, we sent it a new link.')
+    await expectFocusedStatus('Check your inbox')
     expect(calls.data).toEqual([{ email: 'new@example.test' }])
   })
 
