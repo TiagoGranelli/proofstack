@@ -51,8 +51,11 @@ describe('PostsRepo', () => {
 
     // The public list joins the author's name in the same statement, however many authors a page holds.
     const small = await withBudget('listPublic (limit 1)', 1, (repo) => repo.listPublic({ limit: 1 }))
+    expect(small.items).toHaveLength(1)
+    // From below the author with 50 posts' second page: their last 10, then older posts, the other author's
+    // among them. Not from the top of the list, where other files' newer posts may fill a whole page by one author.
     const large = await withBudget('listPublic (limit 50)', 1, (repo) =>
-      repo.listPublic({ limit: 50, cursor: lastKey(small) }),
+      repo.listPublic({ limit: 50, cursor: lastKey(next) }),
     )
     expect(new Set(large.items.map((post) => post.authorName)).size).toBeGreaterThan(1)
   })
