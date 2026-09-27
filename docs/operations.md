@@ -165,6 +165,12 @@ Better Auth resolves it from `X-Forwarded-For` with `advanced.ipAddress.trustedP
 peer as the last hop of that header before Better Auth sees it, for `/api/auth/*` and for the server
 functions alike.
 
+An IPv6 client is recorded and rate-limited by its /64 network (`advanced.ipAddress.ipv6Subnet: 64`), not
+by its full address: one subscriber usually gets a whole /64 and can pick any address in it, so per-address
+buckets would let one client make unlimited fresh ones. Clients that share a /64 share a bucket. The
+account page shows such a session's address as that network, for example `IPv6 network 2001:db8:1:2::/64`
+(`::/64` for `::1`). IPv4 addresses are kept whole.
+
 - **`TRUSTED_PROXIES` unset:** the TCP peer address is the client IP. Whatever `X-Forwarded-For` the
   client sent is dropped, so clients cannot choose their bucket. Use this only when clients connect to
   the Node process directly.

@@ -10,6 +10,7 @@ import { db } from './db/client.ts'
 import * as schema from './db/schema/index.ts'
 import { env } from './env.ts'
 import { AUTH_BASE_PATH, endpointAllowlist, isExposedEndpoint } from './http/auth-endpoints.ts'
+import { IPV6_SUBNET } from './http/client-address.ts'
 import { log } from './log.ts'
 import { authMail } from './mail/auth-mail.ts'
 
@@ -82,7 +83,13 @@ export const auth = betterAuth({
     // Every request reaches Better Auth with the TCP peer as the last X-Forwarded-For hop
     // (./http/forwarded-for.ts). Hops inside TRUSTED_PROXIES are skipped from the right; the first address
     // outside them is the client. With no trusted proxies the header holds only the peer.
-    ipAddress: { ipAddressHeaders: ['x-forwarded-for'], trustedProxies: env.trustedProxies },
+    // IPv6 clients are recorded and rate-limited by their /64 network (./http/client-address.ts): one subscriber
+    // usually holds a whole /64 and could otherwise rotate through fresh buckets. Clients in one /64 share one.
+    ipAddress: {
+      ipAddressHeaders: ['x-forwarded-for'],
+      trustedProxies: env.trustedProxies,
+      ipv6Subnet: IPV6_SUBNET,
+    },
   },
   // Unexpected errors (e.g. database down) are thrown to src/server/http/auth-handler.ts, which logs
   // them as JSON without query parameters and answers an empty 500. Auth failures still answer normally.

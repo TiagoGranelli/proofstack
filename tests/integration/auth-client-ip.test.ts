@@ -20,6 +20,20 @@ describe('client IP behind a trusted proxy', () => {
     expect(res.status).toBe(200)
     expect(await sessionIp(appUrl, sessionCookie(res)!)).toBe('100.64.1.7')
   })
+
+  it('is an IPv6 client’s /64 network, which is also its rate-limit bucket', async () => {
+    const res = await postSignIn(users.author, { 'x-forwarded-for': '2001:db8:64:1:aaaa:bbbb:cccc:dddd' })
+    expect(res.status).toBe(200)
+    expect(await sessionIp(appUrl, sessionCookie(res)!)).toBe('2001:db8:64:1::/64')
+
+    // Other addresses in the same /64 count against the same bucket (3 sign-ins per 10 s, 1 already used).
+    const statuses: number[] = []
+    for (const address of ['2001:db8:64:1::2', '2001:db8:64:1:ffff::1', '2001:db8:64:1::3'])
+      statuses.push(
+        (await postSignIn({ email, password: 'wrong-password-123' }, { 'x-forwarded-for': address })).status,
+      )
+    expect(statuses).toEqual([401, 401, 429])
+  })
 })
 
 describe('client IP from a peer outside TRUSTED_PROXIES', () => {
