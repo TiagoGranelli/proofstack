@@ -64,6 +64,7 @@
     "react-dom": "19.3.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
     "@babel/core": "8.0.6",
     "@effect/vitest": "4.0.0-rc.117",
     "@hey-api/openapi-ts": "0.99.0",

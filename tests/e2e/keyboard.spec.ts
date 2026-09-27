@@ -1,0 +1,169 @@
+// Keyboard use: Tab reaches every control in reading order with a visible focus indicator and then leaves
+// the page (no trap); editing works from the keyboard and puts focus back; alerts and status messages
+// appear where the design says. Pointer-free, so skipped on touch projects.
+import type { Page } from '@playwright/test'
+import { tabOrder, tabThrough } from './support/a11y.ts'
+import { dashboardWithMyPost, expect, fakePost, navigateWithApiResponse, signIn, test, visit } from './support/app.ts'
+
+test.skip(({ isMobile }) => isMobile, 'keyboard navigation is a desktop concern')
+
+const NAV = ['link "ProofStack"', 'link "About"', 'link "Dashboard"']
+
+/**
+ * WebKit leaves links out of the Tab order by default (Safari's "Press Tab to highlight each item" setting),
+ * so its expected stops are the same minus the links.
+ */
+const tabbable = (browserName: string, stops: string[]) =>
+  browserName === 'webkit' ? stops.filter((stop) => !stop.startsWith('link ')) : stops
+
+test.describe('tab order', () => {
+  const pages: Array<[string, (page: Page) => Promise<unknown>, string[]]> = [
+    ['home', (page) => visit(page, '/'), NAV],
+    ['about', (page) => visit(page, '/about'), NAV],
+    ['login', (page) => visit(page, '/login'), [...NAV, 'textbox "Email"', 'textbox "Password"', 'button "Sign in"']],
+    ['not found', (page) => visit(page, '/no-such-page'), [...NAV, 'link "Go to latest posts"']],
+    [
+      'error page',
+      (page) => navigateWithApiResponse(page, 'ProofStack', '/api/posts', { status: 503, json: {} }),
+      [...NAV, 'button "Try again"', 'link "Go to latest posts"'],
+    ],
+    [
+      'dashboard',
+      async (page) => {
+        await signIn(page)
+        await navigateWithApiResponse(page, 'Dashboard', '/api/me/posts', {
+          json: [fakePost('First'), fakePost('Second')],
+        })
+        await expect(page.getByText('Second', { exact: true })).toBeVisible()
+      },
+      [
+        ...NAV,
+        'button "Sign out"',
+        'textbox "New post"',
+        // Publish is disabled until there is text, so it is not a Tab stop yet.
+        'button "Edit post: First"',
+        'button "Delete post: First"',
+        'button "Edit post: Second"',
+        'button "Delete post: Second"',
+      ],
+    ],
+  ]
+
+  for (const [name, reach, expected] of pages) {
+    test(`${name}: every control, in order, with visible focus, then out of the page`, async ({
+      page,
+      browserName,
+    }) => {
+      await reach(page)
+      const stops = await tabOrder(page)
+      expect(stops.map((stop) => stop.name)).toEqual(tabbable(browserName, expected))
+      expect(stops.filter((stop) => !stop.visibleFocus).map((stop) => stop.name)).toEqual([])
+    })
+  }
+
+  test('Shift+Tab walks the same stops backwards and out of the page', async ({ page, browserName }) => {
+    await visit(page, '/login')
+    await page.getByRole('button', { name: 'Sign in' }).focus()
+    const stops = await tabThrough(page, { backwards: true })
+    expect(stops.map((stop) => stop.name)).toEqual(
+      tabbable(browserName, ['textbox "Password"', 'textbox "Email"', ...NAV.toReversed()]),
+    )
+  })
+})
+
+test.describe('editing from the keyboard', () => {
+  test('Enter on Edit focuses the draft; Escape cancels and puts focus back on Edit', async ({ page }) => {
+    const { body, post, edit } = await dashboardWithMyPost(page)
+    await edit.focus()
+    await page.keyboard.press('Enter')
+    const field = page.getByLabel('Edit post')
+    await expect(field).toBeFocused()
+    await page.keyboard.type(' (discarded)')
+    await page.keyboard.press('Escape')
+    await expect(field).toHaveCount(0)
+    await expect(edit).toBeFocused()
+    await expect(post.locator('p')).toHaveText(body)
+  })
+
+  test('the edit form is not a trap: Tab goes on to Cancel, Save and the rest of the page', async ({ page }) => {
+    await signIn(page)
+    await navigateWithApiResponse(page, 'Dashboard', '/api/me/posts', { json: [fakePost('First'), fakePost('Second')] })
+    await page.getByRole('button', { name: 'Edit post: First' }).click()
+    await expect(page.getByLabel('Edit post')).toBeFocused()
+    const stops = await tabThrough(page)
+    expect(stops.map((stop) => stop.name)).toEqual([
+      'button "Cancel"',
+      'button "Save"',
+      'button "Edit post: Second"',
+      'button "Delete post: Second"',
+    ])
+    expect(stops.filter((stop) => !stop.visibleFocus)).toEqual([])
+  })
+
+  test('Save from the keyboard announces it and returns focus to Edit', async ({ page }) => {
+    const { body, edit } = await dashboardWithMyPost(page)
+    await edit.focus()
+    await page.keyboard.press('Enter')
+    await page.keyboard.type(' (saved)')
+    await page.keyboard.press('Tab')
+    await page.keyboard.press('Tab')
+    await expect(page.getByRole('button', { name: 'Save' })).toBeFocused()
+    await page.keyboard.press('Enter')
+    await expect(page.getByRole('status')).toHaveText('Post saved.')
+    const saved = page
+      .getByTestId('my-posts')
+      .locator('li')
+      .filter({ hasText: `${body} (saved)` })
+    await expect(saved.getByRole('button', { name: /^Edit/ })).toBeFocused()
+  })
+
+  test('a rejected save is an alert inside the form that also describes the draft', async ({ page }) => {
+    const { edit } = await dashboardWithMyPost(page)
+    await edit.click()
+    const field = page.getByLabel('Edit post')
+    await field.fill('x'.repeat(281))
+    await page.getByRole('button', { name: 'Save' }).press('Enter')
+    const alert = page.getByRole('alert')
+    await expect(alert).toContainText('Could not save the post')
+    await expect(field).toHaveAttribute('aria-invalid', 'true')
+    await expect(field).toHaveAccessibleDescription(/Over the 280-character limit\..*Could not save the post/)
+  })
+})
+
+test.describe('announcements', () => {
+  test('publishing and deleting are announced; after a delete, focus moves to the list heading', async ({ page }) => {
+    const { post } = await dashboardWithMyPost(page)
+    await expect(page.getByRole('status')).toHaveText('Post published.')
+    await post.getByRole('button', { name: /^Delete/ }).focus()
+    await page.keyboard.press('Enter')
+    await expect(post).toHaveCount(0)
+    await expect(page.getByRole('heading', { name: 'Published' })).toBeFocused()
+    await expect(page.getByRole('status')).toHaveText('Post deleted.')
+  })
+
+  test('a failed sign-in is an alert that describes the form, and focus stays in the form', async ({ page }) => {
+    await visit(page, '/login')
+    await page.getByLabel('Email').fill('nobody@example.test')
+    await page.getByLabel('Password').fill('not the password at all')
+    await page.keyboard.press('Enter')
+    const alert = page.getByRole('alert')
+    await expect(alert).toBeVisible()
+    await expect(page.locator('form')).toHaveAccessibleDescription(await alert.innerText())
+    await expect(page.getByLabel('Password')).toBeFocused()
+  })
+
+  test('a failed sign-out is an alert, and the button can be used again from the keyboard', async ({ page }) => {
+    await signIn(page)
+    await visit(page, '/dashboard')
+    await page.route('**/api/auth/sign-out', (route) => route.abort())
+    const signOut = page.getByRole('button', { name: 'Sign out' })
+    await signOut.focus()
+    await page.keyboard.press('Enter')
+    await expect(page.getByRole('alert')).toHaveText('Could not sign out. Check your connection and try again.')
+    await expect(signOut).toBeEnabled()
+    await page.unroute('**/api/auth/sign-out')
+    await signOut.focus()
+    await page.keyboard.press('Enter')
+    await expect(page).toHaveURL(/\/$/)
+  })
+})
