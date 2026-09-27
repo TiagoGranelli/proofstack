@@ -1,5 +1,6 @@
 import { useRequestPasswordReset } from '#/features/auth/api/request-password-reset.ts'
 import { AuthField, AuthForm } from '#/features/auth/components/auth-form.tsx'
+import { AuthStatus } from '#/features/auth/components/auth-status.tsx'
 import { formText } from '#/features/auth/utils/form-text.ts'
 
 /** Asks for a reset link. The answer does not reveal whether the address has an account. */
@@ -7,10 +8,10 @@ export function ForgotPasswordForm() {
   const request = useRequestPasswordReset()
   if (request.isSuccess)
     return (
-      <output className="block">
+      <AuthStatus title="Check your inbox">
         If <strong>{request.variables.email}</strong> belongs to an account, we sent it a link to choose a new password.
         The link works for one hour.
-      </output>
+      </AuthStatus>
     )
   return (
     <AuthForm

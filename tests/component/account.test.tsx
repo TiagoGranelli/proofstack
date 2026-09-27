@@ -7,7 +7,7 @@ import { DeleteAccountForm } from '#/features/auth/components/delete-account-for
 import { SessionList } from '#/features/auth/components/session-list.tsx'
 import type { AuthOutcome, SessionView } from '#/lib/auth.functions.ts'
 import { authCalls, authFunction, held, worker } from './api-mocks.ts'
-import { renderInApp, testQueryClient } from './test-utils.tsx'
+import { expectFocusedStatus, renderInApp, statusText, testQueryClient } from './test-utils.tsx'
 
 const FIREFOX_LINUX = 'Mozilla/5.0 (X11; Linux x86_64; rv:130.0) Gecko/20100101 Firefox/130.0'
 const CHROME_WINDOWS =
@@ -78,7 +78,7 @@ describe('ChangePasswordForm', () => {
     expect(calls.data).toEqual([])
   })
 
-  it('changes the password, busy meanwhile, then empties the fields and says other sessions were signed out', async () => {
+  it('changes the password, busy meanwhile, then empties the fields and focuses the news that other sessions were signed out', async () => {
     const response = held()
     const calls = authCalls('changePassword')
     worker.use(calls.handler, authFunction('changePassword', response))
@@ -87,9 +87,9 @@ describe('ChangePasswordForm', () => {
     await expect.element(changeButton()).toBeDisabled()
     await expect.element(formOf(changeButton())).toHaveAttribute('aria-busy', 'true')
     response.release()
-    await expect
-      .element(page.getByRole('status'))
-      .toHaveTextContent('Password changed. Your other sessions were signed out.')
+    await expect.element(statusText('Password changed')).toHaveTextContent('Your other sessions were signed out.')
+    // The fields were emptied by a fresh form, which has no focus to keep.
+    await expectFocusedStatus('Password changed')
     await expect.element(currentPassword()).toHaveValue('')
     await expect.element(newPassword()).toHaveValue('')
     expect(calls.data).toEqual([{ currentPassword: 'the old password', newPassword: 'a brand new password' }])

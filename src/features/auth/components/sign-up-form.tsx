@@ -1,6 +1,7 @@
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '#/contract/limits.ts'
 import { useSignUp } from '#/features/auth/api/sign-up.ts'
 import { AuthField, AuthForm } from '#/features/auth/components/auth-form.tsx'
+import { AuthStatus } from '#/features/auth/components/auth-status.tsx'
 import { formText } from '#/features/auth/utils/form-text.ts'
 
 /**
@@ -11,10 +12,10 @@ export function SignUpForm() {
   const signUp = useSignUp()
   if (signUp.isSuccess)
     return (
-      <output className="block">
+      <AuthStatus title="Confirm your email">
         Check your inbox at <strong>{signUp.variables.email}</strong>: open the link we sent to confirm your address,
         then sign in.
-      </output>
+      </AuthStatus>
     )
   return (
     <AuthForm
