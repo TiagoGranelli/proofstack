@@ -39,8 +39,9 @@ that cannot call a server function.
   stubs and `tests/integration/server-functions.ts` for server functions, `tests/integration` for `/api/auth/*`.
 - Server function ids change per build, so they are not a stable API (ADR 0009), and account actions have no
   published description for other clients.
-- The `_authed` guard reads the session through a server function while the `HttpApi` middleware reads it again
-  for the same page.
+- The `_authed` guard reads the session through a server function and the `HttpApi` middleware reads it again
+  for the same page. During SSR both share one lookup per request (`src/server/http/request-session.ts`,
+  `tests/db/ssr-session.test.ts`); a client-side navigation still makes two requests, so two lookups.
 
 ## Revisit when
 

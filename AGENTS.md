@@ -28,7 +28,9 @@ changes to the contract, database, auth, or UI flows.
   `createServerOnlyFn`) and `src/lib/server-function-errors.ts`, the global function middleware
   (Fallow zone `server-adapters`).
 - SSR loaders call the same SDK. On the server it dispatches in-process to the Effect handler
-  (`src/server/api/in-process-client.ts`), so every business operation goes through the contract.
+  (`src/server/api/in-process-client.ts`, GET only: writes come from the browser, through the CSRF check), so
+  every business operation goes through the contract. The session is looked up once per request, shared by
+  the route guard and the API middleware (`src/server/http/request-session.ts`).
 - Authorization happens in the Effect `Authentication` middleware. The `_authed` route guard is only a UX
   redirect.
 - Boundaries are enforced by Fallow zones in `.fallowrc.json` and by `no-restricted-imports` in

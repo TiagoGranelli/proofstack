@@ -4,18 +4,19 @@ import { HttpServerRequest } from 'effect/unstable/http'
 import { HttpApiError } from 'effect/unstable/httpapi'
 import { Unauthorized, ValidationError } from '#/contract/errors.ts'
 import { Authentication, CurrentUser, RequestValidation } from '#/contract/middleware.ts'
-import { auth } from '../auth.ts'
+import { requestSession } from '../http/request-session.ts'
 
 // Effect tries each declared security scheme in turn with the cookie it names (empty when absent).
 // Better Auth itself picks the cookie name for the current APP_URL and verifies it, so both schemes
-// share one implementation: a request without the cookie fails without touching the database.
+// share one implementation: a request without the cookie fails without touching the database. During SSR the
+// lookup is the one the route guard already made for the same request (requestSession).
 const authenticate: Authentication['Service']['sessionCookie'] = (httpEffect, { credential }) =>
   Effect.gen(function* () {
     if (Redacted.value(credential) === '') return yield* new Unauthorized({ message: 'Authentication required' })
     const request = yield* HttpServerRequest.HttpServerRequest
     const headers = new Headers()
     for (const [key, value] of Object.entries(request.headers)) if (typeof value === 'string') headers.set(key, value)
-    const session = yield* Effect.tryPromise(() => auth.api.getSession({ headers })).pipe(Effect.orDie)
+    const session = yield* Effect.tryPromise(() => requestSession(headers)).pipe(Effect.orDie)
     if (!session) return yield* new Unauthorized({ message: 'Authentication required' })
     const { id, name, email } = session.user
     return yield* Effect.provideService(httpEffect, CurrentUser, { id, name, email })
