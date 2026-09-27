@@ -88,8 +88,8 @@ the same scripts in the Playwright Ubuntu image next to Postgres [f1b26a9]. `act
 | A Nitro release with nitrojs/nitro#4620 and #4654 | Drop the `bodyLimit` middleware for `maxRequestBodySize`; pass `trustProxy` |
 | A stable Hey API release with the TypeScript-free printer | Leave the `next` snapshot (ADR 0002) |
 | TanStack/router#7473 | Revisit ADR 0004 |
-| TanStack/router#8520 (ours, fixes #8511) | Upgrade; `/` and `/dashboard` then preload `useBaseQuery-*.js`; re-run `pnpm lighthouse` (ADR 0011) |
-| GoogleChrome/lighthouse#16539 | Lantern stops simulating preloaded scripts as blocking the first paint; mobile FCP should drop well below 1.5 s (ADR 0011) |
+| TanStack/router#8520 (ours, fixes #8511) | Upgrade; `/` and `/dashboard` then preload `useBaseQuery-*.js`; re-run `pnpm lighthouse`. The 2.7 KB cost `/dashboard` a simulated round trip (1.51 → 1.66 s) unless about 1 KB leaves its first-load JavaScript first (ADR 0011) |
+| GoogleChrome/lighthouse#16539 (its planned follow-up to #16782, "ignore modulepreloads when computing FCP and LCP"; #16782 alone changes nothing here, our LCP already equals FCP) | Lantern stops simulating preloaded scripts as blocking the first paint; mobile FCP should drop to about 0.8 s, and CI's 2-vCPU runner should score like the laptop (ADR 0011) |
 | A StrykerJS vitest-runner release that filters by Vitest 5's full test names (stryker-js#6210; fixes in #6214, #6220, #6217; see [Mutation testing](#mutation-testing)) | Add mutation testing as a gate with the thresholds below |
 | A Better Auth release whose `/revoke-other-sessions` deletes in one statement (better-auth#11433) | Lower its budget in `tests/db/query-budget.test.ts` to a constant |
 

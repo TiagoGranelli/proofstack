@@ -121,7 +121,9 @@ applies project `allow` rules only after you accept the workspace trust dialog. 
 median metrics must stay within the budgets. `agentic-browsing` is reported but not gated. SEO is not gated on
 `/login` and `/dashboard` (noindex). Exit 2 means inconclusive, not failed: a run's `benchmarkIndex` was below
 1000 or Lighthouse warned about a slow CPU (each run's value and warnings are in
-`lighthouse-report/summary.json`). CI runs `pnpm lighthouse --runs=5`.
+`lighthouse-report/summary.json`). CI runs `pnpm lighthouse --runs=5`. A mobile 99 whose runs show a preload task of
+10 ms or more (`perRun[].preloadTaskMs`, and a note in `summary.md`) comes from a contended host, not from the page:
+Lantern then adds four times that task before every preloaded script ([ADR 0011](../decisions/0011-lighthouse-over-https-http2.md#the-preload-task-and-why-ci-scored-99)).
 
 `pnpm build && pnpm lighthouse [--runs=3] [--page=<name>] [--form-factor=mobile|desktop] [--direct]
 [--edge-protocol=h2|h1|http]` runs the gate on the built app behind the Caddy edge over HTTPS and HTTP/2, as in
