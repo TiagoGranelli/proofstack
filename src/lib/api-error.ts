@@ -29,6 +29,15 @@ export const apiErrorTag = (error: unknown): TaggedApiError['_tag'] | undefined 
   isTaggedApiError(error) ? error._tag : undefined
 
 /**
+ * The message of the first issue of a ValidationError that names `field` (its first path segment, a payload key
+ * such as `body`), for a form that shows it next to that field; undefined for any other error.
+ */
+export function fieldIssue(error: unknown, field: string): string | undefined {
+  if (!isTaggedApiError(error) || error._tag !== 'ValidationError') return undefined
+  return error.issues.find((issue) => issue.path[0] === field)?.message
+}
+
+/**
  * Turns whatever the SDK threw into a user-facing message. The SDK throws the parsed JSON body for API
  * errors, the raw text for non-JSON bodies (CSRF "Forbidden", a proxy's 502 page), `{}` for an empty
  * body, and a TypeError when the network fails, so the input is `unknown`, not the declared error type.

@@ -65,7 +65,7 @@ const STATES: Record<string, (fixtures: Fixtures) => Promise<unknown>> = {
     await visit(page, '/dashboard')
     await page.getByLabel('New post').fill(overTheLimit)
     await page.getByRole('button', { name: 'Publish' }).click()
-    await expect(page.getByRole('alert')).toContainText('Could not publish the post')
+    await expect(page.getByRole('alert')).toContainText('Use at most 280 characters')
   },
   'dashboard, editing a post': async ({ page, author }) => {
     const { edit } = await dashboardWithMyPost(page, author)
@@ -77,7 +77,7 @@ const STATES: Record<string, (fixtures: Fixtures) => Promise<unknown>> = {
     await edit.click()
     await page.getByLabel('Edit post').fill(overTheLimit)
     await page.getByRole('button', { name: 'Save' }).click()
-    await expect(page.getByRole('alert')).toContainText('Could not save the post')
+    await expect(page.getByRole('alert')).toContainText('Use at most 280 characters')
   },
   'dashboard, sign-out failed': async ({ page, author }) => {
     await signIn(page, author)

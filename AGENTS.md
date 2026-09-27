@@ -57,6 +57,10 @@ The UI follows [Bulletproof React](https://github.com/alan2207/bulletproof-react
     `*Mutation()` themselves, and component files export components, not hooks. Cache helpers shared by a
     feature's hooks go in `api/<noun>-cache.ts`.
   - Feature UI: `features/<name>/components/`; pure helpers: `features/<name>/utils/`.
+  - Forms: `useAppForm` (`src/components/form/app-form.ts`) with the input's Effect Schema as Standard Schema in
+    `validators.onDynamic` and `validationLogic: revalidateLogic()`, the same schema the server validates with
+    (`src/contract/post-input.ts`, `src/lib/account-input.ts`). A `ValidationError` issue goes next to the field
+    its path names (`fieldIssue` in `src/lib/api-error.ts`); any other failure under the form.
   - UI shared by several features and free of feature knowledge: `components/` (`ui/`, `errors/`,
     `layouts/`). shadcn primitives go in `components/ui/` through `pnpm exec shadcn add`.
   - Route files hold the route definition (loader, `beforeLoad`, `head`, `headers`, `validateSearch`) and a
@@ -87,8 +91,8 @@ index on a large table is built by hand `CONCURRENTLY`, see
 
 1. Schema in `src/server/db/schema/`, then `pnpm db:generate --name <slug>` and `pnpm db:migrate`.
 2. Contract in `src/contract/`: schemas, endpoints, tagged errors. Constants the UI also needs (limits,
-   lengths) go in `src/contract/limits.ts`, which stays free of Effect so client bundles do not pull in
-   the schema runtime.
+   lengths) go in `src/contract/limits.ts`, which stays free of Effect. An input schema a form also validates
+   goes in a module without HttpApi code (`src/contract/post-input.ts`), so the browser loads Schema only.
 3. Repository (for example `src/server/posts/repo.ts`) and handler in `src/server/api/handlers.ts`. A
    repository takes its client per statement from `Database.client`; a write of several statements runs in
    `Database.transaction(effect)` (`src/server/db/client.ts`, proven in `tests/db/transaction.test.ts`).

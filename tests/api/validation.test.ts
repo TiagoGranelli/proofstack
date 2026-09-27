@@ -30,12 +30,13 @@ const send = async (method: string, path: string, body?: string) => {
 
 describe('payload validation', () => {
   const invalid: Array<[string, string, string]> = [
-    ['empty', JSON.stringify({ body: '' }), 'Expected a value with a length of at least 1'],
-    ['untrimmed', JSON.stringify({ body: ' hi ' }), 'Expected a string with no leading or trailing whitespace'],
+    // The contract's own messages (src/contract/post-input.ts), which the post forms show too.
+    ['empty', JSON.stringify({ body: '' }), 'Write something to post.'],
+    ['untrimmed', JSON.stringify({ body: ' hi ' }), 'Remove the spaces before and after the text.'],
     [
       'over the limit',
       JSON.stringify({ body: 'x'.repeat(POST_MAX_LENGTH + 1) }),
-      `Expected a value with a length of at most ${POST_MAX_LENGTH}`,
+      `Use at most ${POST_MAX_LENGTH} characters.`,
     ],
     ['not a string', JSON.stringify({ body: 42 }), 'Expected string'],
     ['missing', JSON.stringify({}), 'Missing key'],

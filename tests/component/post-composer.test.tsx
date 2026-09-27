@@ -74,34 +74,60 @@ describe('PostComposer', () => {
     expect(queryClient.getQueryState(getPublicPostsQueryOptions().queryKey)?.isInvalidated).toBe(true)
   })
 
+  it('flags a draft over the limit on Publish without sending it, moves focus to it, and clears once fixed', async () => {
+    // No handler: a request would fail the test (setup.ts).
+    const onPublished = vi.fn<() => void>()
+    await renderInApp(<PostComposer onPublished={onPublished} />)
+    await field().fill('x'.repeat(POST_MAX_LENGTH + 1))
+    await publish().click()
+
+    const error = page.getByRole('alert')
+    await expect.element(error).toHaveTextContent(`Use at most ${POST_MAX_LENGTH} characters.`)
+    await expect.element(field()).toHaveFocus()
+    await expect.element(field()).toHaveAttribute('aria-describedby', 'post-body-count post-body-error')
+    // Checked again on every change once flagged.
+    await field().fill('x'.repeat(POST_MAX_LENGTH))
+    await expect.element(error).not.toBeInTheDocument()
+    await expect.element(field()).not.toHaveAttribute('aria-invalid')
+    expect(onPublished).not.toHaveBeenCalled()
+  })
+
   const failures = [
     {
-      name: 'a ValidationError',
+      name: 'a ValidationError, next to the field it names',
       handler: () =>
         apiError('myPostsCreate', 400, {
           _tag: 'ValidationError',
           message: 'Invalid request payload',
-          issues: [{ path: ['body'], message: 'Expected a value with a length of at most 280' }],
+          issues: [{ path: ['body'], message: 'Use at most 280 characters.' }],
         }),
-      message: 'Could not publish the post: Expected a value with a length of at most 280',
+      message: 'Use at most 280 characters.',
+      describedBy: 'post-body-count post-body-error',
+      invalid: true,
     },
     {
       name: 'an ended session',
       handler: () => apiError('myPostsCreate', 401, { _tag: 'Unauthorized', message: 'Authentication required' }),
       message: 'Your session has ended. Sign in again to continue. Sign in',
+      describedBy: 'post-body-count post-error',
+      invalid: false,
     },
     {
       name: 'a network failure',
       handler: () => apiFailure('myPostsCreate', { network: true }),
       message: 'Could not publish the post. Check your connection and try again.',
+      describedBy: 'post-body-count post-error',
+      invalid: false,
     },
     {
       name: 'a CSRF rejection (plain-text 403)',
       handler: () => apiFailure('myPostsCreate', { status: 403, text: 'Forbidden' }),
       message: 'Could not publish the post. Try again.',
+      describedBy: 'post-body-count post-error',
+      invalid: false,
     },
   ]
-  it.each(failures)('keeps the draft and describes $name', async ({ handler, message }) => {
+  it.each(failures)('keeps the draft and describes $name', async ({ handler, message, describedBy, invalid }) => {
     worker.use(handler())
     const onPublished = vi.fn<() => void>()
     await renderInApp(<PostComposer onPublished={onPublished} />)
@@ -110,8 +136,9 @@ describe('PostComposer', () => {
 
     await expect.element(page.getByRole('alert')).toHaveTextContent(message)
     await expect.element(field()).toHaveValue('keep me')
-    await expect.element(field()).toHaveAttribute('aria-invalid', 'true')
-    await expect.element(field()).toHaveAttribute('aria-describedby', 'post-body-count post-body-error')
+    // Only an issue with the text marks the field invalid; the alert describes the draft either way.
+    expect(field().element().getAttribute('aria-invalid')).toBe(invalid ? 'true' : null)
+    await expect.element(field()).toHaveAttribute('aria-describedby', describedBy)
     await expect.element(publish()).toBeEnabled()
     expect(onPublished).not.toHaveBeenCalled()
   })

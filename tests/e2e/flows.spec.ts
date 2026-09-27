@@ -174,11 +174,11 @@ test('a rejected save shows the error in the post and keeps the draft', async ({
   const body = `e2e rejected edit ${Date.now()}`
   await publish(page, body)
   await myPost(page, body).getByRole('button', { name: /^Edit/ }).click()
-  // Over the 280-character limit: the server answers 400 and the form stays open with the draft.
+  // Over the 280-character limit: the form refuses it with the API's own rule and stays open with the draft.
   const draft = 'x'.repeat(281)
   await page.getByLabel('Edit post').fill(draft)
   await page.getByRole('button', { name: 'Save' }).click()
-  await expect(editing(page).getByRole('alert')).toContainText('Could not save the post')
+  await expect(editing(page).getByRole('alert')).toContainText('Use at most 280 characters')
   await expect(page.getByLabel('Edit post')).toHaveValue(draft)
 
   await page.getByRole('button', { name: 'Cancel' }).click()

@@ -188,9 +188,11 @@ test.describe('editing from the keyboard', () => {
     await field.fill('x'.repeat(281))
     await page.getByRole('button', { name: 'Save' }).press('Enter')
     const alert = page.getByRole('alert')
-    await expect(alert).toContainText('Could not save the post')
+    await expect(alert).toContainText('Use at most 280 characters')
     await expect(field).toHaveAttribute('aria-invalid', 'true')
-    await expect(field).toHaveAccessibleDescription(/Over the 280-character limit\..*Could not save the post/)
+    await expect(field).toHaveAccessibleDescription(/Over the 280-character limit\..*Use at most 280 characters/)
+    // Refused before sending, and focus is on the draft to fix.
+    await expect(field).toBeFocused()
   })
 })
 

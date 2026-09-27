@@ -131,9 +131,10 @@ test('deletes the account after the password and an explicit confirmation', asyn
 
   const deletion = page.getByRole('region', { name: 'Delete account' })
   await deletion.getByLabel('Password', { exact: true }).fill('not-the-password-123')
-  // The confirmation checkbox is required: nothing is sent without it.
+  // The confirmation checkbox is required: nothing is sent without it, and focus goes to it.
   await deletion.getByRole('button', { name: 'Delete account' }).click()
-  await expect(deletion.getByRole('alert')).toHaveCount(0)
+  await expect(deletion.getByRole('alert')).toHaveText('Confirm that you want to delete the account.')
+  await expect(deletion.getByRole('checkbox')).toBeFocused()
   await deletion.getByRole('checkbox').check()
   await deletion.getByRole('button', { name: 'Delete account' }).click()
   await expect(deletion.getByRole('alert')).toContainText('That password is not correct')

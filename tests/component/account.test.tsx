@@ -74,6 +74,12 @@ describe('ChangePasswordForm', () => {
     await renderInApp(<ChangePasswordForm />, { url: '/account' })
     await change('too short')
     await expect.element(newPassword()).toBeInvalid()
+    await expect.element(newPassword()).toHaveFocus()
+    await expect
+      .element(newPassword())
+      .toHaveAccessibleDescription(
+        'At least 12 characters. Your other sessions will be signed out. Use at least 12 characters.',
+      )
     await expect.element(formOf(changeButton())).toHaveAttribute('aria-busy', 'false')
     expect(calls.data).toEqual([])
   })
@@ -310,11 +316,16 @@ describe('DeleteAccountForm', () => {
     await deletePassword().fill('my password')
     await deleteButton().click()
     await expect.element(deleteConfirm()).toBeInvalid()
+    await expect.element(deleteConfirm()).toHaveFocus()
+    await expect.element(deleteConfirm()).toHaveAccessibleDescription('Confirm that you want to delete the account.')
 
     await deletePassword().clear()
     await deleteConfirm().click()
     await deleteButton().click()
     await expect.element(deletePassword()).toBeInvalid()
+    await expect.element(deletePassword()).toHaveFocus()
+    await expect.element(deletePassword()).toHaveAccessibleDescription('Enter your password.')
+    await expect.element(deleteConfirm()).not.toHaveAttribute('aria-invalid')
     expect(calls.data).toEqual([])
   })
 

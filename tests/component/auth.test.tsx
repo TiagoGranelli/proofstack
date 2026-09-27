@@ -36,6 +36,38 @@ describe('LoginForm', () => {
     await expect.element(signInButton()).toBeEnabled()
   })
 
+  it.each([
+    ['empty fields', '', '', 'Enter your email address.', 'Enter your password.'],
+    ['an address without @', 'author.example.test', 'a password', 'Enter a valid email address.', ''],
+  ])(
+    'sends nothing with %s and says why next to each field, focusing the first',
+    async (_, typed, pass, message, passwordMessage) => {
+      const calls = authCalls('signIn')
+      worker.use(calls.handler)
+      await renderInApp(<LoginForm />, { url: '/login' })
+      await email().fill(typed)
+      await password().fill(pass)
+      await signInButton().click()
+      await expect.element(email()).toHaveAccessibleDescription(message)
+      await expect.element(email()).toHaveAttribute('aria-invalid', 'true')
+      await expect.element(email()).toHaveFocus()
+      await expect.element(password()).toHaveAccessibleDescription(passwordMessage)
+      expect(calls.data).toEqual([])
+    },
+  )
+
+  it('sends the address without the spaces around it', async () => {
+    const calls = authCalls('signIn')
+    worker.use(calls.handler, auth.signIn(held()))
+    await renderInApp(<LoginForm />, { url: '/login' })
+    await email().fill('  author@example.test ')
+    await password().fill(' a password with spaces ')
+    await signInButton().click()
+    await expect
+      .poll(() => calls.data)
+      .toEqual([{ email: 'author@example.test', password: ' a password with spaces ' }])
+  })
+
   it('is busy while signing in', async () => {
     const response = held()
     worker.use(auth.signIn(response))
