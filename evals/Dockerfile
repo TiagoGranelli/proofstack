@@ -11,15 +11,14 @@ RUN ln -sf /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN npm install --global --no-fund --no-audit "$(node -p "require('./package.json').packageManager.split('+')[0]")"
-RUN pnpm install --frozen-lockfile
+# No git yet, so `prepare` (lefthook install) runs below, once the repository exists.
+RUN pnpm install --frozen-lockfile --ignore-scripts
 # evals/ stays out: the hidden checks and reference solutions must not be in the agent's checkout.
 COPY --exclude=evals . .
-# The first run of the migration lint downloads the pinned squawk binary; later runs are offline.
-RUN pnpm check:migrations \
- && git init --quiet --initial-branch=main \
+RUN git init --quiet --initial-branch=main \
  && git config user.name eval \
  && git config user.email eval@example.invalid \
  && git add --all \
  && git commit --quiet -m Baseline \
- && git config core.hooksPath .githooks
+ && pnpm exec lefthook install
 COPY --chmod=755 evals/grade.sh /opt/eval/grade.sh

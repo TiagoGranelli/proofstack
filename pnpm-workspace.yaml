@@ -4,11 +4,13 @@
 allowBuilds:
   # esbuild (via drizzle-kit/tsx) works without its postinstall binary check.
   esbuild: false
+  # lefthook's postinstall runs `lefthook install`, which the `prepare` script already does.
+  lefthook: false
   # msw's postinstall only copies mockServiceWorker.js into `msw.workerDirectory`, which is not set: the
   # component tests serve the worker straight from node_modules (vitest.config.ts).
   msw: false
 engineStrict: true
-# `pnpm add` writes exact versions (package.json pins every dependency; the `guards` gate in scripts/check.ts checks).
+# `pnpm add` writes exact versions (package.json pins every dependency; tests/unit/repo-policy.test.ts checks).
 savePrefix: ''
 
 # Release quarantine: no version younger than one day is resolved. Set explicitly, which makes it strict: a

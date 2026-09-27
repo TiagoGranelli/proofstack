@@ -44,7 +44,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          # The parent commit is the baseline of the `security` gate and the applied-migrations guard.
+          # The parent commit is the baseline of the `security` job and the applied-migrations test (CHECK_BASE_REF).
           fetch-depth: 2
       - uses: ./.github/actions/setup
         with:

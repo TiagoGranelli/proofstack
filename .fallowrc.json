@@ -30,7 +30,7 @@
     // installed but never run.
     "@tanstack/eslint-plugin-query",
     "@tanstack/eslint-plugin-router",
-    // Invoked as a CLI (node_modules/.bin/effect-tsgo) by the `effect` gate in scripts/check.ts.
+    // Invoked as a CLI (`pnpm exec effect-tsgo`) by the `effect` job in lefthook.yml.
     "@effect/tsgo",
     // Invoked as a CLI (`pnpm exec lighthouse`) by scripts/lighthouse.ts.
     "lighthouse",
@@ -61,11 +61,11 @@
     // the integration-tested server code do not have in `check`, so it would only restate cyclomatic complexity.
     "complexity-crap": "off"
   },
-  // The `complexity` gate in scripts/check.ts (`fallow health --complexity`): a function above either ceiling
+  // The `complexity` job in lefthook.yml (`fallow health --complexity`): a function above either ceiling
   // fails. Cognitive 15 is SonarJS's default (nesting and broken flow weigh more than a flat switch); cyclomatic
   // 20 matches oxlint's `complexity` rule. Refactor an offender into named steps; a function that is genuinely
   // irreducible gets a `thresholdOverrides` entry here with its reason, never a higher global ceiling.
-  // The `dupes` gate in scripts/check.ts (`fallow dupes`, JSON report): any clone group (defaults: 50 tokens and
+  // The `dupes` job in lefthook.yml (`fallow dupes --threshold 0.000001`): any clone group (defaults: 50 tokens and
   // 5 lines, `mild` mode) fails. Calibration: outside generated code the repository had two groups (13 lines, in
   // scripts) and now has none, so the gate starts at zero instead of at a percentage that a 20-line copy-paste
   // would not move. A reviewed, deliberate clone goes in `ignoredClones` as `<fingerprint>:<count>` with a comment.

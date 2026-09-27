@@ -1,5 +1,5 @@
-// scripts/route-coverage.ts, the `routes` gate of `pnpm check`: which files are pages, and which pages a spec
-// block reaches.
+// scripts/route-coverage.ts: which files are pages, and which pages a spec block reaches. The last test fails
+// `pnpm check` for a page route without its accessibility coverage.
 import { describe, expect, it } from 'vitest'
 import { pagePath, reachedPaths, routeCoverageProblems } from '../../scripts/route-coverage.ts'
 

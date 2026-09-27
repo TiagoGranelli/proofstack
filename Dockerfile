@@ -17,8 +17,10 @@ RUN npm install --global --no-fund --no-audit \
       "$(node -p "require('./package.json').packageManager.split('+')[0]")" \
  && npm cache clean --force \
  && pnpm --version
+# --ignore-scripts: `prepare` installs the git hooks, and there is no git here. No dependency may run a build
+# script anyway (allowBuilds in pnpm-workspace.yaml).
 RUN --mount=type=cache,id=proofstack-pnpm-store,target=/pnpm-store \
-    pnpm install --frozen-lockfile --store-dir /pnpm-store
+    pnpm install --frozen-lockfile --ignore-scripts --store-dir /pnpm-store
 COPY . .
 # Nitro prerenders /about during the build, which loads the server config. These placeholders only
 # satisfy validation; nothing connects to them and none of them ends up in the output.
