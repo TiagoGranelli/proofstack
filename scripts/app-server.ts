@@ -87,8 +87,8 @@ export const startApp = async (options: {
   databaseUrl: string
   logFile: string
   port?: string
-  /** TRUSTED_IP_HEADER for the server; tests use x-forwarded-for to give every suite its own rate-limit bucket. */
-  trustedIpHeader?: string
+  /** TRUSTED_PROXIES for the server: trusting loopback lets each test suite pick its client IP (X-Forwarded-For). */
+  trustedProxies?: string
 }): Promise<RunningApp> => {
   assertFreshBuild()
   const appPort = options.port ?? (await freePort())
@@ -103,7 +103,7 @@ export const startApp = async (options: {
     PORT: appPort,
     NODE_ENV: 'production',
     BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET || crypto.randomUUID().repeat(2),
-    TRUSTED_IP_HEADER: options.trustedIpHeader ?? '',
+    TRUSTED_PROXIES: options.trustedProxies ?? '',
   }
 
   await resetTestDatabase(databaseUrl)

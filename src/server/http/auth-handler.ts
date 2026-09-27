@@ -1,7 +1,9 @@
 import '@tanstack/react-start/server-only'
+import { getRequestIP } from '@tanstack/react-start/server'
 import { auth } from '../auth.ts'
+import { env } from '../env.ts'
 import { log } from '../log.ts'
-import { CLIENT_IP_HEADER, resolveClientIp } from './client-ip.ts'
+import { forwardedFor } from './forwarded-for.ts'
 
 const BASE_PATH = '/api/auth'
 
@@ -24,10 +26,11 @@ export const handleAuthRequest = async (request: Request): Promise<Response> => 
   if (!pathname.startsWith(`${BASE_PATH}/`)) return notFound()
   if (!ALLOWED.has(`${request.method} ${pathname.slice(BASE_PATH.length)}`)) return notFound()
 
+  // The one place the client IP enters: the TCP peer becomes the last X-Forwarded-For hop (see forwarded-for.ts).
   const headers = new Headers(request.headers)
-  headers.delete(CLIENT_IP_HEADER)
-  const ip = resolveClientIp(request)
-  if (ip) headers.set(CLIENT_IP_HEADER, ip)
+  const chain = forwardedFor(headers.get('x-forwarded-for'), getRequestIP(), env.trustedProxies.length > 0)
+  if (chain) headers.set('x-forwarded-for', chain)
+  else headers.delete('x-forwarded-for')
   // A fresh Request: the incoming one is srvx's Node request wrapper, which undici cannot clone.
   const hasBody = request.method !== 'GET' && request.method !== 'HEAD'
   const forwarded = new Request(request.url, {

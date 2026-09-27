@@ -9,7 +9,7 @@ export default definePlugin(() => {
   if (process.env.NODE_ENV === 'production') captureConsole()
   log('info', 'starting', {
     appUrl: env.appUrl,
-    trustedIpHeader: env.trustedIpHeader ?? null,
+    trustedProxies: env.trustedProxies,
     databasePoolMax: env.databasePoolMax,
   })
 

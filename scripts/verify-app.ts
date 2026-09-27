@@ -50,8 +50,8 @@ try {
     logFile: LOG_FILE,
     port: process.env.VERIFY_PORT,
     // The test process is the "proxy": each suite sends its own X-Forwarded-For and so gets its own sign-in
-    // rate-limit bucket. The server honors the header only from loopback/private peers.
-    trustedIpHeader: 'x-forwarded-for',
+    // rate-limit bucket. The server believes the header only from these peers.
+    trustedProxies: '127.0.0.1/32,::1/128',
   })
   console.log(`app ${app.url} (database ${new URL(databaseUrl).pathname.slice(1)}, log ${LOG_FILE})`)
   try {

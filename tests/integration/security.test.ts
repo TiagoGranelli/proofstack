@@ -195,12 +195,11 @@ describe('sessions', () => {
     expect(attempts.map((res) => res.status)).toEqual([401, 401, 401, 429])
     expect(Number(attempts[3]!.headers.get('x-retry-after'))).toBeLessThanOrEqual(10)
 
-    // The proxy appends the real peer, so only the last X-Forwarded-For value counts: prepending addresses
-    // or sending the internal client-IP header neither resets the bucket nor moves it, even with the right password.
+    // The test process is the trusted proxy and its value is the last hop it vouches for: addresses prepended
+    // in front of it neither reset the bucket nor move it, even with the right password.
     const forgeries: Array<Record<string, string> & { 'x-forwarded-for': string }> = [
       { 'x-forwarded-for': `203.0.113.7, ${client}` },
       { 'x-forwarded-for': `203.0.113.8, 198.18.0.9, ${client}` },
-      { 'x-forwarded-for': client, 'x-proofstack-client-ip': '203.0.113.9' },
     ]
     for (const headers of forgeries)
       expect((await postSignIn({ email, password }, headers)).status, JSON.stringify(headers)).toBe(429)
