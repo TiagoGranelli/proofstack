@@ -22,9 +22,14 @@ requests over a modeled 150 ms RTT, 1.6 Mbps network with 4× CPU. Reading Lante
    every request that finished before the *observed* first paint and has "render-blocking priority";
    `NetworkNode.hasRenderBlockingPriority()` counts a `Script` at `High`, which is the default priority of a
    `modulepreload`. Module evaluation appears in the trace as `v8.evaluateModule` without a URL, so Lantern
-   cannot tell that the scripts ran after the paint. On a local server every preload finishes before the
-   observed paint, so all ~135 KB (brotli) of JavaScript is simulated as blocking FCP and LCP. With Chrome's
-   applied throttling instead, the real FCP of `/` is about 0.53 s.
+   cannot tell that the scripts ran after the paint, although Chrome's own trace marks every preload
+   `renderBlocking: "non_blocking"`. The LCP graph keeps every request before the observed LCP, whatever its
+   priority. On the local edge the race is lost by a few milliseconds: in the trace of `/` the stylesheet
+   arrives at 32 ms, the first layout and paint run at 32–44 ms, the preloads finish at 45–48 ms and the
+   frame is presented (observed FCP) at 50 ms. So all ~135 KB (brotli) of JavaScript is simulated as
+   blocking FCP and LCP. Over a real network the scripts would arrive after that first frame. With Chrome's
+   applied throttling instead of the simulation, the real FCP of `/` is about 0.53 s. This is the Lantern
+   limitation reported in GoogleChrome/lighthouse#16539 (acknowledged, a fix for the LCP side in progress).
 3. **Not the cause:** the head order of TanStack/router#6749. React 19 hoists stylesheets that carry a
    `precedence` (TanStack's `Asset` sets `precedence="default"`), so the HTML already has the stylesheet
    before every `modulepreload`. Neither are "non-critical" preloads: every generated preload is part of the
@@ -64,7 +69,10 @@ Same build, mobile, medians of 3 (docs/operations.md has the table): plain HTTP/
   congestion window on the shared connection; `/dashboard` would need about 13 KB (brotli) less JavaScript
   and `/` about 8 KB less for four (1.35 s). The CPU part of the simulation is the observed main-thread time
   times four, so a busy machine can push single runs to 1.55 s (99). The policy tolerates one such run per
-  page; the `benchmarkIndex` of every run is in `lighthouse-report/summary.json`.
+  page; the `benchmarkIndex` of every run is in `lighthouse-report/summary.json`. Measured: two
+  `--runs=5` gates on a quiet laptop (benchmarkIndex mostly 3500–4600) had 39 of 40 mobile runs at 100
+  each; one taken while other heavy jobs shared the laptop (benchmarkIndex 1559–3000, still above the
+  inconclusive threshold) had 7 of 20 mobile runs at 99 and failed. Run the gate on an otherwise idle machine.
 - `pnpm lighthouse` needs no trust-store changes; the local CA lives in the edge's tmpfs (or a temporary
   `XDG_DATA_HOME` with `EDGE_RUNTIME=binary`) and is gone after the run.
 - `verify:app --edge` still uses plain HTTP; its tests are about headers and client IPs, not the protocol.

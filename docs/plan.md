@@ -88,3 +88,5 @@ the same scripts in the Playwright Ubuntu image next to Postgres [f1b26a9]. `act
 | A Nitro release with nitrojs/nitro#4620 and #4654 | Drop the `bodyLimit` middleware for `maxRequestBodySize`; pass `trustProxy` |
 | A stable Hey API release with the TypeScript-free printer | Leave the `next` snapshot (ADR 0002) |
 | TanStack/router#7473 | Revisit ADR 0004 |
+| TanStack/router#8520 (ours, fixes #8511) | Upgrade; `/` and `/dashboard` then preload `useBaseQuery-*.js`; re-run `pnpm lighthouse` (ADR 0011) |
+| GoogleChrome/lighthouse#16539 | Lantern stops simulating preloaded scripts as blocking the first paint; mobile FCP should drop well below 1.5 s (ADR 0011) |
