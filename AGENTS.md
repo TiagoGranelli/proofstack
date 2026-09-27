@@ -10,284 +10,73 @@ changes to the contract, database, auth, or UI flows.
 | Path | Role | May import |
 | --- | --- | --- |
 | `src/contract/` | Effect `HttpApi` contract: schemas, endpoints, tagged errors, middleware tags | `effect` and other `src/contract` modules only |
-| `src/server/` | Server-only: Effect handlers (`api/`), Better Auth (`auth.ts`), Drizzle (`db/`), repositories, `env.ts`, shutdown `lifecycle.ts` | contract, sdk |
+| `src/server/` | Server-only: Effect handlers (`api/`), Better Auth (`auth.ts`), Drizzle (`db/`), repositories, `env.ts`, shutdown `lifecycle.ts`. Read [src/server/AGENTS.md](src/server/AGENTS.md) before changing it | contract, sdk |
 | `src/sdk/` | Hey API client and TanStack Query options (generated) | nothing |
 | `src/lib/` | Shared plumbing: `api-client.ts` (isomorphic SDK client), `api-error.ts`, `utils.ts`. `*.functions.ts` are server functions (`createServerFn`): `session.functions.ts` (route guards), `auth.functions.ts` (every account action) | contract, sdk. The server adapters (`*.functions.ts`, `api-client.ts`) also import server and lib |
 | `src/components/` | Shared UI that knows no feature: `ui/` (shadcn primitives, Radix, style `radix-nova`), `errors/` (router error and not-found states, `SectionErrorBoundary`, `ApiErrorAlert`), `layouts/` (site header, pending state) | lib, contract, sdk |
 | `src/features/<name>/` | One feature each (`posts`, `auth`): `api/` (query options and mutation hooks), `components/`, `utils/` | components, lib, server adapters, contract, sdk. Never another feature |
 | `src/routes/`, `router.tsx`, `start.ts`, `styles/` | The app layer. Page routes define the route (loader, guards, head) and compose features. `api/$.ts` hands requests to the Effect API; `api/auth/$.ts` to Better Auth | Page routes: features, components, lib, server adapters, contract, sdk. `api/**` is a server adapter: server, contract, sdk, lib |
 
-- Every module in `src/server/` starts with `import '@tanstack/react-start/server-only'`. The exceptions
-  are `nitro/` plugins and `db/schema/`, which drizzle-kit and Better Auth's CLI load outside Start.
 - UI and page routes reach data only through the SDK (`#/sdk/...`) or a server function in
-  `#/lib/*.functions.ts`. They never import `src/server`, `drizzle-orm`, `pg`, or `better-auth` (its client
-  included) directly: account actions are server functions that run Better Auth's router in-process
-  (`callAuthEndpoint` in `src/server/http/auth-handler.ts`), so rate limits and the endpoint allowlist apply.
-  Only the server adapters import `src/server`: `src/routes/api/**`, `src/lib/*.functions.ts`,
-  `src/lib/api-client.ts`, `src/lib/app-origin.ts` (the validated APP_URL for `src/start.ts`, through
-  `createServerOnlyFn`) and `src/lib/server-function-errors.ts`, the global function middleware
-  (Fallow zone `server-adapters`).
-- SSR loaders call the same SDK. On the server it dispatches in-process to the Effect handler
-  (`src/server/api/in-process-client.ts`), so every business operation goes through the contract.
-- Authorization happens in the Effect `Authentication` middleware. The `_authed` route guard is only a UX
-  redirect.
+  `#/lib/*.functions.ts`. `src/server`, `drizzle-orm`, `pg` and `better-auth` (its client included) stay behind
+  those: account actions are server functions that run Better Auth's router in-process (`callAuthEndpoint`),
+  so rate limits and the endpoint allowlist apply. Authorization happens in the Effect `Authentication`
+  middleware; the `_authed` route guard is only a UX redirect.
 - Boundaries are enforced by Fallow zones in `.fallowrc.json` and by `no-restricted-imports` in
   `.oxlintrc.json`. A new top-level `src/` directory needs a zone before it can be used.
 - Imports use the `#/` alias (`package.json#imports`) with explicit `.ts` or `.tsx` extensions.
 
-### Frontend structure
+### Where code goes
 
-The UI follows [Bulletproof React](https://github.com/alan2207/bulletproof-react), with TanStack Start's
-`src/routes/` as the app layer.
+The UI follows [Bulletproof React](https://github.com/alan2207/bulletproof-react), with `src/routes/` as the app
+layer. Imports flow one way: `components` → `features` → app (`routes/`).
 
-- Imports flow one way: `components` → `features` → app (`routes/`). A feature never imports another
-  feature, not even `import type` (Fallow `autoDiscover` makes each `src/features/<name>` its own zone).
-  When two features need the same code, move it down to `components/` or `lib/`; when a page needs two
-  features, compose them in the route.
-- Where new code goes:
-  - Data access for a feature: `features/<name>/api/<verb>-<noun>.ts`. Queries export
-    `get<Noun>QueryOptions()` bound to `client: apiClient()` over `#/sdk/@tanstack/react-query.gen.ts`.
-    Mutations export a `use<Verb><Noun>({ mutationConfig })` hook that owns cache updates and invalidation
-    and runs the caller's `onSuccess` before invalidating (`useCreatePost`, `useSignIn`, `useSignOut`). Where
-    the user goes afterwards is the caller's `onSuccess`, never the hook's. Components never spread a generated
-    `*Mutation()` themselves, and component files export components, not hooks. Cache helpers shared by a
-    feature's hooks go in `api/<noun>-cache.ts`.
-  - Feature UI: `features/<name>/components/`; pure helpers: `features/<name>/utils/`.
-  - UI shared by several features and free of feature knowledge: `components/` (`ui/`, `errors/`,
-    `layouts/`). shadcn primitives go in `components/ui/` through `pnpm exec shadcn add`.
-  - Route files hold the route definition (loader, `beforeLoad`, `head`, `headers`, `validateSearch`) and a
-    small page component that composes features. Forms, buttons with behavior and lists live in features.
-  - Errors: a route with a loader sets `errorComponent` to `RouteError` with its own `title` and `action`
-    (`/dashboard`, `/account`); the router's default covers the rest. Page sections that can fail on their
-    own (a list next to a form) are wrapped in `SectionErrorBoundary`, and a section that reads a suspense
-    query reads it inside the boundary (`MyPostList`), not in the page component.
-- Naming: files and folders are kebab-case (Oxlint `unicorn/filename-case`; folders by the `guards` gate
-  in `scripts/check.ts`). TanStack route names keep their prefixes (`__root.tsx`, `_authed.tsx`, `$.ts`,
-  `-private/`, `(group)/`). `src/sdk/` is generated and exempt.
-- No barrel files (`index.ts` re-exporting a folder): import the file that defines the symbol (Oxlint
-  `oxc/no-barrel-file`). The only exception is `src/server/db/schema/index.ts`, Drizzle's schema entry.
+- Feature code: `src/features/<name>/`. Read [src/features/AGENTS.md](src/features/AGENTS.md) before adding or
+  changing one: it holds the data-access and mutation-hook conventions.
+- UI shared by several features and free of feature knowledge: `src/components/` (`ui/`, `errors/`,
+  `layouts/`); shadcn primitives go in `components/ui/` through `pnpm exec shadcn add`.
+- Route files hold the route definition and a small page component that composes features (skill `add-page`).
+- Naming: files and folders are kebab-case (Oxlint `unicorn/filename-case`; folders by the `folder-name`
+  guard). TanStack route names keep their prefixes (`__root.tsx`, `_authed.tsx`, `$.ts`, `-private/`,
+  `(group)/`). `src/sdk/` is generated and exempt.
+- Import the file that defines a symbol. Barrel files (`index.ts` re-exporting a folder) fail Oxlint
+  `oxc/no-barrel-file`; the only one is `src/server/db/schema/index.ts`, Drizzle's schema entry.
 
 ## Workflows
 
-**API change.** Edit `src/contract/*` and `src/server/api/handlers.ts`. Run `pnpm codegen` to regenerate
-`openapi.json` and `src/sdk/`. Commit all three together. `pnpm check:drift contract` must pass.
+Each multi-step workflow is a project skill in `.agents/skills/` (linked into `.claude/skills/`). Load it first:
 
-**Database change.** Edit `src/server/db/schema/*.ts`. Run `pnpm db:generate --name <slug>`, review the new
-SQL in `drizzle/` (a type change that must convert data gets its `USING` clause there, as in
-`0004_auth_timestamptz.sql`), apply it with `pnpm db:migrate` (after `pnpm db:up`), and run
-`pnpm check:drift migrations` and `pnpm check:migrations` (squawk: no statement that blocks a busy table; an
-index on a large table is built by hand `CONCURRENTLY`, see
-[docs/operations.md](docs/operations.md#migration-safety)).
+| Task | Skill |
+| --- | --- |
+| Endpoint, schema or typed error in `src/contract` | `api-change` |
+| Table, column, index or migration | `database-change` |
+| A feature across database, API and UI | `add-feature` |
+| Account action, Better Auth config, creating users | `auth-change` |
+| New page, form or UI state | `add-page` |
+| Any dependency bump, above all the pre-release pins | `upgrade-prerelease-deps` |
 
-**Feature checklist.** A new feature usually touches every layer, in this order:
-
-1. Schema in `src/server/db/schema/`, then `pnpm db:generate --name <slug>` and `pnpm db:migrate`.
-2. Contract in `src/contract/`: schemas, endpoints, tagged errors. Constants the UI also needs (limits,
-   lengths) go in `src/contract/limits.ts`, which stays free of Effect so client bundles do not pull in
-   the schema runtime.
-3. Repository (for example `src/server/posts/repo.ts`) and handler in `src/server/api/handlers.ts`.
-4. `pnpm codegen`.
-5. Map every new error tag to a message in `src/lib/api-error.ts`. Its error union is derived from the
-   generated SDK, so `pnpm typecheck` fails until the switch in `describeApiError` handles the new tag.
-6. UI in `src/features/<name>/` (see [Frontend structure](#frontend-structure)) and routes in `src/routes/`.
-7. Tests, cheapest layer first (see [Tests](#tests)): handler branches in `tests/api/`, UI states in
-   `tests/component/`, then `tests/integration/` and `tests/e2e/` (each new page or UI state gets an entry
-   in `STATES` in `tests/e2e/a11y.spec.ts`).
-
-**Auth config change** (plugins, user fields, rate-limit storage). `src/server/db/schema/auth.ts` is
-application code: edit it by hand (timestamps stay `timestamptz`), then follow the database workflow.
-`pnpm auth:check` (Better Auth's `auth check schema`, also run by `pnpm check`) fails until every table,
-column, nullability and default the configuration writes exists. To see what Better Auth would generate, run
-`pnpm exec auth generate --config src/server/auth.ts --output /tmp/auth-schema.ts -y` and port the
-difference; never write its output over `auth.ts`.
-
-**Users.** Run `pnpm user:create <email> <name>`. The password comes from `PROOFSTACK_USER_PASSWORD`,
-otherwise from stdin: a hidden prompt (asked twice) in a terminal, or the whole input of a pipe. The account
-is created verified. Public sign-up is `AUTH_SIGN_UP=closed` by default
-([ADR 0003](docs/decisions/0003-sign-up-policy.md)).
-
-**Auth endpoint.** A new account action is a server function in `src/lib/auth.functions.ts` calling
-`callAuthEndpoint`, plus its `METHOD /path` in `EXPOSED` (`src/server/http/auth-endpoints.ts`; not in
-`HTTP_ENDPOINTS`, which `/api/auth/*` answers from outside), a hook in
-`src/features/auth/api/`, and a message for any new Better Auth error code in
-`src/features/auth/utils/describe-auth-failure.ts`. Mail goes through `authMail` (`src/server/mail/`).
-
-**First setup.** Run `pnpm install && pnpm bootstrap`. This creates `.env` with a secret, starts
-Postgres and Mailpit (`pnpm mail:up`, the local inbox for account emails), and applies migrations.
+**First setup.** Run `pnpm install && pnpm bootstrap`. This creates `.env` with a secret, starts Postgres and
+Mailpit (`pnpm mail:up`, the local inbox for account emails), and applies migrations.
 
 ## Verify
 
+Read [tests/AGENTS.md](tests/AGENTS.md) before you write or change a test: it says which layer a behavior belongs
+in and how each layer's harness works.
+
 | Command | Covers |
 | --- | --- |
-| `pnpm check` | `format:check`, `lint` (type-aware Oxlint with the `pedantic` category and TanStack Query/Router rules; zero warnings: `--deny-warnings`, every rule is error or off), `typecheck`, `effect` (Effect language-service diagnostics, `effect-tsgo`), `deadcode` (Fallow with `--fail-on-issues`: unused files, exports, types and dependencies, zones), `complexity` (Fallow: cognitive 15, cyclomatic 20 per function), `dupes` (any clone group outside generated code and tests), `security` (new security-sink candidates in `src/` since `HEAD`), `tests` (`pnpm test:fast`: Vitest projects `unit`, `api` and `component` with the coverage gate, see [Tests](#tests)), the database-free drift checks (contract, migrations, auth), `migration-lint` (`pnpm check:migrations`: squawk over the migrations after 0004), `licenses` (`pnpm licenses:check`: every production dependency under an allowed license), `routes` (every page route has an axe state, a landmark snapshot and a tab-order row: `scripts/route-coverage.ts`) and `guards` (see [Gates](#gates-and-escape-hatches)). No database, no build, about 12 s. Needs Playwright's Chromium, and the network once to download the pinned squawk binary into `~/.cache/proofstack`. Run it before every hand-off; the pre-commit hook runs it on what you commit. |
-| `pnpm test:unit\|test:api\|test:component [filter ...]` | One fast layer (see [Tests](#tests)); `pnpm test:fast` runs all three with coverage |
-| `pnpm test:db [filter ...]` | The `db` layer against a fresh `proofstack_db_<pid>_test` database next to `DATABASE_URL` (dropped afterwards; `KEEP_TEST_DB=1` keeps it). Needs Postgres, no build |
+| `pnpm check` | Every gate that needs no database and no build (format, type-aware lint, typecheck, Effect diagnostics, dead code, complexity, duplication, security sinks, unit/api/component tests with coverage, drift, migration lint, licenses, route a11y coverage, guards), about 12 s. Run it before every hand-off; the pre-commit hook runs it on what you commit |
+| `pnpm test:unit\|test:api\|test:component [filter ...]` | One fast layer; `pnpm test:fast` runs all three with coverage |
+| `pnpm test:db [filter ...]` | The `db` layer on a throwaway Postgres database. Needs Postgres, no build |
 | `pnpm format`, `pnpm lint:fix` | Autofixes |
-| `pnpm check:drift [contract\|migrations\|auth\|database]` | Checks that generated files match their sources and that the auth schema holds what Better Auth writes; `database` needs Postgres |
-| `pnpm build && pnpm verify:app [--no-db] [--no-e2e] [--no-integration] [--edge] [filter ...]` | Runs the `db` layer, then starts two built servers (open and closed sign-up) against a fresh per-run `proofstack_<purpose>_<pid>_test` database (dropped afterwards) and runs Vitest (`tests/integration`) and Playwright (`tests/e2e`, projects from `PW_PROJECTS`); app logs go to `test-results/app-server*.log`. After a full run (every runner, no filter) it runs the api layer again with its recorder and the contract-coverage check (see [Tests](#tests)). A filter that matches no test is an error; a runner that no filter matches is skipped. Needs Mailpit (`pnpm mail:up`). `--edge` puts the Caddy edge in front of the open one. Refuses a stale `.output` |
-| `pnpm build && pnpm lighthouse [--runs=3] [--page=<name>] [--form-factor=mobile\|desktop] [--direct] [--edge-protocol=h2\|h1\|http]` | Lighthouse gate on the built app behind the Caddy edge over HTTPS and HTTP/2, as in production (needs Docker); see the policy below and [ADR 0011](docs/decisions/0011-lighthouse-over-https-http2.md) |
-| `pnpm deps:check` | Report only, always exit 0: `pnpm outdated` (the release quarantine applies) and, for packages pinned from another dist-tag (`effect` and `@effect/vitest` on `rc`, `@hey-api/openapi-ts` on `next`), the pinned version against that tag. Needs the npm registry |
-| `pnpm audit:check` | Vulnerability gate over production and development packages (`pnpm audit`): fails on a high or critical advisory unless `security/audit-allowlist.json` accepts it (reason, expiry), and on an expired or stale entry. Needs the npm registry; CI job `supply-chain` |
-| `pnpm images:check`, `pnpm images:sync` | Report only: newer tags and rebuilt digests for every image in `scripts/images.ts` (needs the registries). `images:sync` copies the pins from `scripts/images.ts` into compose.yaml, ci.yml and the Dockerfile |
-| `pnpm sbom:release [--image=<ref>] [--no-image]` | CycloneDX SBOMs in `sbom/` for a release: production npm dependencies, and the production image with syft (Docker). Not a gate |
-| `pnpm ci:local [job ...]` | The CI jobs (`workflows secrets static supply-chain drift build verify lighthouse docker`, default all) as `pnpm ci:<job>` scripts in the Playwright Ubuntu container next to Postgres and Mailpit, all five browser projects included. Needs Docker. See [docs/operations.md](docs/operations.md#ci-and-local-ci) |
+| `pnpm check:drift [contract\|migrations\|auth\|database]` | Generated files match their sources, and the auth schema holds what Better Auth writes; `database` needs Postgres |
+| `pnpm build && pnpm verify:app [filter ...]` | The built app against a throwaway database: `db`, integration and E2E layers. Needs Postgres and Mailpit (`pnpm mail:up`) |
+| `pnpm build && pnpm lighthouse [--page=<name>]` | The Lighthouse gate behind the Caddy edge (needs Docker) |
+| `pnpm ci:local [job ...]` | The CI jobs in the Playwright Ubuntu container (needs Docker) |
 
-`pnpm test` (Vitest project `integration`) and `pnpm test:e2e` expect an app that is already running at
-`APP_URL`; both also need `CLOSED_APP_URL` and `MAILPIT_URL`, the integration tests `TEST_USER_*`, and E2E
-the app's own environment (`DATABASE_URL` and the rest, to create its authors). `verify:app` provides all
-of it.
-
-### Gates and escape hatches
-
-Fix what a gate reports; every failure message says how. `pnpm install` activates the pre-commit hook
-(`prepare` sets `core.hooksPath` unless the clone already has one); `git commit --no-verify` skips it, and CI runs the same gates anyway. An
-exception is always a visible edit next to its reason, and `.github/CODEOWNERS` routes the gate files to review:
-
-- **Lint:** a rule that is wrong for one line takes `// oxlint-disable-next-line <rule>` under a comment line
-  saying why (the `bare-disable` guard rejects one without; a stale directive fails). `@ts-expect-error` needs a
-  reason of 10 or more characters; `@ts-ignore` and `@ts-nocheck` are banned. Turned-off rules are commented in
-  `.oxlintrc.json`.
-- **effect:** the JSDoc tag or `@effect-diagnostics` comment the diagnostic names, with the reason (see
-  `Authentication` in `src/contract/middleware.ts`).
-- **complexity:** split the function into named steps. A function that is irreducible gets a
-  `health.thresholdOverrides` entry in `.fallowrc.json` with its reason. **dupes:** extract the shared code; a
-  deliberate clone goes in `duplicates.ignoredClones`. **security:** keep untrusted input away from the sink; a
-  reviewed false positive gets `// fallow-ignore-next-line security-sink` with the reason.
-- **guards** (`scripts/check.ts`): `focused-test` (`.only`, `.fixme`, `.todo`), `skipped-test` (a skip without
-  a condition; `test.skip(({ isMobile }) => isMobile, 'reason')` is fine), `test-sleep` (fixed waits in
-  component, integration and E2E tests), `tautology` (`expect(<literal>)`), `double-cast` (`as unknown as` in
-  `src`) and `cors` accept `// guards-allow <guard>: <reason>` on the line above. The others use allowlists in
-  `scripts/check.ts`: `vite-env` (`PUBLIC_VITE_ENV`), `openapi-security` (`PUBLIC_OPERATIONS`: operations
-  without a session), `server-routes` (`SERVER_ROUTES`: the only Start server routes). `exact-versions`,
-  `server-fn-validator` (Effect Schema only), `applied-migrations` (migrations in the journal at `HEAD` never
-  change; on CI, at `HEAD^`) and `bare-disable` have no exception.
-- **migration-lint:** make the migration safe, or waive one statement with `-- squawk-ignore <rule>` under a
-  comment line giving the reason ([docs/operations.md](docs/operations.md#migration-safety)). **licenses:** an
-  acceptable license goes in `ALLOWED` in `scripts/licenses.ts`, one exact version in `EXCEPTIONS`, each with the
-  reason. **audit:check** and the image scan: `security/*-allowlist.json` entries need a reason and an expiry.
-
-**Lighthouse policy** (`POLICY` in `scripts/lighthouse.ts`): per page and form factor, accessibility, best
-practices and SEO must score 100 on every run; performance needs a median of at least 99, at most one run
-below 100 and none below 95; the median metrics must stay within the budgets. `agentic-browsing` is
-reported but not gated. SEO is not gated on `/login` and `/dashboard` (noindex). Exit 2 means
-inconclusive, not failed: a run's `benchmarkIndex` was below 1000 or Lighthouse warned about a slow CPU
-(each run's value and warnings are in `lighthouse-report/summary.json`). CI runs `pnpm lighthouse --runs=5`.
-
-## Tests
-
-Test each behavior in the cheapest layer that can observe it:
-
-| Layer | Where | Run by | For |
-| --- | --- | --- | --- |
-| unit | `tests/unit` | `check` | Pure functions, examples plus fast-check properties. Modules in `COVERAGE_GATE` (`vitest.config.ts`) need 100% lines and branches |
-| api | `tests/api` | `check` | Effect handler branching through the typed client: in-memory `PostsRepo`, fake session store, no database |
-| component | `tests/component` | `check` | React components in Chromium (Vitest browser mode), network mocked by MSW: pending and disabled states, every error branch, limits, focus |
-| db | `tests/db` | `verify:app`, `test:db` | Server modules on a real Postgres without a build: the rate-limit storage, and the query budget of every repository method |
-| integration | `tests/integration` | `verify:app` | The built app over HTTP: SQL, Better Auth, CSRF, headers, rate limits |
-| e2e | `tests/e2e` | `verify:app` | Browser flows, axe on every page state, keyboard and focus, ARIA landmark snapshots |
-
-- Install the test browsers once: `pnpm exec playwright install chromium firefox`. `verify:app`,
-  `lighthouse` and the `component` project use `CHROME_PATH` instead of Playwright's Chromium when it is set.
-  E2E runs every flow on the Playwright projects `chromium`, `firefox`, `webkit`, `Pixel 7` and `iPhone 15`;
-  outside CI the default is `chromium,firefox`, because WebKit needs Ubuntu's libraries. `PW_PROJECTS=all`
-  (or a list) chooses; `pnpm ci:local verify` runs all five.
-- **Coverage.** `pnpm test:fast` writes `coverage/index.html` for all of `src` and fails unless every module in
-  `COVERAGE_GATE` is fully covered (lines and branches) and the whole of `src` stays above `COVERAGE_FLOOR`, set
-  a little under the measured totals. Add security-critical and fully tested modules to the gate with their
-  tests; raise the floor when coverage grows.
-- **Properties.** Parsers, validators and anything security-relevant get fast-check properties next to their
-  examples (`import * as fc from 'fast-check'`): round trips, arbitrary input never throws, invariants such as
-  "the TCP peer is the last hop" or "a returned redirect is accepted as it is". When a property finds a case,
-  add it to the examples too, so the failure stays named.
-- **api.** `tests/api/harness.ts`: `apiLayer({ databaseDown?, clockStepMicros? })` provides the real handlers,
-  `RequestValidation` and `WriteRateLimit` over a fresh in-memory repository and rate-limit store (the Postgres
-  store's rule on a virtual clock, one second per request, so `retryAfter` is computed, not a constant);
-  `clientAs('alice' | 'bob' | 'forged' | 'none')` is a typed client with that session (one client per identity:
-  the client captures its middleware). The typed client refuses to encode invalid payloads, so send those
-  through `webHandler(options?)` as raw `Request`s. `database-down.test.ts` sends every contract operation with
-  the database down and expects its documented failure, so a new endpoint is checked there without edits.
-  The project sets dummy env values (`vitest.config.ts`) because `src/server/env.ts` validates at import;
-  nothing connects to them.
-- **db.** `tests/db` runs against a real, migrated database of its own (`tests/db/global-setup.ts`). A new
-  repository method gets a query budget in `tests/db/query-budget.test.ts`: `withBudget(name, n, call)`
-  counts the statements it sends through a Drizzle logger injected as `Database`, and a list method must send
-  as many for 1 row as for 50 (N+1 fails with the statements listed). A server path that reads rows through
-  Better Auth is counted at pg's `Client` with `statementsOf` (tests/db/helpers.ts).
-- **Contract coverage.** After a full `verify:app`, `scripts/contract-coverage.ts` checks that every
-  operation × status in `openapi.json` was answered by some test (the app servers' request logs, plus the
-  api layer through the harness's recorder, `CONTRACT_OBSERVATIONS`) and that no operation answered a status it
-  does not declare. A new declared status needs a test that provokes it; a gap that cannot be tested goes in
-  `tests/contract-coverage-allowlist.json` with its reason (today: the CSRF 403 and the empty 500 of a defect,
-  which the API description documents once). Stale entries fail.
-- **component.** Render with `renderInApp(ui, { url })` from `tests/component/test-utils.tsx` (memory
-  router with the app's paths, fresh `QueryClient`; returns `router` and `queryClient`); `route: { path,
-  route }` mounts a real `src/routes` file route there (search validation, loader, component). Mock the
-  network per test with `worker.use(...)` from `tests/component/api-mocks.ts`: `api.<operation>({ body })`
-  (handlers generated from `openapi.json` by Hey API's `msw` plugin into `src/sdk/msw.gen.ts`),
-  `apiError(operation, status, body)` (only statuses and bodies the operation declares), `apiFailure`
-  (network error or non-JSON body), `held()` (a response that waits, for pending states), and
-  `authFunction(name, answer)` with the shortcuts `auth.signIn`/`auth.signOut` for the account server
-  functions (outside the contract; `answer` is their typed `AuthOutcome`, `'network'`, `'thrown'` or
-  `held()`, or `{ ...held(), answer }` to fail after release); `authCalls(name)` records the `data` each call
-  sends. A button whose action is pending is `aria-disabled` and ignores presses, never `disabled` (a disabled
-  button loses focus when the browser renders); `pressAndKeepFocus(button)` (test-utils.tsx) presses it with
-  the keyboard and checks focus stays after two rendered frames. A test that starts a request must wait for its
-  handler (for example `authCalls`) before it ends. A request to `/api` or `/_serverFn`
-  without a handler fails the test. `#/lib/api-client.ts` is aliased to its browser branch
-  (`tests/component/stubs/api-client.ts`), and `#/lib/auth.functions.ts` to a stub that posts each call to
-  `/_serverFn/auth/<name>` (`tests/component/stubs/auth-functions.ts`).
-- **Accessibility.** `expectAccessible(page, '<state>')` (`tests/e2e/support/a11y.ts`) fails on any axe
-  violation of WCAG 2.0/2.1/2.2 A and AA or best practices. A new page or UI state is one entry in `STATES`
-  in `tests/e2e/a11y.spec.ts`, a landmark snapshot in its `landmarks` block, and, if it has controls, a row
-  in the tab-order table of `tests/e2e/keyboard.spec.ts` (the `routes` gate of `pnpm check` fails for a page
-  route without all three; it recognizes `visit(page, '/path')` and the helpers listed in
-  `scripts/route-coverage.ts`) (`tabOrder` records every Tab stop, its accessible
-  name and visible focus, and fails on a focus trap: `tabThrough` walks until a temporary sentinel after the
-  last control, because what a browser does past the last control differs by engine).
-  `navigateWithApiResponse(page, '/api/posts' | '/api/me/posts', response)` (`tests/e2e/support/app.ts`)
-  reaches empty and failure states by answering the browser's API call on a client-side navigation; build
-  list bodies with `lastPage(...)` so they match the contract's `PostPage`.
-- **Flakiness.** CI retries a failed Playwright test once but fails the run if it then passes
-  (`failOnFlakyTests`): fix the cause. Locate fields by role and exact name (`getByRole('textbox', { name:
-  'Email', exact: true })`); a bare `getByLabel('Email')` also matches "Email confirmed". Mutation testing is
-  not a gate yet: StrykerJS's Vitest runner skips nested tests on Vitest 5 (docs/plan.md, "Mutation testing").
-- **E2E isolation.** Specs run in parallel on one database and never depend on each other's data. Import
-  `test` from `tests/e2e/support/app.ts`: every worker gets its own `author` (created verified through
-  `scripts/create-user.ts`) and every browser and API context its own client IP (sign-in rate limit).
-  Flows that change or delete an account use a throwaway one instead: `createAccount` from
-  `tests/e2e/support/accounts.ts` (created verified the same way), and a
-  second signed-in browser comes from `newClient`, which gets its own client IP too.
-  Find your posts by a unique body. Data several specs need is written once by the `seed` project
-  (`tests/e2e/seed.setup.ts`), which runs before the browser projects; today that is more than a page of
-  posts by an author only `posts-pagination.spec.ts` reads (`PAGINATED_AUTHOR`). Never publish many posts
-  from a spec: a post published moments ago must stay on the first page of `/`.
-- `verify:app` needs Mailpit (`pnpm mail:up`; `MAILPIT_SMTP_PORT`/`MAILPIT_HTTP_PORT` from `.env`). It
-  starts two servers on one database per run: `APP_URL` with `AUTH_SIGN_UP=open` and loopback in
-  `TRUSTED_PROXIES`, and `CLOSED_APP_URL` with the default closed sign-up and a proxy list that excludes the
-  test process. The integration tests and then the E2E tests run against them, so both suites see each
-  other's data. Only `auth-client-ip.test.ts` signs in on `CLOSED_APP_URL`: every request there shares the
-  bucket of 127.0.0.1.
-- Integration files run in parallel against the same two test users. Each file creates its own client IP
-  sequence with `clientIps('<prefix>')` from `tests/integration/helpers.ts` (for example `192.0.2`), sent
-  as `X-Forwarded-For`, so each file has its own sign-in rate-limit buckets. Use a prefix no other file
-  uses.
-- `/api/auth/*` only signs in, signs out and reads the session. Account actions in integration tests go
-  through the server functions over HTTP, `callAuthFunction(name, { data, headers })` from
-  `tests/integration/server-functions.ts`, on a throwaway account from `createUser(label)` (helpers.ts) when
-  the test changes or deletes it.
-- Assert only on posts the test created. An invariant over all of one author's posts (for example, an
-  empty list) must be owned by a single file, because other files add posts for the same author
-  concurrently.
-- State-changing requests must send `Origin: <APP_URL>`. Without it, the CSRF middleware in
-  `src/start.ts` answers 403 before authentication runs, so a test that expects 401 gets 403.
-  `sdkClient(cookie)` and `postSignIn` send it; the anonymous `sdkClient()` does not.
-- Environment for `verify:app` (`ALLOW_STALE_BUILD` also applies to `lighthouse`):
-  - `TEST_DATABASE_URL`: use this fixed `*_test` database. It is reset (dropped and recreated) at the
-    start and not dropped afterwards.
-  - `KEEP_TEST_DB=1`: keep the per-run database after the run.
-  - `ALLOW_STALE_BUILD=1`: skip the check that `.output` is newer than its sources (CI tests a downloaded
-    build).
-  - `VERIFY_PORT`: fixed port for the app (default: a free port).
+Every gate's failure message says how to fix it. What each gate covers, how to make a reviewed exception, the
+Lighthouse policy and the less common commands (`deps:check`, `audit:check`, `images:*`, `sbom:release`) are in
+[docs/agents/gates.md](docs/agents/gates.md).
 
 ## Memory safety
 
@@ -306,80 +95,45 @@ A misconfigured lint once reached 17 GB and crashed the maintainer's laptop.
 
 ## Generated and vendored files
 
-Regenerate these files; never edit them by hand:
+Regenerate these files; edit their sources instead.
 
 - `src/sdk/**` and `openapi.json`: `pnpm codegen`
 - `src/routeTree.gen.ts`: `pnpm dev` or `pnpm build`
 - `drizzle/**`: `pnpm db:generate` (only the new SQL file may be adjusted by hand, before it is committed; the
   `applied-migrations` guard rejects edits to migrations already in the journal)
-- `.agents/skills/**`, `.claude/skills/**`, and `skills-lock.json`: the `skills` CLI
+- `.agents/skills/shadcn/**` and `skills-lock.json`: the `skills` CLI ([docs/agents/skills.md](docs/agents/skills.md)).
+  The other skills in `.agents/skills/` are this repo's own and are edited by hand.
 - `repos/**`: `scripts/vendor-source.ts`
 
 ## Version policy
 
-- `package.json` uses exact versions (`savePrefix: ''`; the `exact-versions` guard checks), and `pnpm-lock.yaml` is
-  committed with them. pnpm 12 blocks dependency build scripts (`allowBuilds`) and quarantines fresh releases
-  (`minimumReleaseAge`, one day, strict: a younger version fails the install instead of being excluded
-  silently). Each exception names an exact version and its reason in `pnpm-workspace.yaml`.
-  `trustPolicy: no-downgrade` fails a version published with weaker provenance than an earlier one, and
-  `strictPeerDependencies` an unmet peer. Every frozen install checks the lockfile against these policies.
-- A vulnerable transitive package gets an exact `overrides` entry in `pnpm-workspace.yaml` naming the advisory
-  (and an `ignoreDependencyOverrides` entry in `.fallowrc.json`, since the overridden version is no longer in
-  the lockfile). What cannot be fixed goes in `security/audit-allowlist.json` with a reason and an expiry.
-  Dependabot security alerts do not work with pnpm 12 lockfiles; `pnpm audit:check` is the gate.
-- Pre-release packages, pinned exactly: `effect` and `@effect/vitest` (4.0.0 RCs from the `rc` dist-tag;
-  npm `latest` is v3), `nitro` (its npm `latest` is a `-beta` build), `@tanstack/react-start` (npm `latest`
-  is a 1.x release, but Start's docs still call it a Release Candidate), `oxfmt` (0.x, announced as beta) and
-  `@hey-api/openapi-ts` (a `next` snapshot, see "TypeScript" below).
-  Upgrade each in its own PR, with `check`, `check:drift`, and `verify:app` passing. `pnpm deps:check`
-  reports what is newer.
-- Skills are pinned to a commit (`skills-lock.json`). Docs shipped inside packages are pinned by the
-  lockfile.
+Dependencies are pinned exactly, fresh releases are quarantined for a day, and the pre-release packages
+(`effect`, `@effect/vitest`, `nitro`, `@tanstack/react-start`, `oxfmt`, `@hey-api/openapi-ts`) are upgraded one
+per PR with `check`, `check:drift` and `verify:app` passing. The `upgrade-prerelease-deps` skill holds the full
+policy; load it before changing `package.json` or `pnpm-workspace.yaml`.
 
 ## Sharp edges
 
-- **Effect v4 RC.** `effect@latest` on npm is still v3, so most examples on the web use the wrong API.
-  Check against `node_modules/effect`. Starting with the next RC after `4.0.0-rc.117`,
-  `effect/unstable/httpapi` becomes `effect/http-api` and `effect/unstable/http` becomes `effect/http`,
-  with no compatibility exports (Effect PRs #8354 and #8365). `effect/unstable/*` imports are confined to
-  `src/contract`, `src/server/api`, and `scripts/openapi.ts`; when upgrading, rewrite them there, run
-  `pnpm codegen`, and review the `openapi.json` diff. Core `effect` is also imported by `src/server/posts`
-  and `src/server/db/client.ts`.
-- **TypeScript.** The project has one TypeScript, 7.0.2 (no JS compiler API). Hey API is pinned to the
-  `next` snapshot `0.0.0-next-20260824173136` because the stable 0.99.0 needs that API and crashes on TS 7.
-  Do not "upgrade" it to 0.99.0; Dependabot ignores it ([ADR 0002](docs/decisions/0002-typescript-7.md)).
-  `scripts/*.ts` run through Node's type stripping, so use erasable syntax only (no enums, namespaces,
-  or constructor parameter properties). Effect's language service for TS 7 is `@effect/tsgo` (0.x): the tsconfig
-  plugin serves editors and `effect-tsgo diagnostics` is the `effect` gate; never run `effect-tsgo patch`. The
-  TanStack ESLint plugins (Oxlint `jsPlugins`) declare a TypeScript peer below 7; their rules use no type
-  information and run fine.
-- **Prerender.** Static routes go in `nitro({ prerender: { routes } })` in `vite.config.ts`: Nitro, the
-  deployment layer, prerenders and serves them, and its `prerender:generate` hook writes each page's
-  hash-based CSP ([ADR 0004](docs/decisions/0004-prerender-via-nitro.md)).
-- **CSP.** No policy allows `'unsafe-inline'` ([ADR 0010](docs/decisions/0010-content-security-policy.md)).
-  Never render `style` attributes or inline event handlers (`style={…}`, `onclick="…"` in raw HTML): the
-  prerender build fails on them and browsers block them on SSR pages. Put head scripts and styles through
-  the route's `head()` so the router adds the nonce.
-- **Tailwind.** Keep `@import "tailwindcss" source("../")` in `src/styles/app.css`. Without it, Tailwind
-  scans `.output`, SSR and client CSS hashes diverge, and the CSS returns 404 in production.
-  `tests/integration/assets.test.ts` guards this.
-- **Better Auth.** `auth.api.*` skips rate limiting, `disabledPaths` and plugin `onRequest` hooks (the
-  endpoint allowlist); use it only for trusted server-side reads (`getSession`) and the CLI. Browser-triggered
-  actions go through `callAuthEndpoint`. Sign-up answers success for an email that already exists
-  (enumeration protection), so `scripts/create-user.ts` checks first. Its `storage: 'database'` rate limit is
-  not atomic on Postgres, hence `src/server/auth-rate-limit.ts`. Keep `tanstackStartCookies()` last in
-  `plugins`.
-- **Origin.** `APP_URL` must be the public origin. SSR uses it as the SDK base URL, and a mismatch
-  changes TanStack Query keys and causes a refetch after hydration. `src/start.ts` rejects
-  state-changing requests from any other origin.
-- **E2E.** Wait for `body[data-hydrated="true"]` before interacting. Input before hydration is lost.
-  Import `test` and `expect` from `tests/e2e/fixtures.ts`, not `@playwright/test`: it fails the test on
-  any Content-Security-Policy violation.
+- **Effect v4 RC.** `effect@latest` on npm is still v3, so most examples on the web use the wrong API. Before
+  writing Effect code, read `node_modules/effect/AGENTS.md` in full; look up APIs in `node_modules/effect/src`.
+- **TypeScript.** The project has one TypeScript, 7.0.2 (no JS compiler API). Hey API stays on its `next`
+  snapshot; 0.99.0 crashes on TS 7 ([ADR 0002](docs/decisions/0002-typescript-7.md)). `scripts/*.ts` run through
+  Node's type stripping, so use erasable syntax only (no enums, namespaces, or constructor parameter
+  properties). The TanStack ESLint plugins (Oxlint `jsPlugins`) declare a TypeScript peer below 7; their rules
+  use no type information and run fine.
+- **CSP.** No policy allows `'unsafe-inline'` ([ADR 0010](docs/decisions/0010-content-security-policy.md)): style
+  with classes, and put head scripts and styles through the route's `head()` so the router adds the nonce.
+- **Tailwind.** Keep `@import "tailwindcss" source("../")` in `src/styles/app.css`. Without it, Tailwind scans
+  `.output`, SSR and client CSS hashes diverge, and the CSS returns 404 in production (guarded by
+  `tests/integration/assets.test.ts` and the `tailwind-source` guard).
+- **Origin.** `APP_URL` must be the public origin. SSR uses it as the SDK base URL, and a mismatch changes
+  TanStack Query keys and causes a refetch after hydration. `src/start.ts` rejects state-changing requests from
+  any other origin.
+- **Prerender.** Nitro, the deployment layer, prerenders the routes in `vite.config.ts` and writes each page's
+  hash-based CSP in its `prerender:generate` hook ([ADR 0004](docs/decisions/0004-prerender-via-nitro.md)).
 
 ## Library docs and skills
 
-- **Effect:** before writing Effect code, read `node_modules/effect/AGENTS.md` in full. Look up APIs in
-  `node_modules/effect/src`.
 - **TanStack Start and Router:** run `pnpm dlx @tanstack/intent@0.4.0 list`, then
   `pnpm dlx @tanstack/intent@0.4.0 load <package>#<skill>` for the matching skill (for example,
   `@tanstack/start-client-core#start-core/execution-model`). The `Load:` lines that `intent list` prints

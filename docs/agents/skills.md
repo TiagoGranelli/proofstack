@@ -1,8 +1,43 @@
 # Agent skills and package-shipped docs
 
-Checked 2026-09-27. A skill is committed to this repo only when it is official, its license allows
+Checked 2026-09-27. A third-party skill is committed to this repo only when it is official, its license allows
 redistribution, no installed package already ships it, and it helps with this stack. Everything else is
 loaded from `node_modules` (pinned by `pnpm-lock.yaml`) or fetched on demand.
+
+## Project skills (this repository's own)
+
+The multi-step workflows of `AGENTS.md` are skills, so their steps load only when a task needs them. Each lives
+in `.agents/skills/<name>/SKILL.md` (read by Codex, which scans `.agents/skills` from the working directory up to
+the repository root) with a relative symlink `.claude/skills/<name>` (Claude Code reads `.claude/skills` and
+follows symlinked skill folders). Both tools show only `name` and `description` until a task matches the
+description, then load the whole file.
+
+| Skill | Loads when |
+| --- | --- |
+| `api-change` | An endpoint, request or response schema, or typed error changes in `src/contract` or `src/server/api/handlers.ts` |
+| `database-change` | A table, column, index or migration changes (`src/server/db/schema`, `drizzle/`) |
+| `add-feature` | A capability spans database, contract, server and UI (the ordered checklist, pointing to the other skills) |
+| `auth-change` | An account action, a Better Auth config change, or creating users |
+| `add-page` | A page, form or UI state is added, with its axe, landmark, tab-order and Lighthouse obligations |
+| `upgrade-prerelease-deps` | Any dependency bump, above all the pinned pre-release packages; holds the version policy |
+
+Rules for editing them, checked by the `agent-docs` guard of `pnpm check`:
+
+- `name` equals the folder name (lowercase letters, digits and hyphens, at most 64 characters) and
+  `description` is one line of at most 1,024 characters (the [Agent Skills spec](https://agentskills.io/specification);
+  Claude Code allows 1,536 for `description` plus `when_to_use`). Put the trigger cases in the description: it
+  is the only part an agent sees before deciding to load the skill.
+- `.claude/skills/<name>` is a symlink to `../../.agents/skills/<name>`.
+- Keep each `SKILL.md` well under 500 lines; link to docs for reference material instead of copying it.
+- `skills-lock.json` tracks only vendored skills; project skills are not in it.
+
+The same guard keeps the instruction files small. The root `AGENTS.md` stays under 14 KiB, because every session
+loads it. Nested `AGENTS.md` files (`tests/`, `src/server/`, `src/features/`) hold rules for one directory; each
+has a `CLAUDE.md` next to it containing `@AGENTS.md`, because Claude Code loads a subdirectory's `CLAUDE.md` when
+it reads a file there and, with a root `CLAUDE.md` present, does not read `AGENTS.md` files on its own. Codex reads
+nested files only for a session started inside that directory, concatenating every `AGENTS.md` from the root down
+and stopping at 32 KiB (`project_doc_max_bytes`), so the root file points to each nested one and every
+root-to-directory chain stays under 28 KiB.
 
 ## Installed (in the repository, pinned to a commit)
 

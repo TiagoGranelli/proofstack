@@ -475,7 +475,7 @@ browsers, Postgres and (for `verify`) Mailpit, and moves artifacts. The logic li
 | `pnpm ci:drift` | `pnpm check:drift`, all four checks (`DATABASE_URL`) |
 | `pnpm ci:build` | `pnpm build` with placeholder configuration (the same as the Dockerfile's) |
 | `pnpm ci:verify` | `verify:app` on all five Playwright projects (needs Mailpit: the `mailpit` service) |
-| `pnpm ci:lighthouse` | `pnpm lighthouse --runs=5`, through the edge. Exit 2 means inconclusive (see AGENTS.md) |
+| `pnpm ci:lighthouse` | `pnpm lighthouse --runs=5`, through the edge. Exit 2 means inconclusive (see docs/agents/gates.md) |
 | `pnpm ci:docker` | `scripts/docker-smoke.ts`: builds the image, scans it with grype (see below), migrates twice, serves it behind Caddy on a private network, checks pages through the edge, stops it gracefully. Brings its own Postgres. Needs Docker. |
 
 `pnpm ci:local [job ...]` is the faithful local equivalent (default: every job, in CI order). It runs the
