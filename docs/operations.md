@@ -259,9 +259,12 @@ docker compose --profile edge down
 
 The profile keeps `pnpm dev` and `pnpm db:up` to Postgres only. In front of a locally running build
 (`pnpm lighthouse`, `pnpm verify:app --edge`), `scripts/edge.ts` starts the same Caddyfile, either from
-the pinned image with `--network host` (`EDGE_RUNTIME=docker`, the default; Linux, because Docker
-Desktop's host networking differs) or from a `caddy` binary (`EDGE_RUNTIME=binary`, `CADDY_BIN`), which
-is what `pnpm ci:local` uses inside its container. The edge log goes next to the app log
+the pinned image (`EDGE_RUNTIME=docker`, the default) or from a `caddy` binary (`EDGE_RUNTIME=binary`,
+`CADDY_BIN`), which is what `pnpm ci:local` uses inside its container. The image runs on the host network
+on Linux; on macOS and Windows, where Docker Desktop's host networking differs, it runs on Docker's bridge
+network with its ports published on `127.0.0.1` and reaches the app at `host.docker.internal`
+(`EDGE_DOCKER_NETWORK=host|bridge` overrides the choice). The app then trusts the private ranges as the
+edge's address, because Docker picks them. The edge log goes next to the app log
 (`test-results/edge.log`, `lighthouse-report/edge.log`).
 
 ### Lighthouse through the edge
@@ -598,6 +601,40 @@ Mailpit (`MAILPIT_HOST=mailpit` for `verify:app`) on a private Docker network. T
 `act` still works as a smoke test of the YAML for the jobs without artifacts, but not as a CI
 replacement: `actions/upload-artifact` v7 fails under act (nektos/act#6022).
 The grype database volume (`<prefix>-grype-db`, about 200 MB) also stays between `ci:docker` runs.
+
+## Development platforms
+
+The tooling targets Linux, macOS and Windows; CI runs everything on Linux and `pnpm check` on Windows
+(`static-windows`, not blocking yet, on main and on demand).
+
+- **Starting pnpm and tools.** On Windows, `pnpm`, `npm` and the files in `node_modules/.bin` are `.cmd`
+  shims, which Node refuses to start without a shell (CVE-2024-27980). The scripts start them through
+  `scripts/spawn.ts`: pnpm itself when pnpm runs the script (`npm_execpath`), the `.bin` tools through
+  `pnpm exec` on Windows, and a shim through `cmd.exe` only as the last resort, with every argument quoted
+  and one that `cmd.exe` could still expand (`"`, `%`) refused.
+- **Line endings.** `.gitattributes` keeps text files LF on every platform; with the CRLF that Git for
+  Windows checks out by default, the format check would fail.
+- **The pre-commit hook** is POSIX `sh`. Git for Windows runs it with its own `sh`; there it links
+  `node_modules` into the temporary tree with a directory junction, because its `ln -s` copies without
+  Developer Mode. The Windows path has not been run yet; `git commit --no-verify` skips the hook if it fails.
+- **The edge** runs on the bridge network on macOS and Windows ([Edge proxy](#edge-proxy-caddy)). This
+  path is written for Docker Desktop and has not been run there yet. On Linux it needs a host firewall that
+  lets containers reach the host (it timed out on the maintainer's machine), which is why Linux keeps the
+  host network by default.
+- **`pnpm ci:local` and `pnpm ci:docker`** need Docker; `ci:local` samples memory from the cgroup, which
+  exists on Linux only.
+
+### Linux: memory caps
+
+The type-aware lint, `pnpm build` (about 1.9 GB peak), `verify:app` and `lighthouse` are heavy. A
+misconfigured lint once reached 17 GB and took a laptop down. On Linux, run heavy commands one at a time
+under a cgroup limit, so a runaway process is killed alone:
+
+```sh
+systemd-run --user --scope -p MemoryMax=4G -p MemorySwapMax=0 -- pnpm build
+```
+
+On macOS and Windows, watch Activity Monitor or Task Manager, and give Docker Desktop a memory limit.
 
 ## Supply chain
 

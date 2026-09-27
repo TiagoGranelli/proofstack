@@ -6,7 +6,7 @@ import { type ChildProcess, spawn } from 'node:child_process'
 import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { dirname, join } from 'node:path'
-import { type RunningEdge, startEdge } from './edge.ts'
+import { edgePeers, type RunningEdge, startEdge } from './edge.ts'
 import { resetTestDatabase } from './test-db.ts'
 
 if (existsSync('.env')) process.loadEnvFile('.env')
@@ -29,7 +29,7 @@ export type RunningApp = {
   stop: () => Promise<{ ms: number; code: number | null; signal: NodeJS.Signals | null }>
 }
 
-/** Where the edge (and the test runners, without one) connect from. */
+/** Where the test runners connect from when no edge sits in front. */
 export const LOOPBACK = '127.0.0.1/32,::1/128'
 
 const password = () => `pw-${crypto.randomUUID()}`
@@ -95,7 +95,7 @@ type StartAppOptions = {
   port?: string
   /**
    * TRUSTED_PROXIES for the server: trusting loopback lets each test suite pick its client IP (X-Forwarded-For).
-   * Ignored with `edge`: the server then trusts only the edge, which connects from loopback.
+   * Ignored with `edge`: the server then trusts only the edge (`edgePeers`, scripts/edge.ts).
    */
   trustedProxies?: string
   /** More server settings, such as AUTH_SIGN_UP, SMTP_URL and MAIL_FROM. */
@@ -105,7 +105,7 @@ type StartAppOptions = {
   /**
    * Put the reference edge in front. `trustedProxies` becomes the edge's EDGE_TRUSTED_PROXIES: the test
    * runners send their own X-Forwarded-For per suite, so they pass `private_ranges`. The edge replaces
-   * X-Forwarded-For with the client IP it resolved, and the server trusts only the edge (loopback).
+   * X-Forwarded-For with the client IP it resolved, and the server trusts only the edge (`edgePeers`).
    */
   edge?: {
     trustedProxies?: string
@@ -193,7 +193,7 @@ export const startApp = async (options: StartAppOptions): Promise<RunningApp> =>
     NODE_ENV: 'production',
     BETTER_AUTH_SECRET:
       options.alongside?.env.BETTER_AUTH_SECRET || process.env.BETTER_AUTH_SECRET || crypto.randomUUID().repeat(2),
-    TRUSTED_PROXIES: options.edge ? LOOPBACK : (options.trustedProxies ?? ''),
+    TRUSTED_PROXIES: options.edge ? edgePeers() : (options.trustedProxies ?? ''),
     ...options.settings,
   }
   if (!options.alongside) await seedDatabase(databaseUrl, env, [user, otherUser])

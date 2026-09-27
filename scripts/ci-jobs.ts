@@ -15,10 +15,11 @@ import { spawnSync } from 'node:child_process'
 import { relative, resolve } from 'node:path'
 import { pinProblems } from './image-pins.ts'
 import { IMAGES } from './images.ts'
+import { type Invocation, pnpmInvocation, runSync } from './spawn.ts'
 
-const run = (command: string, args: string[], env: NodeJS.ProcessEnv = {}) => {
-  const result = spawnSync(command, args, { stdio: 'inherit', env: { ...process.env, ...env } })
-  return result.status ?? 1
+const run = (command: string | Invocation, args: string[] = [], env: NodeJS.ProcessEnv = {}) => {
+  const invocation = typeof command === 'string' ? { command, args, shell: false } : command
+  return runSync(invocation, { stdio: 'inherit', env: { ...process.env, ...env } }).status ?? 1
 }
 
 // GitHub Actions tests the build job's artifact: its file times say nothing about the checkout's.
@@ -103,7 +104,7 @@ const JOBS: Record<string, (args: string[]) => number> = {
   // The install before it already verified the lockfile against minimumReleaseAge and trustPolicy.
   'supply-chain': () =>
     sequence([
-      ['registry signatures', () => run('pnpm', ['audit', 'signatures'])],
+      ['registry signatures', () => run(pnpmInvocation(['audit', 'signatures']))],
       ['vulnerabilities', () => run('node', ['scripts/audit.ts'])],
     ]),
   secrets,
@@ -111,7 +112,7 @@ const JOBS: Record<string, (args: string[]) => number> = {
   // Nitro prerenders /about during the build, which loads the server configuration. The placeholders only
   // satisfy its validation (the same ones as the Dockerfile); nothing connects, nothing lands in .output.
   build: (args) =>
-    run('pnpm', ['build', ...args], {
+    run(pnpmInvocation(['build', ...args]), [], {
       DATABASE_URL: 'postgres://build:build@127.0.0.1:1/build',
       APP_URL: 'http://localhost:3000',
       BETTER_AUTH_SECRET: 'ci-build-placeholder-secret-not-used-at-runtime',

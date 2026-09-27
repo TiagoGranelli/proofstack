@@ -7,7 +7,6 @@
 // Usage: pnpm check:drift [contract] [migrations] [auth] [database]   (default: all; database needs Postgres)
 // `pnpm check` runs the first three. The database check uses DRIFT_DATABASE_URL if set, otherwise a
 // throwaway proofstack_drift_<pid>_test next to DATABASE_URL.
-import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -16,6 +15,7 @@ import { createClient } from '@hey-api/openapi-ts'
 import { Client } from 'pg'
 import heyApiConfig from '../openapi-ts.config.ts'
 import { renderOpenApi } from './openapi.ts'
+import { pnpmInvocation, runSync } from './spawn.ts'
 import { dropTestDatabase, resetTestDatabase, testDatabaseUrl } from './test-db.ts'
 
 if (existsSync('.env')) process.loadEnvFile('.env')
@@ -49,8 +49,9 @@ const diffTrees = (committed: string, generated: string): string[] => {
   })
 }
 
-const run = (command: string, args: string[], env: NodeJS.ProcessEnv = process.env) => {
-  const result = spawnSync(command, args, {
+/** `pnpm <args>` with its output captured; throws with the output when it fails. */
+const pnpm = (args: string[], env: NodeJS.ProcessEnv = process.env) => {
+  const result = runSync(pnpmInvocation(args), {
     encoding: 'utf8',
     env,
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -61,7 +62,7 @@ const run = (command: string, args: string[], env: NodeJS.ProcessEnv = process.e
   const output = `${stdout ?? ''}${stderr ?? ''}`
   // A drizzle-kit rename prompt cannot be answered without a TTY; it ends here as a failure or a timeout.
   if (result.status !== 0)
-    throw new Error(`${command} ${args.join(' ')} failed (${result.status ?? result.signal})\n${output}`)
+    throw new Error(`pnpm ${args.join(' ')} failed (${result.status ?? result.signal})\n${output}`)
   return output
 }
 
@@ -93,8 +94,8 @@ const checks = {
     cpSync(MIGRATIONS, dir, { recursive: true })
     // drizzle-kit prefixes --out with './', so an absolute path breaks; a relative one reaches the temp dir.
     const out = relative(process.cwd(), dir)
-    run('pnpm', ['exec', 'drizzle-kit', 'generate', '--dialect=postgresql', `--schema=${SCHEMA}`, `--out=${out}`])
-    run('pnpm', ['exec', 'drizzle-kit', 'check', '--dialect=postgresql', `--out=${MIGRATIONS}`])
+    pnpm(['exec', 'drizzle-kit', 'generate', '--dialect=postgresql', `--schema=${SCHEMA}`, `--out=${out}`])
+    pnpm(['exec', 'drizzle-kit', 'check', '--dialect=postgresql', `--out=${MIGRATIONS}`])
     // The generated folder starts as a copy of drizzle/, so a difference is a migration the schema needs.
     return diffTrees(MIGRATIONS, dir).map(
       (p) => `${p} (the schema changed without a migration: run \`pnpm db:generate --name <slug>\`)`,
@@ -105,7 +106,7 @@ const checks = {
     // Better Auth's own check: every table, column, nullability and default the configuration writes exists in
     // the Drizzle schema (src/server/db/schema/auth.ts is application code, not generated). It only loads the
     // config, so placeholders let it run without a local .env.
-    const result = spawnSync('pnpm', ['exec', 'auth', 'check', 'schema', '--config', 'src/server/auth.ts'], {
+    const result = runSync(pnpmInvocation(['exec', 'auth', 'check', 'schema', '--config', 'src/server/auth.ts']), {
       encoding: 'utf8',
       env: {
         ...process.env,
@@ -129,7 +130,7 @@ const checks = {
     try {
       const before = await fingerprint(url)
       // Without --strict, push applies whatever the schema needs; on a fresh migrated database that must be nothing.
-      const output = run('pnpm', [
+      const output = pnpm([
         'exec',
         'drizzle-kit',
         'push',

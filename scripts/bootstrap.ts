@@ -1,13 +1,13 @@
 // One-command local setup after `pnpm install`: .env with a fresh auth secret, Postgres, Mailpit, migrations.
 // Idempotent and non-destructive: an existing .env is never overwritten, only an empty secret is filled in.
 // Usage: pnpm bootstrap   (named so because `pnpm setup` is a built-in pnpm command)
-import { spawnSync } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import { copyFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { type Invocation, pnpmInvocation, runSync } from './spawn.ts'
 
-const step = (label: string, command: string, args: string[], hint: string) => {
+const step = (label: string, invocation: Invocation, hint: string) => {
   console.log(`\n> ${label}`)
-  const { status, error } = spawnSync(command, args, { stdio: 'inherit' })
+  const { status, error } = runSync(invocation, { stdio: 'inherit' })
   if (status !== 0) {
     console.error(`\n${label} failed (${error?.message ?? `exit ${status}`}). ${hint}`)
     process.exit(status ?? 1)
@@ -42,21 +42,18 @@ if (['127.0.0.1', 'localhost'].includes(url.hostname) && url.port !== port)
 
 step(
   'pnpm db:up',
-  'pnpm',
-  ['run', '--silent', 'db:up'],
+  pnpmInvocation(['run', '--silent', 'db:up']),
   'Is Docker running? If the port is taken, set POSTGRES_PORT (and the port in DATABASE_URL) in .env.',
 )
 step(
   'pnpm mail:up',
-  'pnpm',
-  ['run', '--silent', 'mail:up'],
+  pnpmInvocation(['run', '--silent', 'mail:up']),
   'Is Docker running? If a port is taken, set MAILPIT_SMTP_PORT (and the port in SMTP_URL) or MAILPIT_HTTP_PORT in .env.',
 )
 // The same migrator as deploys (advisory lock, JSON logs with the failing statement's error).
 step(
   'node scripts/migrate.ts',
-  'node',
-  ['scripts/migrate.ts'],
+  { command: process.execPath, args: ['scripts/migrate.ts'], shell: false },
   'See the error above; `pnpm db:up` must have succeeded.',
 )
 

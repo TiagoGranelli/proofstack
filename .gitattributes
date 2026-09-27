@@ -1,0 +1,3 @@
+# Line endings stay LF on every platform: Git for Windows would otherwise check text files out with CRLF,
+# which the format check and several guards read as changes.
+* text=auto eol=lf
