@@ -244,11 +244,13 @@ Regenerate these files; never edit them by hand:
 
 ## Version policy
 
-- `package.json` uses exact versions, and `pnpm-lock.yaml` is meant to be committed (no commits exist
-  yet). pnpm 12 blocks dependency build scripts (`allowBuilds`) and quarantines fresh releases
+- `package.json` uses exact versions, and `pnpm-lock.yaml` is committed with them. pnpm 12 blocks dependency build scripts (`allowBuilds`) and quarantines fresh releases
   (`minimumReleaseAge`). Each exception names an exact version in `pnpm-workspace.yaml`.
-- Upgrade RC and beta packages (`effect`, `@tanstack/react-start`, `nitro`, `oxfmt`) in their own PR,
-  with `check`, `check:drift`, and `verify:app` passing.
+- Pre-release packages, pinned exactly: `effect` and `@effect/vitest` (4.0.0 RCs from the `rc` dist-tag;
+  npm `latest` is v3), `nitro` (its npm `latest` is a `-beta` build), `@tanstack/react-start` (npm `latest`
+  is a 1.x release, but Start's docs still call it a Release Candidate) and `oxfmt` (0.x, announced as beta).
+  Upgrade each in its own PR, with `check`, `check:drift`, and `verify:app` passing. `pnpm deps:check`
+  reports what is newer.
 - Skills are pinned to a commit (`skills-lock.json`). Docs shipped inside packages are pinned by the
   lockfile.
 
