@@ -1,0 +1,28 @@
+# The quality gates decide what "done" means for every change, agent-written ones included. A pull request that
+# loosens them (a rule turned off, a threshold raised, a module dropped from COVERAGE_GATE, an allowlist entry in
+# scripts/check.ts) needs a review from the owners below. Replace @proofstack/maintainers with the real team or
+# user, and require code-owner review in the branch protection of main; until then this file only suggests
+# reviewers. The last matching pattern wins, so later lines narrow earlier ones.
+
+# Lint, types, dead code, complexity, duplication, formatting.
+/.oxlintrc.json      @proofstack/maintainers
+/.oxfmtrc.json       @proofstack/maintainers
+/.fallowrc.json      @proofstack/maintainers
+/tsconfig.json       @proofstack/maintainers
+
+# Test gates: COVERAGE_GATE and the projects live in vitest.config.ts.
+/vitest.config.ts    @proofstack/maintainers
+/playwright.config.ts @proofstack/maintainers
+
+# The gate runner, its guards and allowlists, the drift checks, the pre-commit hook.
+/scripts/check.ts       @proofstack/maintainers
+/scripts/check-drift.ts @proofstack/maintainers
+/scripts/ci-jobs.ts     @proofstack/maintainers
+/.githooks/             @proofstack/maintainers
+
+# Supply chain: exact versions, build-script and release-age exceptions.
+/package.json        @proofstack/maintainers
+/pnpm-workspace.yaml @proofstack/maintainers
+
+# CI workflows, actions, Dependabot and this file.
+/.github/            @proofstack/maintainers
