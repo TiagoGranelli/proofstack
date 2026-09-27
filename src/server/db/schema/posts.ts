@@ -1,10 +1,16 @@
+import { sql } from 'drizzle-orm'
 import { index, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
 import { user } from './auth.ts'
 
 export const post = pgTable(
   'post',
   {
-    id: uuid('id').primaryKey().defaultRandom(),
+    // Postgres 18's time-ordered UUIDs: new rows land at the right edge of the primary key index instead of on a
+    // random page. Rows from before 0006 keep their random (v4) ids. The lists still sort by created_at: see
+    // docs/decisions/0013-uuidv7-ids-keyset-on-created-at.md.
+    id: uuid('id')
+      .primaryKey()
+      .default(sql`uuidv7()`),
     authorId: text('author_id')
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),

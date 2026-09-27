@@ -43,6 +43,13 @@
       "when": 1790518754495,
       "tag": "0005_rate_limit_unlogged",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790518892845,
+      "tag": "0006_post_id_uuidv7",
+      "breakpoints": true
     }
   ]
 }
