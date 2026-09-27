@@ -36,3 +36,9 @@ overrides:
   # GHSA-pm4m-ph32-ghv5 (high) and GHSA-724g-mxrg-4qvm (moderate): @hey-api/json-schema-ref-parser pins js-yaml
   # 5.2.0 exactly. 5.2.2 is the first release with both fixes, a patch release of the same line.
   'js-yaml@5.2.0': 5.2.2
+
+# better-call (Better Auth's router) has an optional peer on zod ^4. pnpm fills a missing optional peer from any
+# version in the graph and chose shadcn's zod 3.25.76, which gave @better-auth/core a second copy of better-call
+# next to better-auth's own (two APIError classes). zod 4.6.5 in package.json, the version better-auth already
+# depends on, is the provider instead; nothing imports it (ADR 0007).
+strictPeerDependencies: true
