@@ -54,7 +54,8 @@ Test each behavior in the cheapest layer that can observe it:
   `clientAs('alice' | 'bob' | 'forged' | 'none')` is a typed client with that session (one client per identity:
   the client captures its middleware). The typed client refuses to encode invalid payloads, so send those
   through `webHandler(options?)` as raw `Request`s. `database-down.test.ts` sends every contract operation with
-  the database down and expects its documented failure, so a new endpoint is checked there without edits.
+  the database down and expects its documented failure, and `public-operations.test.ts` sends each one without a
+  session and expects 401 unless `PUBLIC_OPERATIONS` lists it, so a new endpoint is checked without edits.
   The project sets dummy env values (`vitest.config.ts`) because `src/server/env.ts` validates at import;
   nothing connects to them.
 - **db.** `tests/db` runs against a real, migrated database of its own (`tests/db/global-setup.ts`). A new
@@ -89,7 +90,7 @@ Test each behavior in the cheapest layer that can observe it:
 - **Accessibility.** `expectAccessible(page, '<state>')` (`tests/e2e/support/a11y.ts`) fails on any axe
   violation of WCAG 2.0/2.1/2.2 A and AA or best practices. A new page or UI state is one entry in `STATES`
   in `tests/e2e/a11y.spec.ts`, a landmark snapshot in its `landmarks` block, and, if it has controls, a row
-  in the tab-order table of `tests/e2e/keyboard.spec.ts` (the `routes` gate of `pnpm check` fails for a page
+  in the tab-order table of `tests/e2e/keyboard.spec.ts` (`tests/unit/route-coverage.test.ts` fails for a page
   route without all three; it recognizes `visit(page, '/path')` and the helpers listed in
   `scripts/route-coverage.ts`). `tabOrder` records every Tab stop, its accessible name and visible focus, and
   fails on a focus trap: `tabThrough` walks until a temporary sentinel after the last control, because what a

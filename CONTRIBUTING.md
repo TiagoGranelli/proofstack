@@ -20,7 +20,7 @@ workflows and the rules; it is written for coding agents and applies to people a
   edited by hand, and committed with their source.
 - Keep example code in posts-named files where you can, so the `minimal` branch (below) merges cleanly.
 - Keep the app's name out of code: import `APP_NAME` or `pageTitle` from `src/config/app.ts` and use neutral
-  identifiers (`tests/unit/app-name.test.ts` checks).
+  identifiers (`tests/unit/repo-policy.test.ts` checks).
 - Every exception to a gate is a visible edit next to its reason.
 
 Before you open the pull request, run:

@@ -73,7 +73,7 @@ names) is neutral, so nothing else carries it.
    git grep -n -i proofstack
    ```
 
-   What is left should be prose about the template. `tests/unit/app-name.test.ts`, part of `pnpm check`,
+   What is left should be prose about the template. `tests/unit/repo-policy.test.ts`, part of `pnpm check`,
    fails if the name shows up in code or configuration outside those two files.
 
 `COMPOSE_PROJECT_NAME` and the ports in `.env` are neutral too (`app`); if another project on this machine
@@ -85,8 +85,8 @@ The feature workflow in [AGENTS.md](../AGENTS.md) walks through the layers in or
 
 1. Table in `src/server/db/schema/`, then `pnpm db:generate --name <slug>` and `pnpm db:migrate`.
 2. Endpoints, schemas and tagged errors in `src/contract/`, added to `Api` in `src/contract/api.ts`.
-   Private endpoints go in a group with the `Authentication` middleware; the `openapi-security` guard fails
-   on an operation without it unless you list it in `PUBLIC_OPERATIONS` (`scripts/check.ts`).
+   Private endpoints go in a group with the `Authentication` middleware; `tests/api/public-operations.test.ts`
+   fails for an operation that answers without a session unless you list it in `PUBLIC_OPERATIONS` there.
 3. A repository under `src/server/<feature>/` and handlers in `src/server/api/handlers.ts`, provided in
    `src/server/api/web-handler.ts` and in the api test harness (`tests/api/harness.ts`).
 4. `pnpm codegen`, then a message for each new error tag in `src/lib/api-error.ts` (typecheck fails until
@@ -130,7 +130,8 @@ change most:
 - Allowlists with expiry (`security/*-allowlist.json`) and license exceptions (`scripts/licenses.ts`).
 
 If a gate costs more than it catches for your product, remove it in its own commit that says why. The
-pre-commit hook runs `pnpm check`; `pnpm hooks:uninstall` turns it off locally, and CI still runs it.
+pre-commit hook runs the `lefthook.yml` jobs a commit touches; `pnpm exec lefthook uninstall` turns it off
+locally, and CI still runs every job.
 
 ## Deploying
 

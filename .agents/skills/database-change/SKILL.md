@@ -22,8 +22,8 @@ description: Change the Postgres schema of this repo with Drizzle. Use when addi
 
 ## Rules
 
-- Migrations already in the journal at `HEAD` are frozen: databases may have applied them, so the
-  `applied-migrations` guard rejects an edit. Change the schema and generate a new migration instead.
+- Migrations already in the journal at `HEAD` are frozen: databases may have applied them, so
+  `tests/unit/repo-policy.test.ts` rejects an edit. Change the schema and generate a new migration instead.
 - `drizzle/meta/**` is written by `pnpm db:generate` only.
 
 ## Done when

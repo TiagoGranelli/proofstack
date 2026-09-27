@@ -3,7 +3,7 @@
 // Usage: node scripts/ci-jobs.ts <job> [args for the job's script]
 //   workflows   actionlint + zizmor on .github, image pins (compose files, ci.yml, Dockerfile) consistent with
 //               scripts/images.ts, and the deploy recipes in deploy/ valid (Docker)
-//   static      pnpm check without its drift gate (the drift job runs every drift check)
+//   static      pnpm check against the parent commit, without its drift job (the drift job runs every drift check)
 //   supply-chain registry signatures of every installed package, and the vulnerability gate (`pnpm audit:check`)
 //   secrets     gitleaks over every commit of HEAD's history (.gitleaks.toml; Docker, a full clone)
 //   drift       every drift check, including the database one (DATABASE_URL)
@@ -141,7 +141,12 @@ const imagePins = () => {
 
 const JOBS: Record<string, (args: string[]) => number> = {
   workflows,
-  static: (args) => run('node', ['scripts/check.ts', '--skip=drift', ...args]),
+  // The commit under test against its parent (the checkout fetches two commits). The drift job runs every drift check.
+  static: (args) =>
+    run('pnpm', ['check', ...args], {
+      CHECK_BASE_REF: process.env.CHECK_BASE_REF ?? 'HEAD^',
+      LEFTHOOK_EXCLUDE: 'drift',
+    }),
   // The install before it already verified the lockfile against minimumReleaseAge and trustPolicy.
   'supply-chain': () =>
     sequence([

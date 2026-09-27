@@ -43,7 +43,7 @@ Application code:
 
 Scripts and configuration:
 
-- `scripts/check.ts`: drop `'GET /api/posts'` from `PUBLIC_OPERATIONS`.
+- `tests/api/public-operations.test.ts`: drop `'GET /api/posts'` from `PUBLIC_OPERATIONS`.
 - `scripts/lighthouse.ts`: drop `POSTS`, `seedPosts` and its call (and the imports only they used).
 - `scripts/route-coverage.ts`: drop the `dashboardWithMyPost` and `'/api/posts'` entries of `HELPERS`.
 - `playwright.config.ts`: `const setup: Array<{ name: string; testMatch: RegExp }> = []` (no `seed` project).
@@ -220,7 +220,7 @@ function Dashboard() {
 1. `pnpm db:generate --name remove_example`: a migration with `DROP TABLE "post" CASCADE;`. It comes after
    `0009_post_body_check_validate`: the example's migrations (0000's `post` table, 0001, 0002, and 0007 to 0009:
    the `uuidv7()` default, the ascending keyset indexes and the body CHECK) stay in the journal, because
-   databases may have applied them (the `applied-migrations` guard). Dropping the table drops its constraint
+   databases may have applied them (`tests/unit/repo-policy.test.ts` rejects an edit). Dropping the table drops its constraint
    and indexes with it. Put the migration
    lint's waiver above the statement:
 

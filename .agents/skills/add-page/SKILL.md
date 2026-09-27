@@ -24,7 +24,7 @@ description: Add or change a page (route) in this repo's UI, with its accessibil
    `lazyFormSchema` (see "Forms" in `src/features/AGENTS.md`).
    Every control has a visible label. A button whose action is pending sets `aria-disabled` and ignores
    presses, so it keeps focus (a `disabled` button loses it).
-6. **Accessibility tests** (the `routes` gate of `pnpm check` fails without all three):
+6. **Accessibility tests** (`tests/unit/route-coverage.test.ts` in `pnpm check` fails without all three):
    - an entry in `STATES` in `tests/e2e/a11y.spec.ts` for the page and each new UI state (axe, WCAG 2.2 AA);
    - a landmark snapshot in its `landmarks` block;
    - a row in the tab-order table of `tests/e2e/keyboard.spec.ts` if the page has controls.

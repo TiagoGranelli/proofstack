@@ -1,8 +1,9 @@
 # The quality gates decide what "done" means for every change, agent-written ones included. A pull request that
-# loosens them (a rule turned off, a threshold raised, a module dropped from COVERAGE_GATE, an allowlist entry in
-# scripts/check.ts) needs a review from the owners below. Replace @your-org/maintainers with the real team or
-# user, and require code-owner review in the branch protection of main; until then this file only suggests
-# reviewers. The last matching pattern wins, so later lines narrow earlier ones.
+# loosens them (a rule turned off, a threshold raised, a module dropped from COVERAGE_GATE, a selector dropped from
+# .oxlintrc.json, an entry in PUBLIC_OPERATIONS) needs a review from the owners below. Replace
+# @your-org/maintainers with the real team or user, and require code-owner review in the branch protection of
+# main; until then this file only suggests reviewers. The last matching pattern wins, so later lines narrow
+# earlier ones.
 
 # Lint, types, dead code, complexity, duplication, formatting.
 /.oxlintrc.json      @your-org/maintainers
@@ -14,11 +15,12 @@
 /vitest.config.ts    @your-org/maintainers
 /playwright.config.ts @your-org/maintainers
 
-# The gate runner, its guards and allowlists, the drift checks, the pre-commit hook.
-/scripts/check.ts       @your-org/maintainers
-/scripts/check-drift.ts @your-org/maintainers
-/scripts/ci-jobs.ts     @your-org/maintainers
-/.githooks/             @your-org/maintainers
+# The gate list and pre-commit hook, the repository rules, the public operations, the drift checks.
+/lefthook.yml                        @your-org/maintainers
+/tests/unit/repo-policy.test.ts      @your-org/maintainers
+/tests/api/public-operations.test.ts @your-org/maintainers
+/scripts/check-drift.ts              @your-org/maintainers
+/scripts/ci-jobs.ts                  @your-org/maintainers
 
 # Supply chain: exact versions, build-script, release-age and trust exceptions, overrides, vulnerability and
 # license exceptions, secret-scan and migration-lint exceptions.
@@ -27,7 +29,6 @@
 /security/                    @your-org/maintainers
 /scripts/licenses.ts          @your-org/maintainers
 /scripts/allowlist.ts         @your-org/maintainers
-/scripts/check-migrations.ts  @your-org/maintainers
 /scripts/images.ts            @your-org/maintainers
 /.gitleaks.toml               @your-org/maintainers
 /.gitleaksignore              @your-org/maintainers
