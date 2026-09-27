@@ -77,7 +77,9 @@ The UI follows [Bulletproof React](https://github.com/alan2207/bulletproof-react
 5. Map every new error tag to a message in `src/lib/api-error.ts`. Its error union is derived from the
    generated SDK, so `pnpm typecheck` fails until the switch in `describeApiError` handles the new tag.
 6. UI in `src/features/<name>/` (see [Frontend structure](#frontend-structure)) and routes in `src/routes/`.
-7. Integration tests in `tests/integration/` and E2E tests in `tests/e2e/` (see [Tests](#tests)).
+7. Tests, cheapest layer first (see [Tests](#tests)): handler branches in `tests/api/`, UI states in
+   `tests/component/`, then `tests/integration/` and `tests/e2e/` (each new page or UI state gets an entry
+   in `STATES` in `tests/e2e/a11y.spec.ts`).
 
 **Auth config change** (plugins, user fields). Run `pnpm auth:generate` to rewrite
 `src/server/db/schema/auth.ts`, then follow the database workflow.
@@ -93,8 +95,8 @@ Postgres, and applies migrations.
 
 | Command | Covers |
 | --- | --- |
-| `pnpm check` | `format:check`, `lint` (warnings are counted in the summary but do not fail), `typecheck`, `deadcode`, `unit` (Vitest project `unit`, `tests/unit`), the database-free drift checks (contract, migrations, auth) and repo guards (including kebab-case folder names). No database, no build, about 4 s. Run it before every hand-off. |
-| `pnpm test:unit [filter ...]` | Unit tests only: pure functions, no app |
+| `pnpm check` | `format:check`, `lint` (warnings are counted in the summary but do not fail), `typecheck`, `deadcode`, `tests` (`pnpm test:fast`: Vitest projects `unit`, `api` and `component` with the coverage gate, see [Tests](#tests)), the database-free drift checks (contract, migrations, auth) and repo guards (including kebab-case folder names). No database, no build, about 9 s. Needs Playwright's Chromium. Run it before every hand-off. |
+| `pnpm test:unit\|test:api\|test:component [filter ...]` | One fast layer (see [Tests](#tests)); `pnpm test:fast` runs all three with coverage |
 | `pnpm format`, `pnpm lint:fix` | Autofixes |
 | `pnpm check:drift [contract\|migrations\|auth\|database]` | Checks that generated files match their sources; `database` needs Postgres |
 | `pnpm build && pnpm verify:app [--no-e2e] [--no-integration] [filter ...]` | Starts the built server against a fresh per-run `proofstack_<purpose>_<pid>_test` database (dropped afterwards) and runs Vitest (`tests/integration`) and Playwright (`tests/e2e`); app logs go to `test-results/app-server.log`. Refuses a stale `.output` |
@@ -110,8 +112,40 @@ is not gated on `/login` and `/dashboard` (noindex). CI runs `pnpm lighthouse --
 
 ## Tests
 
-- Install the test browser once: `pnpm exec playwright install chromium`. `verify:app` and `lighthouse`
-  use `CHROME_PATH` instead when it is set.
+Test each behavior in the cheapest layer that can observe it:
+
+| Layer | Where | Run by | For |
+| --- | --- | --- | --- |
+| unit | `tests/unit` | `check` | Pure functions. Modules in `COVERAGE_GATE` (`vitest.config.ts`) need 100% lines and branches |
+| api | `tests/api` | `check` | Effect handler branching through `HttpApiTest`: in-memory `PostsRepo`, fake session store, no database |
+| component | `tests/component` | `check` | React components in Chromium (Vitest browser mode), network mocked by MSW: pending and disabled states, every error branch, limits, focus |
+| integration | `tests/integration` | `verify:app` | The built app over HTTP: SQL, Better Auth, CSRF, headers, rate limits |
+| e2e | `tests/e2e` | `verify:app` | Browser flows, axe on every page state, keyboard and focus, ARIA landmark snapshots |
+
+- Install the test browser once: `pnpm exec playwright install chromium`. `verify:app`, `lighthouse` and the
+  `component` project use `CHROME_PATH` instead when it is set.
+- **Coverage.** `pnpm test:fast` writes `coverage/index.html` for all of `src` (report only) and fails unless
+  every module in `COVERAGE_GATE` is fully covered. Add security-critical pure modules there with their tests.
+- **api.** `tests/api/harness.ts`: `apiLayer({ databaseDown? })` provides the real handlers and
+  `RequestValidation` over a fresh in-memory repository; `clientAs('alice' | 'bob' | 'forged' | 'none')`
+  is a typed client with that session (one client per identity: the client captures its middleware).
+  The typed client refuses to encode invalid payloads, so send those through `webHandler()` as raw
+  `Request`s. The project sets dummy env values (`vitest.config.ts`) because `src/server/env.ts` validates
+  at import; nothing connects to them.
+- **component.** Render with `renderInApp(ui, { url })` from `tests/component/test-utils.tsx` (memory
+  router with the app's paths, fresh `QueryClient`; returns `router` and `queryClient`). Mock the network
+  per test with `worker.use(...)` from `tests/component/api-mocks.ts`: `api.<operation>({ body })` (handlers
+  generated from `openapi.json` by Hey API's `msw` plugin into `src/sdk/msw.gen.ts`), `apiError(operation,
+  status, body)` (only statuses and bodies the operation declares), `apiFailure` (network error or non-JSON
+  body), `held()` (a response that waits, for pending states) and `auth.signIn`/`auth.signOut` (Better
+  Auth, outside the contract). A request to `/api` without a handler fails the test. `#/lib/api-client.ts`
+  is aliased to its browser branch (`tests/component/stubs/api-client.ts`).
+- **Accessibility.** `expectAccessible(page, '<state>')` (`tests/e2e/support/a11y.ts`) fails on any axe
+  violation of WCAG 2.0/2.1/2.2 A and AA or best practices. A new page or UI state is one entry in `STATES`
+  in `tests/e2e/a11y.spec.ts`, a landmark snapshot in its `landmarks` block, and, if it has controls, a row
+  in the tab-order table of `tests/e2e/keyboard.spec.ts` (`tabOrder` records every Tab stop, its accessible
+  name and visible focus, and fails on a focus trap). `navigateWithApiResponse` (`tests/e2e/support/app.ts`)
+  reaches empty and failure states by answering the browser's API call on a client-side navigation.
 - `verify:app` starts one server on one database per run. The integration tests and then the E2E tests
   run against it, so both suites see each other's data.
 - Integration files run in parallel against the same two test users. Each file creates its own client IP
