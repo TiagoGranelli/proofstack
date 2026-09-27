@@ -6,12 +6,10 @@
 // (dependabot/dependabot-core#15904), so Dependabot security alerts miss this project: this is the gate.
 // Usage: pnpm audit:check   (needs the npm registry; CI job `supply-chain`)
 import { spawnSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { readAllowlist } from './allowlist.ts'
 
 const ALLOWLIST = 'security/audit-allowlist.json'
 const BLOCKING = new Set(['high', 'critical'])
-const MAX_DAYS = 180
-const DAY_MS = 24 * 60 * 60 * 1000
 
 type Advisory = {
   github_advisory_id: string
@@ -22,9 +20,8 @@ type Advisory = {
   patched_versions: string | null
   findings: Array<{ version: string; paths: string[] }>
 }
-type Entry = { ghsa?: unknown; package?: unknown; reason?: unknown; expires?: unknown }
 
-const problems: string[] = []
+const { entries, problems } = readAllowlist(ALLOWLIST, 'advisories', 'ghsa', /^GHSA(-[23456789cfghjmpqrvwx]{4}){3}$/)
 
 const audit = spawnSync('pnpm', ['audit', '--json'], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
 let advisories: Advisory[] = []
@@ -39,27 +36,8 @@ try {
   process.exit(1)
 }
 
-const allowlist = (JSON.parse(readFileSync(ALLOWLIST, 'utf8')) as { advisories?: Entry[] }).advisories ?? []
-const today = new Date().toISOString().slice(0, 10)
-const entries = allowlist.flatMap((entry, index) => {
-  const where = `${ALLOWLIST} entry ${index + 1}`
-  const { ghsa, package: name, reason, expires } = entry
-  if (typeof ghsa !== 'string' || !/^GHSA(-[23456789cfghjmpqrvwx]{4}){3}$/.test(ghsa))
-    problems.push(`${where}: \`ghsa\` must be a GHSA id`)
-  else if (typeof name !== 'string' || !name) problems.push(`${where}: \`package\` is required`)
-  else if (typeof reason !== 'string' || reason.trim().length < 20)
-    problems.push(`${where} (${ghsa}): \`reason\` must say why the advisory does not apply`)
-  else if (typeof expires !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(expires) || Number.isNaN(Date.parse(expires)))
-    problems.push(`${where} (${ghsa}): \`expires\` must be a YYYY-MM-DD date`)
-  else if (expires < today) problems.push(`${where} (${ghsa} in ${name}): expired on ${expires}; review it again`)
-  else if (Date.parse(expires) - Date.parse(today) > MAX_DAYS * DAY_MS)
-    problems.push(`${where} (${ghsa} in ${name}): expires more than ${MAX_DAYS} days ahead`)
-  else return [{ ghsa, name, expires }]
-  return []
-})
-
 const allowed = (advisory: Advisory) =>
-  entries.find((entry) => entry.ghsa === advisory.github_advisory_id && entry.name === advisory.module_name)
+  entries.find((entry) => entry.id === advisory.github_advisory_id && entry.name === advisory.module_name)
 
 const ORDER = ['critical', 'high', 'moderate', 'low', 'info']
 const sorted = advisories.toSorted((a, b) => ORDER.indexOf(a.severity) - ORDER.indexOf(b.severity))
@@ -79,7 +57,7 @@ for (const advisory of sorted) {
 }
 for (const entry of entries)
   if (!advisories.some((advisory) => allowed(advisory) === entry))
-    problems.push(`${ALLOWLIST}: ${entry.ghsa} in ${entry.name} matches no advisory anymore; remove the entry`)
+    problems.push(`${ALLOWLIST}: ${entry.id} in ${entry.name} matches no advisory anymore; remove the entry`)
 
 const counts = ORDER.map((s) => [s, advisories.filter((a) => a.severity === s).length] as const).filter(([, n]) => n)
 console.log(

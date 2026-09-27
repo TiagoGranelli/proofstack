@@ -32,6 +32,11 @@ RUN DATABASE_URL=postgres://build:build@127.0.0.1:1/build \
 FROM ${NODE_IMAGE} AS runtime
 ENV NODE_ENV=production \
     PORT=3000
+# The server needs only node. npm (and corepack or yarn, which newer base images no longer ship) would add a
+# package manager and its dependency tree to the attack surface and to every vulnerability scan.
+RUN rm -rf /usr/local/lib/node_modules /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
+      /usr/local/bin/yarn /usr/local/bin/yarnpkg /opt/yarn-* \
+ && node --version
 WORKDIR /app
 # Application files stay owned by root: the server process cannot modify its own code.
 COPY --from=build /app/.output ./.output
