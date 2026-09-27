@@ -17,6 +17,7 @@
     "dev": "vite dev",
     "build": "vite build",
     "start": "node --env-file-if-exists=.env .output/server/index.mjs",
+    "prepare": "git rev-parse --is-inside-work-tree >/dev/null 2>&1 && git config core.hooksPath .githooks || true",
     "bootstrap": "node scripts/bootstrap.ts",
     "check": "node scripts/check.ts",
     "format": "oxfmt",
