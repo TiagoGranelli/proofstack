@@ -1,5 +1,6 @@
 import { createCsrfMiddleware, createMiddleware, createStart } from '@tanstack/react-start'
 import { setResponseHeader } from '@tanstack/react-start/server'
+import { serverFunctionErrors } from '#/lib/server-function-errors.ts'
 
 // Security headers, the Content-Security-Policy and request logging live in the Nitro plugin
 // src/server/nitro/http.ts, which also sees static files that never reach this middleware. Neither
@@ -60,4 +61,5 @@ const serverFnNotFound = createMiddleware().server(async ({ handlerType, next })
 
 export const startInstance = createStart(() => ({
   requestMiddleware: [serverFnNotFound, csrf, bodyLimit, cspNonce],
+  functionMiddleware: [serverFunctionErrors],
 }))
