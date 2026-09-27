@@ -4,7 +4,8 @@
 # from deploy.env.example, then:
 #   docker compose -f compose.production.yaml --env-file deploy.env up -d
 # Every service restarts with the host (restart: always). The migrations run before the app starts, on every
-# `up` that changes the image. Image pins are checked against scripts/images.ts by `pnpm ci:workflows`.
+# `up` that changes the image. Image pins are checked against scripts/images.ts by `pnpm ci:workflows`, and
+# `pnpm ci:docker` runs this file with ../compose.smoke.yaml on every change.
 name: app
 
 services:

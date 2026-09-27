@@ -236,6 +236,10 @@ change both places if the host already routes that range). Logs: `docker compose
 back, set the previous tag and run step 3; migrations stay applied, which is why each must be compatible
 with the version before it ([Build and deploy](#build-and-deploy)).
 
+CI tests this file on every change: `pnpm ci:docker` runs it with the override `compose.smoke.yaml` (the image
+built from the checkout, PgBouncer in front of Postgres, plain HTTP on an ephemeral port, a subnet Docker
+picks) through steps 3 and 4 and a sign-in through Caddy.
+
 Tested locally with `DOMAIN=localhost`, where Caddy uses its internal CA, on ports 58080 and 58443: HTTPS
 with HTTP/2 and the redirect from HTTP, the migrations, `create-user` through the command above, a sign-in
 through Caddy (the session records the client's address, not Caddy's), the role's settings, and the backup
@@ -775,7 +779,7 @@ browsers, Postgres and (for `verify`) Mailpit, and moves artifacts. The logic li
 | `pnpm ci:build` | `pnpm build` with placeholder configuration (the same as the Dockerfile's) |
 | `pnpm ci:verify` | `verify:app` on all five Playwright projects (needs Mailpit: the `mailpit` service) |
 | `pnpm ci:lighthouse` | `pnpm lighthouse --runs=5`, through the edge. Exit 2 means inconclusive (see docs/agents/gates.md) |
-| `pnpm ci:docker` | `scripts/docker-smoke.ts`: builds the image, scans it with grype (see below), migrates with three runs at once through PgBouncer (transaction mode) and once directly, serves it through the pooler and behind Caddy on a private network, checks pages through the edge, stops it gracefully. Brings its own Postgres and PgBouncer. Needs Docker. |
+| `pnpm ci:docker` | `scripts/docker-smoke.ts` on the adopters' recipe itself: `deploy/compose.production.yaml` plus `compose.smoke.yaml` (PgBouncer in transaction mode in front of Postgres, the image built from this checkout, the edge on an ephemeral loopback port). Builds the image, scans it with grype (see below), migrates with three runs at once through the pooler and once directly, creates the first account with the bundled `create-user`, brings the stack up, checks pages and a sign-in through the edge, stops the app gracefully, and `down -v` removes everything. Needs Docker. |
 
 `pnpm ci:local [job ...]` is the faithful local equivalent (default: every job, in CI order). It runs the
 container jobs (`static`, `supply-chain`, `drift`, `build`, `verify`, `lighthouse`) in the official Playwright image
@@ -848,11 +852,11 @@ What guards the dependencies, the image and the repository, and where each gate 
 | `pnpm licenses:check` | `pnpm check` | a production dependency whose license is not allowed (`scripts/licenses.ts`) |
 | `pnpm check:migrations` | `pnpm check` | a migration statement that locks or rewrites a busy table ([Migration safety](#migration-safety)) |
 | `pnpm ci:secrets` | CI `secrets`; the pre-commit hook when a `gitleaks` binary is installed | a secret anywhere in the history (`.gitleaks.toml`) |
-| grype in `pnpm ci:docker` | CI `docker` | a high or critical vulnerability with a released fix in the production image, not in `security/image-allowlist.json` |
+| grype in `pnpm ci:docker` | CI `docker` | a high or critical vulnerability with a released fix in the production image (`grype --only-fixed --fail-on high`), unless `.grype.yaml` ignores it |
 
 - **Exceptions.** An advisory goes in `auditConfig.ignoreGhsas` (`pnpm-workspace.yaml`, with a comment giving the
-  reason and a review date), and an image finding in `security/image-allowlist.json` (`{ <id>, package, reason,
-  expires }`, at most 180 days ahead), only when it cannot apply here. The usual fix is an upgrade, an exact
+  reason and a review date), and an image finding in `.grype.yaml` (an `ignore` rule with the package, a
+  `reason` and a review date in it), only when it cannot apply here. The usual fix is an upgrade, an exact
   `overrides` entry in `pnpm-workspace.yaml` naming the advisory, or a newer base image.
 - **Renovate** (`renovate.json`; install the Renovate GitHub App to turn it on) proposes updates for the npm
   packages, pnpm (`packageManager`), Node (`devEngines`), every container image and the GitHub Actions, the

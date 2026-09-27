@@ -26,9 +26,8 @@
 # license exceptions, secret-scan and migration-lint exceptions.
 /package.json                 @your-org/maintainers
 /pnpm-workspace.yaml          @your-org/maintainers
-/security/                    @your-org/maintainers
+/.grype.yaml                  @your-org/maintainers
 /scripts/licenses.ts          @your-org/maintainers
-/scripts/allowlist.ts         @your-org/maintainers
 /scripts/images.ts            @your-org/maintainers
 /.gitleaks.toml               @your-org/maintainers
 /.gitleaksignore              @your-org/maintainers
