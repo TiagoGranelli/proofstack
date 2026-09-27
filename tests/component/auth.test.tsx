@@ -1,17 +1,12 @@
 // LoginForm and sign-out: pending states, every failure message, and where each success leads.
-import { QueryClientProvider } from '@tanstack/react-query'
-import { RouterContextProvider, useNavigate } from '@tanstack/react-router'
-import { hydrateRoot } from 'react-dom/client'
-import { renderToString } from 'react-dom/server'
-import { describe, expect, it, onTestFinished } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
-import { useSignOut } from '#/features/auth/api/sign-out.ts'
 import { LoginForm } from '#/features/auth/components/login-form.tsx'
-import { SignOutAlert, SignOutButton } from '#/features/auth/components/sign-out-button.tsx'
+import { SignOutButton } from '#/features/auth/components/sign-out-button.tsx'
 import { SignUpForm } from '#/features/auth/components/sign-up-form.tsx'
 import type { AuthFailure } from '#/lib/auth.functions.ts'
 import { auth, authCalls, authFunction, held, worker } from './api-mocks.ts'
-import { formOf, pressAndKeepFocus, renderInApp } from './test-utils.tsx'
+import { formOf, pressAndKeepFocus, renderInApp, serverRendered } from './test-utils.tsx'
 
 const email = () => page.getByLabelText('Email')
 const password = () => page.getByLabelText('Password')
@@ -21,26 +16,6 @@ const signIn = async () => {
   await email().fill('author@example.test')
   await password().fill('a long enough password')
   await signInButton().click()
-}
-
-/** Renders `tree` to HTML as the server does, mounts it, and hydrates it when asked. */
-const serverRendered = async (ui: React.ReactNode) => {
-  const { router, queryClient, unmount } = await renderInApp(null, { url: '/login' })
-  await unmount()
-  const tree = (
-    <RouterContextProvider router={router}>
-      <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>
-    </RouterContextProvider>
-  )
-  const container = document.createElement('div')
-  container.innerHTML = renderToString(tree)
-  document.body.append(container)
-  onTestFinished(() => container.remove())
-  const hydrate = () => {
-    const root = hydrateRoot(container, tree)
-    onTestFinished(() => root.unmount())
-  }
-  return { screen: page.elementLocator(container), form: () => container.querySelector('form')!, hydrate }
 }
 
 describe('LoginForm', () => {
@@ -230,31 +205,20 @@ describe('LoginForm', () => {
   })
 })
 
-/** Wired like the dashboard (src/routes/_authed/dashboard.tsx): one mutation, home on success. */
-function SignOut() {
-  const navigate = useNavigate()
-  const signOut = useSignOut({ mutationConfig: { onSuccess: () => navigate({ to: '/' }) } })
-  return (
-    <>
-      <SignOutButton signOut={signOut} />
-      <SignOutAlert signOut={signOut} />
-    </>
-  )
-}
-
 const signOutButton = () => page.getByRole('button', { name: 'Sign out' })
 
 describe('sign-out', () => {
-  it('is busy while signing out, then clears the cache and goes home', async () => {
+  it('is busy while signing out, then clears the cache and goes home, where it says so', async () => {
     const response = held()
     worker.use(auth.signOut(response))
-    const { router, queryClient } = await renderInApp(<SignOut />, { url: '/dashboard' })
+    const { router, queryClient } = await renderInApp(<SignOutButton />, { url: '/dashboard' })
     queryClient.setQueryData(['my data'], ['private'])
     await signOutButton().click()
     await expect.element(signOutButton()).toBeDisabled()
     await expect.element(signOutButton()).toHaveAttribute('aria-busy', 'true')
     response.release()
     await expect.poll(() => router.state.location.href).toBe('/')
+    expect(router.state.location.state.flash).toBe('signed-out')
     expect(queryClient.getQueryData(['my data'])).toBeUndefined()
   })
 
@@ -262,7 +226,7 @@ describe('sign-out', () => {
     'says so when sign-out %s, keeps the data and can be retried',
     async (outcome) => {
       worker.use(auth.signOut(outcome))
-      const { router, queryClient } = await renderInApp(<SignOut />, { url: '/dashboard' })
+      const { router, queryClient } = await renderInApp(<SignOutButton />, { url: '/dashboard' })
       queryClient.setQueryData(['my data'], ['private'])
       await signOutButton().click()
       await expect
@@ -282,7 +246,7 @@ describe('sign-out', () => {
     const response = held()
     const calls = authCalls('signOut')
     worker.use(calls.handler, authFunction('signOut', { ...response, answer: 'network' }))
-    await renderInApp(<SignOut />, { url: '/dashboard' })
+    await renderInApp(<SignOutButton />, { url: '/dashboard' })
     await pressAndKeepFocus(signOutButton())
     await userEvent.keyboard('{Enter}')
     response.release()

@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { Page } from '#/components/layouts/page.tsx'
 import { pageTitle } from '#/config/app.ts'
 import { ResendVerificationForm } from '#/features/auth/components/resend-verification-form.tsx'
 import { VerifyEmailForm } from '#/features/auth/components/verify-email-form.tsx'
@@ -17,8 +18,7 @@ export const Route = createFileRoute('/verify-email')({
 function VerifyEmail() {
   const { token } = Route.useSearch()
   return (
-    <main className="mx-auto grid max-w-sm gap-4 p-4">
-      <h1 className="text-2xl font-semibold">Confirm your email</h1>
+    <Page title="Confirm your email" narrow>
       {token ? (
         <VerifyEmailForm token={token} />
       ) : (
@@ -27,6 +27,6 @@ function VerifyEmail() {
           <ResendVerificationForm />
         </>
       )}
-    </main>
+    </Page>
   )
 }

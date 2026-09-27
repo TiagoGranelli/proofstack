@@ -1,4 +1,5 @@
 import { Link, createFileRoute, notFound, redirect } from '@tanstack/react-router'
+import { Page } from '#/components/layouts/page.tsx'
 import { pageTitle } from '#/config/app.ts'
 import { SignUpForm } from '#/features/auth/components/sign-up-form.tsx'
 import { getSignUpPolicy } from '#/lib/auth.functions.ts'
@@ -18,8 +19,7 @@ export const Route = createFileRoute('/sign-up')({
 
 function SignUp() {
   return (
-    <main className="mx-auto grid max-w-sm gap-4 p-4">
-      <h1 className="text-2xl font-semibold">Create an account</h1>
+    <Page title="Create an account" narrow>
       <SignUpForm />
       <p className="text-sm text-muted-foreground">
         Already have an account?{' '}
@@ -28,6 +28,6 @@ function SignUp() {
         </Link>
         .
       </p>
-    </main>
+    </Page>
   )
 }

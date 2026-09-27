@@ -9,10 +9,13 @@ import {
   createRoute,
   createRouter,
   Outlet,
+  RouterContextProvider,
   RouterProvider,
 } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
-import { expect } from 'vitest'
+import { hydrateRoot } from 'react-dom/client'
+import { renderToString } from 'react-dom/server'
+import { expect, onTestFinished } from 'vitest'
 import { render } from 'vitest-browser-react'
 import { page, userEvent } from 'vitest/browser'
 import { createQueryClient } from '#/lib/query-client.ts'
@@ -74,9 +77,56 @@ export async function renderInApp(
   return { ...screen, router, queryClient }
 }
 
+/**
+ * Renders `ui` to HTML as the server does (renderToString, inside the app's router and query client), puts it in
+ * the page, and hydrates it when asked: what a visitor sees before and after the scripts run, and whether the two
+ * agree (a hydration mismatch is a recoverable error React reports to `onRecoverableError`).
+ */
+export async function serverRendered(ui: ReactNode, options: { url?: string } = {}) {
+  const { router, queryClient, unmount } = await renderInApp(null, { url: options.url ?? '/login' })
+  await unmount()
+  const tree = (
+    <RouterContextProvider router={router}>
+      <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>
+    </RouterContextProvider>
+  )
+  const container = document.createElement('div')
+  container.innerHTML = renderToString(tree)
+  document.body.append(container)
+  onTestFinished(() => container.remove())
+  const mismatches: unknown[] = []
+  const hydrate = () => {
+    const root = hydrateRoot(container, tree, { onRecoverableError: (error) => mismatches.push(error) })
+    onTestFinished(() => root.unmount())
+  }
+  return {
+    container,
+    screen: page.elementLocator(container),
+    form: () => container.querySelector('form')!,
+    hydrate,
+    mismatches,
+  }
+}
+
 /** The form that `button` submits, to assert on its `aria-busy` state and its error description. */
 export const formOf = (button: ReturnType<typeof page.getByRole>) =>
   page.elementLocator(button.element().closest('form')!)
+
+/**
+ * A failure the server pinned on one field: announced as an alert next to `field`, which is invalid, described by
+ * it and focused, so the user can fix it at once; the form itself (the one `button` submits) is not described.
+ */
+export async function expectFieldIssue(
+  field: ReturnType<typeof page.getByRole>,
+  message: string,
+  button: ReturnType<typeof page.getByRole>,
+) {
+  await expect.element(page.getByRole('alert')).toHaveTextContent(message)
+  await expect.element(field).toHaveAttribute('aria-invalid', 'true')
+  await expect.element(field).toHaveAccessibleDescription(new RegExp(`${message.replaceAll('.', '\\.')}$`))
+  await expect.element(field).toHaveFocus()
+  await expect.element(formOf(button)).not.toHaveAttribute('aria-describedby')
+}
 
 /** The text of an account form's success message (a status named by its heading `title`), without the heading. */
 export const statusText = (title: string) => page.getByRole('status', { name: title }).getByRole('paragraph')

@@ -8,7 +8,7 @@ import type { AuthFailure } from '#/lib/auth.functions.ts'
 import { Route as ResetPasswordRoute } from '#/routes/reset-password.tsx'
 import { Route as VerifyEmailRoute } from '#/routes/verify-email.tsx'
 import { authCalls, authFunction, held, worker } from './api-mocks.ts'
-import { expectFocusedStatus, formOf, renderInApp, statusText } from './test-utils.tsx'
+import { expectFieldIssue, expectFocusedStatus, formOf, renderInApp, statusText } from './test-utils.tsx'
 
 const unreachable = 'Could not reach the server. Check your connection and try again.'
 const expiredLink = 'This link is invalid or has expired. Ask for a new one.'
@@ -99,8 +99,28 @@ describe('SignUpForm', () => {
     ])
   })
 
+  it.each<{ name: string; failure: AuthFailure; field: typeof password; message: string }>([
+    {
+      name: 'a password the server finds too short',
+      failure: { code: 'PASSWORD_TOO_SHORT' },
+      field: password,
+      message: 'Use at least 12 characters.',
+    },
+    {
+      name: 'an address the server rejects',
+      failure: { code: 'INVALID_EMAIL' },
+      field: email,
+      message: 'Enter a valid email address.',
+    },
+  ])('explains $name next to that field and keeps the form', async ({ failure, field, message }) => {
+    worker.use(authFunction('signUp', { ok: false, failure }))
+    await renderInApp(<SignUpForm />, { url: '/sign-up' })
+    await signUp()
+    await expectFieldIssue(field(), message, button('Create account'))
+    await expect.element(password()).toHaveValue('a long enough password')
+  })
+
   it.each<[string, AuthFailure | 'network', string]>([
-    ['a password the server finds too short', { code: 'PASSWORD_TOO_SHORT' }, 'Use at least 12 characters.'],
     ['a rate limit', { code: 'RATE_LIMITED', retryAfter: 60 }, 'Too many attempts. Try again in 60 seconds.'],
     ['an unknown failure', { code: 'FAILED_TO_CREATE_USER' }, 'Something went wrong. Try again.'],
     ['a network failure', 'network', unreachable],
@@ -170,26 +190,20 @@ describe('/reset-password', () => {
     await expect.poll(() => router.state.location.pathname).toBe('/forgot-password')
   })
 
-  it('sets the new password with the token, busy meanwhile, clears the cache and offers to sign in', async () => {
+  it('sets the new password with the token, busy meanwhile, clears the cache and goes to sign in, which says why', async () => {
     const response = held()
     const calls = authCalls('resetPassword')
     worker.use(calls.handler, authFunction('resetPassword', response))
-    const { queryClient } = await renderReset('/reset-password?token=abc123')
+    const { queryClient, router } = await renderReset('/reset-password?token=abc123')
     queryClient.setQueryData(['my data'], ['private'])
-    await expect.element(newPassword()).toHaveAttribute('autocomplete', 'new-password')
-    await expect.element(newPassword()).toHaveAccessibleDescription('At least 12 characters.')
+    // The flash leaves the location once /login shows it, so it is read from the navigation itself.
+    const flashes: unknown[] = []
+    router.subscribe('onBeforeNavigate', (event) => flashes.push(event.toLocation.state.flash))
     await setNewPassword()
     await expectBusy('Set new password')
     response.release()
-    await expect
-      .element(statusText('Password changed'))
-      .toHaveTextContent(
-        'Your password is changed, and every session of your account was signed out. Sign in with the new password.',
-      )
-    await expectFocusedStatus('Password changed')
-    await expect
-      .element(page.getByRole('status').getByRole('link', { name: 'Sign in' }))
-      .toHaveAttribute('href', '/login')
+    await expect.poll(() => router.state.location.pathname).toBe('/login')
+    expect(flashes).toContain('password-reset')
     expect(queryClient.getQueryData(['my data'])).toBeUndefined()
     expect(calls.data).toEqual([{ token: 'abc123', newPassword: 'a brand new password' }])
   })
@@ -198,17 +212,26 @@ describe('/reset-password', () => {
     const calls = authCalls('resetPassword')
     worker.use(calls.handler)
     await renderReset('/reset-password?token=abc123')
+    await expect.element(newPassword()).toHaveAttribute('autocomplete', 'new-password')
+    await expect.element(newPassword()).toHaveAccessibleDescription('At least 12 characters.')
     await newPassword().fill('too short')
     await button('Set new password').click()
     await expect.element(newPassword()).toBeInvalid()
     expect(calls.data).toEqual([])
   })
 
+  it('explains a password the server finds too long next to it, without the code', async () => {
+    worker.use(authFunction('resetPassword', { ok: false, failure: { code: 'PASSWORD_TOO_LONG' } }))
+    await renderReset('/reset-password?token=abc123')
+    await setNewPassword()
+    await expectFieldIssue(newPassword(), 'Use at most 128 characters.', button('Set new password'))
+    expect(document.body.textContent).not.toContain('PASSWORD_TOO_LONG')
+  })
+
   it.each<[string, AuthFailure, string]>([
     ['an invalid token', { code: 'INVALID_TOKEN' }, expiredLink],
     ['an expired token', { code: 'TOKEN_EXPIRED' }, expiredLink],
     ['a deleted account', { code: 'USER_NOT_FOUND' }, expiredLink],
-    ['a password the server finds too long', { code: 'PASSWORD_TOO_LONG' }, 'Use at most 128 characters.'],
   ])('explains %s without the code', async (_, failure, message) => {
     worker.use(authFunction('resetPassword', { ok: false, failure }))
     const { queryClient } = await renderReset('/reset-password?token=abc123')

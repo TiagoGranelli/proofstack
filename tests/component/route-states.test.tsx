@@ -50,8 +50,9 @@ describe('RouteNotFound', () => {
 describe('RoutePending', () => {
   it('marks the page busy and announces loading politely, under the page heading', async () => {
     await renderInApp(<RoutePending />)
-    await expect.element(page.getByRole('main')).toHaveAttribute('aria-busy', 'true')
+    const heading = page.getByRole('heading', { level: 1 })
+    await expect.element(heading).toHaveTextContent('Loading…')
     await expect.element(page.getByRole('status')).toHaveTextContent('Loading…')
-    await expect.element(page.getByRole('heading', { level: 1 })).toHaveTextContent('Loading…')
+    expect(heading.element().closest('[aria-busy]')?.getAttribute('aria-busy')).toBe('true')
   })
 })

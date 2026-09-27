@@ -13,7 +13,9 @@ const schema = lazyFormSchema(() => import('#/lib/account-input.ts').then((modul
  */
 export function DeleteAccountForm() {
   const navigate = useNavigate()
-  const remove = useDeleteAccount({ mutationConfig: { onSuccess: () => navigate({ to: '/', replace: true }) } })
+  const remove = useDeleteAccount({
+    mutationConfig: { onSuccess: () => navigate({ to: '/', replace: true, state: { flash: 'account-deleted' } }) },
+  })
   const form = useAppForm({
     defaultValues: { password: '', confirm: false },
     validationLogic: revalidateLogic(),
@@ -29,6 +31,7 @@ export function DeleteAccountForm() {
       schema={schema}
       pending={remove.isPending}
       error={remove.error}
+      fieldCodes={{ INVALID_PASSWORD: 'password' }}
     >
       <form.AppField name="password">
         {(field) => (
