@@ -3,6 +3,7 @@ import { drizzleAdapter } from '@better-auth/drizzle-adapter'
 import { betterAuth } from 'better-auth'
 import { tanstackStartCookies } from 'better-auth/tanstack-start'
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '#/contract/limits.ts'
+import { postgresRateLimitStorage } from './auth-rate-limit.ts'
 import { runInBackground } from './background-tasks.ts'
 import { db } from './db/client.ts'
 import * as schema from './db/schema/index.ts'
@@ -46,15 +47,17 @@ export const auth = betterAuth({
   // The HTTP router is further restricted to the endpoint allowlist in ./http/auth-endpoints.ts.
   disabledPaths: ['/sign-up/email'],
   // Built-in rules still apply on top of this default: /sign-in/* allows 3 requests per 10 s per IP.
-  // Counters live in the rateLimit table, so every instance shares them; Better Auth increments them with
-  // one conditional UPDATE, which is atomic under concurrent requests. /get-session is a read that every
-  // page guard makes, so it is not counted. Neither are requests the endpoint allowlist answers with 404
-  // (Better Auth counts before plugins run), so invented paths cannot fill the table.
+  // Counters live in the rate_limit table, so every instance shares them. `storage: 'database'` declares that
+  // table; the counting itself is ./auth-rate-limit.ts, one atomic upsert per request, because Better Auth's own
+  // database storage lets concurrent requests past the limit on Postgres. /get-session is a read that every page
+  // guard makes, so it is not counted. Neither are requests the endpoint allowlist answers with 404 (Better Auth
+  // counts before plugins run), so invented paths cannot fill the table.
   rateLimit: {
     enabled: env.isProduction,
     window: 60,
     max: 100,
     storage: 'database',
+    customStorage: postgresRateLimitStorage,
     customRules: { '/get-session': false, '/**': (request, rule) => (isExposedEndpoint(request) ? rule : false) },
   },
   advanced: {
