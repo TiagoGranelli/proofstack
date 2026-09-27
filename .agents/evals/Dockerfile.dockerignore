@@ -1,4 +1,4 @@
-# Build context of evals/Dockerfile: the repository as git has it, without dependencies, output or secrets.
+# Build context of .agents/evals/Dockerfile: the repository as git has it, without dependencies, output or secrets.
 .git/
 node_modules/
 .output/

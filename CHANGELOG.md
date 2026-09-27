@@ -23,6 +23,8 @@ repository created from the template.
   `gitleaksignore`, `grype.yaml`, `squawk.toml`). lefthook finds `.config/lefthook.yml` by itself; the scripts
   pass the others by flag.
 - Upstream reading snapshots go in `.repos/` (was `repos/`); every tool's ignore list names the new path.
+- The agent evals live in `.agents/evals/` (was `evals/`): `docker build -f .agents/evals/Dockerfile -t app-eval .`
+  and `harbor run -p .agents/evals/tasks ...`.
 
 ### Fixed
 

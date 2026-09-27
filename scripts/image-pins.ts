@@ -10,7 +10,7 @@ const PINNED_COPIES = [
   '.github/compose.ci.yaml',
   '.github/workflows/ci.yml',
   'Dockerfile',
-  'evals/Dockerfile',
+  '.agents/evals/Dockerfile',
 ]
 
 /** Each pinned reference with a pattern for `<name>:<tag>[@sha256:...]` of the same image. */

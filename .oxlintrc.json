@@ -12,12 +12,12 @@
     "src/routeTree.gen.ts",
     "test-results/**",
     "playwright-report/**",
+    // Skills, and the agent evals: their hidden checks import tests/<layer> helpers by the path they get when
+    // .agents/evals/grade.sh copies them there.
     ".agents/**",
     ".claude/**",
     "lighthouse-report/**",
-    "coverage/**",
-    // Hidden eval checks import tests/<layer> helpers by the path they get when evals/grade.sh copies them there.
-    "evals/**"
+    "coverage/**"
   ],
   "plugins": ["typescript", "unicorn", "oxc", "import", "react", "jsx-a11y", "promise"],
   "jsPlugins": [

@@ -30,7 +30,7 @@
     "openapi.json",
     "pnpm-lock.yaml",
     "skills-lock.json",
-    ".agents/**",
+    ".agents/skills/**",
     ".claude/**",
     "**/*.md"
   ]

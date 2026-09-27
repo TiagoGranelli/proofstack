@@ -1,4 +1,5 @@
-# The base image (evals/Dockerfile) with the planted bug, folded into the baseline commit so history does not show it.
+# The base image (.agents/evals/Dockerfile) with the planted bug, folded into the baseline commit so history does
+# not show it.
 FROM app-eval
 COPY bug.patch /tmp/bug.patch
 RUN git apply /tmp/bug.patch && rm /tmp/bug.patch && git add --all \

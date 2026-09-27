@@ -1,5 +1,5 @@
-// Hidden check of the eval task add-profile-page (the form). evals/grade.sh copies it to tests/component/ after
-// the agent has finished; it is never in the agent's checkout.
+// Hidden check of the eval task add-profile-page (the form). .agents/evals/grade.sh copies it to
+// tests/component/ after the agent has finished; it is never in the agent's checkout.
 import { describe, expect, it } from 'vitest'
 import { page } from 'vitest/browser'
 import { ProfileNameForm } from '#/features/auth/components/profile-name-form.tsx'

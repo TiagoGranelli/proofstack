@@ -1,4 +1,4 @@
-// Hidden check of the eval task add-post-title. evals/grade.sh copies it to tests/api/ after the agent has
+// Hidden check of the eval task add-post-title. .agents/evals/grade.sh copies it to tests/api/ after the agent has
 // finished; it is never in the agent's checkout. It speaks HTTP to the handlers
 // (webHandler), so it does not depend on how the agent typed the contract.
 import { readdirSync, readFileSync } from 'node:fs'
