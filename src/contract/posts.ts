@@ -27,8 +27,11 @@ const PostPath = { id: Schema.String }
 
 // Microsecond UTC timestamp as Postgres stores it (`Post.createdAt` is rounded to milliseconds, which is
 // not precise enough to resume a keyset scan without skipping or repeating rows).
-const CURSOR_TIME = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])T([01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{6}Z$/
-/** Rejects well-formed but impossible dates such as February 30, so they never reach the database. */
+const CURSOR_TIME = /^(?!0000)\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])T([01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{6}Z$/
+/**
+ * Rejects well-formed but impossible dates such as February 30 (the pattern already rules out year 0), so
+ * they never reach Postgres, which would fail the query instead of answering 400.
+ */
 const isCalendarDate = Schema.makeFilter<string>(
   (value) => {
     const date = new Date(`${value.slice(0, 23)}Z`)
