@@ -29,6 +29,8 @@ lighthouse-report/
 .claude/
 repos/
 docs/
+security/
+.gitleaks.toml
 tests/
 Dockerfile
 .dockerignore

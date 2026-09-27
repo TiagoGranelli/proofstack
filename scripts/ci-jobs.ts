@@ -5,6 +5,7 @@
 //               with scripts/images.ts (Docker)
 //   static      pnpm check without its drift gate (the drift job runs every drift check)
 //   supply-chain registry signatures of every installed package, and the vulnerability gate (scripts/audit.ts)
+//   secrets     gitleaks over every commit of HEAD's history (.gitleaks.toml; Docker, a full clone)
 //   drift       every drift check, including the database one (DATABASE_URL)
 //   build       the production build, with placeholder configuration
 //   verify      verify:app on all five Playwright projects (DATABASE_URL, the build)
@@ -12,6 +13,7 @@
 //   docker      the Docker image end to end (scripts/docker-smoke.ts; Docker)
 import { spawnSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
+import { relative, resolve } from 'node:path'
 import { IMAGES } from './images.ts'
 
 const run = (command: string, args: string[], env: NodeJS.ProcessEnv = {}) => {
@@ -58,6 +60,35 @@ const workflows = () => {
   return sequence(steps)
 }
 
+/**
+ * gitleaks from its pinned image, offline and read-only, over every commit reachable from HEAD: a secret that
+ * was committed and removed later is still in the history. Default rules plus the project's (.gitleaks.toml).
+ * Findings are printed with the secret redacted.
+ */
+const git = (...gitArgs: string[]) => spawnSync('git', gitArgs, { encoding: 'utf8' }).stdout.trim()
+const secrets = (args: string[]) => {
+  if (git('rev-parse', '--is-shallow-repository') !== 'false') {
+    console.error('secrets: needs the full history (a clone that is not shallow; actions/checkout `fetch-depth: 0`)')
+    return 1
+  }
+  const top = git('rev-parse', '--show-toplevel')
+  // In a linked worktree, .git points into the main repository's git directory: mount both at their own paths.
+  const common = resolve(git('rev-parse', '--git-common-dir'))
+  const dirs = relative(top, common).startsWith('..') ? [top, common] : [top]
+  const user = process.getuid ? ['--user', `${process.getuid()}:${process.getgid?.() ?? 0}`] : []
+  // git refuses a repository whose owner differs from the process's ("dubious ownership"), as it can in a
+  // container; the mount is read-only anyway.
+  const safeDirectory = ['GIT_CONFIG_COUNT=1', 'GIT_CONFIG_KEY_0=safe.directory', 'GIT_CONFIG_VALUE_0=*']
+  return run(
+    'docker',
+    ['run', '--rm', '--network', 'none', '--memory', '512m', ...user]
+      .concat(safeDirectory.flatMap((setting) => ['--env', setting]))
+      .concat(dirs.flatMap((dir) => ['--volume', `${dir}:${dir}:ro`]))
+      .concat(['--workdir', top, IMAGES.gitleaks, 'git', '--config', '.gitleaks.toml', '--log-opts=HEAD'])
+      .concat(['--redact', '--verbose', '--no-banner', ...args, '.']),
+  )
+}
+
 /** Every reference to an image from scripts/images.ts in these files must be the same pinned reference. */
 const PINNED_COPIES = ['compose.yaml', '.github/workflows/ci.yml', 'Dockerfile']
 const imagePins = () => {
@@ -87,6 +118,7 @@ const JOBS: Record<string, (args: string[]) => number> = {
       ['registry signatures', () => run('pnpm', ['audit', 'signatures'])],
       ['vulnerabilities', () => run('node', ['scripts/audit.ts'])],
     ]),
+  secrets,
   drift: (args) => run('node', ['scripts/check-drift.ts', ...args]),
   // Nitro prerenders /about during the build, which loads the server configuration. The placeholders only
   // satisfy its validation (the same ones as the Dockerfile); nothing connects, nothing lands in .output.

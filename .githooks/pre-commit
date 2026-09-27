@@ -12,6 +12,13 @@ if git diff --cached --quiet; then
 fi
 
 root=$(git rev-parse --show-toplevel)
+
+# Secrets in the staged changes, when a gitleaks binary is installed (optional: no Docker in the hook). CI's
+# `secrets` job scans every commit either way (`pnpm ci:secrets`).
+if command -v gitleaks >/dev/null 2>&1; then
+  gitleaks git --pre-commit --staged --redact --no-banner --config "$root/.gitleaks.toml" "$root"
+fi
+
 if [ ! -d "$root/node_modules" ]; then
   echo "pre-commit: node_modules is missing; run \`pnpm install\` (or commit with --no-verify)" >&2
   exit 1
