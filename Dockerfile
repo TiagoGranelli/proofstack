@@ -53,4 +53,9 @@ STOPSIGNAL SIGTERM
 # HTTP, so replace it if the server itself terminates TLS (NITRO_SSL_CERT).
 HEALTHCHECK --interval=10s --timeout=3s --start-period=15s --retries=3 \
   CMD ["node", "-e", "const e = process.env, h = e.NITRO_HOST || e.HOST || '', port = e.NITRO_PORT || e.PORT || 3000; const host = ['', '0.0.0.0', '::'].includes(h) ? '127.0.0.1' : h.includes(':') ? `[${h}]` : h; fetch(`http://${host}:${port}/api/health`).then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
-CMD ["node", ".output/server/index.mjs"]
+# Node's permission model (docs/decisions/0012-node-permission-model.md): the server may read only its own
+# bundle and use the network; no file writes, child processes, workers, native addons or WASI. --allow-net is
+# still experimental in Node 26, and its warning would be the only non-JSON line at startup.
+# scripts/app-server.ts starts verify:app's and lighthouse's servers with the same flags.
+CMD ["node", "--permission", "--allow-fs-read=/app/.output", "--allow-net", "--disable-warning=ExperimentalWarning", \
+     ".output/server/index.mjs"]

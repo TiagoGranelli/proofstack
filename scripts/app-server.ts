@@ -5,7 +5,7 @@
 import { type ChildProcess, spawn } from 'node:child_process'
 import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { connect, createServer, type Socket } from 'node:net'
-import { dirname, join } from 'node:path'
+import { dirname, join, resolve as resolvePath } from 'node:path'
 import { edgePeers, type RunningEdge, startEdge } from './edge.ts'
 import { resetTestDatabase } from './test-db.ts'
 
@@ -131,6 +131,17 @@ const seedDatabase = async (databaseUrl: string, env: NodeJS.ProcessEnv, users: 
   )
 }
 
+/**
+ * The production image's flags (Dockerfile CMD, docs/decisions/0012-node-permission-model.md), so every test runs
+ * the server under Node's permission model: it may read its bundle and use the network, nothing else.
+ */
+const SERVER_FLAGS = [
+  '--permission',
+  `--allow-fs-read=${resolvePath('.output')}`,
+  '--allow-net',
+  '--disable-warning=ExperimentalWarning',
+]
+
 /** Starts the built server, logging to `logFile`. `stop` ends it (SIGKILL after 10 s) and says how it exited. */
 const spawnServer = (env: NodeJS.ProcessEnv, logFile: string) => {
   mkdirSync(dirname(logFile), { recursive: true })
@@ -138,7 +149,10 @@ const spawnServer = (env: NodeJS.ProcessEnv, logFile: string) => {
   // srvx skips its graceful shutdown (drain, then Nitro's close hook) when CI or TEST is set, and GitHub
   // Actions sets CI=true. The server runs as it would in production; the test runners keep both variables.
   const { CI: _ci, TEST: _test, ...serverEnv } = env
-  const server = spawn('node', ['.output/server/index.mjs'], { stdio: ['ignore', log, log], env: serverEnv })
+  const server = spawn(process.execPath, [...SERVER_FLAGS, '.output/server/index.mjs'], {
+    stdio: ['ignore', log, log],
+    env: serverEnv,
+  })
   closeSync(log)
   const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) =>
     server.once('exit', (code, signal) => resolve({ code, signal })),

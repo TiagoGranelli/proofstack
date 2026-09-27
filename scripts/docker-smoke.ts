@@ -317,6 +317,12 @@ try {
     if (!posts.ok || !Array.isArray(body.items)) throw new Error(`GET /api/me/posts answered ${posts.status}`)
   })
 
+  await step("check that the server runs under Node's permission model", () => {
+    const logs = spawnSync('docker', ['logs', APP], { encoding: 'utf8' })
+    if (!`${logs.stdout}${logs.stderr}`.includes('"permissionModel":true'))
+      throw new Error('the "starting" log line does not say permissionModel: true')
+  })
+
   await step('stop gracefully', () => {
     const started = performance.now()
     docker(['stop', APP], { quiet: true })

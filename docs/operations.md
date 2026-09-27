@@ -25,7 +25,7 @@ without validation: a non-numeric port silently falls back to 3000, and a non-nu
 | `SMTP_URL` | for mail | `smtps://user:password@smtp.example.com:465` (TLS) or `smtp://...:587` (STARTTLS when offered); credentials percent-encoded. Unset: mail is only logged. |
 | `MAIL_FROM` | with `SMTP_URL` | Sender, such as `ProofStack <no-reply@example.com>`. |
 | `PORT`, `HOST` | no | Listen address. Default port 3000 on all interfaces. `NITRO_PORT` and `NITRO_HOST` take precedence when set. |
-| `NITRO_SSL_CERT`, `NITRO_SSL_KEY` | no | Serve HTTPS from Node: PEM text or file paths. Both must be set; with only one, the server silently serves plain HTTP. |
+| `NITRO_SSL_CERT`, `NITRO_SSL_KEY` | no | Serve HTTPS from Node: PEM text or file paths. Both must be set; with only one, the server silently serves plain HTTP. File paths need an `--allow-fs-read` for each in the image's `CMD` ([ADR 0012](decisions/0012-node-permission-model.md)). |
 | `SERVER_SHUTDOWN_TIMEOUT` | no | Seconds to drain requests on SIGTERM. Default 5. |
 | `NODE_ENV` | no | The production build behaves as production regardless; the Docker image sets it anyway. |
 
@@ -475,7 +475,7 @@ entry can appear on the same line in a log collector. `node .output/migrate.mjs`
 - `request error`: an error that reached Nitro's `error` hook from the request pipeline (`tags`,
   `method`, `path`). Nitro answers it with a bare JSON 500.
 - `starting` and `shutdown complete` bracket the process lifetime. `starting` records `appUrl`,
-  `trustedProxies`, `databasePoolMax` and `databaseUrlPooled`; `shutdown complete` lists the cleanups
+  `trustedProxies`, `databasePoolMax`, `databaseUrlPooled` and `permissionModel`; `shutdown complete` lists the cleanups
   that ran (the auth cleanup timer, pending background tasks, the mailer, the Effect runtime and the
   Postgres pool).
 - `expired auth rows deleted`: the periodic cleanup removed expired sessions or verification tokens
@@ -679,6 +679,8 @@ What guards the dependencies, the image and the repository, and where each gate 
   `scripts/images.ts`, `pnpm images:sync` rewrites the copies. A grype failure in `ci:docker` is usually fixed
   by a rebuilt base image digest.
 - **Runtime image.** Only `node`, `.output/` and `drizzle/`: the runtime stage deletes npm and npx, and the
-  process runs as the unprivileged `node` user.
+  process runs as the unprivileged `node` user, under Node's permission model: it may read `.output/` and
+  use the network, and nothing else (no file writes, child processes, workers or addons;
+  [ADR 0012](decisions/0012-node-permission-model.md)). The tests run the server with the same flags.
 - **SBOM.** `pnpm sbom:release` writes CycloneDX documents for the production npm dependencies and for the
   whole image (syft) into `sbom/`, to attach to a release.

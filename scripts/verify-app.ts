@@ -190,6 +190,8 @@ try {
       .some((line) => line.includes('"shutdown complete"') && line.includes('postgres-pool'))
     const problems = [
       ...drain,
+      // Every suite ran against a server under Node's permission model, as the image runs it.
+      log.includes('"permissionModel":true') ? '' : 'the server did not run under the permission model',
       stopped.ms > MAX_SHUTDOWN_MS ? `took ${stopped.ms} ms (max ${MAX_SHUTDOWN_MS})` : '',
       stopped.code === 0 ? '' : `exit ${stopped.code ?? stopped.signal}`,
       closedPool ? '' : 'no "shutdown complete" log line listing postgres-pool',

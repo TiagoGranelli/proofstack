@@ -11,6 +11,8 @@ export default definePlugin((nitroApp) => {
     trustedProxies: env.trustedProxies,
     databasePoolMax: env.databasePoolMax,
     databaseUrlPooled: env.databaseUrlPooled,
+    // Whether Node's permission model restricts the process (the image's CMD, scripts/app-server.ts).
+    permissionModel: process.execArgv.includes('--permission'),
   })
 
   // srvx handles SIGTERM/SIGINT, drains in-flight requests, then closes Nitro: release what server code

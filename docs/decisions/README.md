@@ -17,3 +17,4 @@ later decision supersedes it.
 | [0009](0009-unknown-server-function-id.md) | An unknown server function id gets Start's own answer until TanStack/router#8246 makes it a 404 | Accepted |
 | [0010](0010-content-security-policy.md) | Content-Security-Policy without 'unsafe-inline' (nonce for SSR, hashes for prerendered pages); Trusted Types deferred | Accepted |
 | [0011](0011-lighthouse-over-https-http2.md) | Lighthouse measures the edge over HTTPS and HTTP/2; stock head tags and preload priority | Accepted |
+| [0012](0012-node-permission-model.md) | The production server runs under Node's permission model: read its bundle, use the network, nothing else | Accepted |
