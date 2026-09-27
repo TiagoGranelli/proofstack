@@ -85,7 +85,9 @@ index on a large table is built by hand `CONCURRENTLY`, see
 2. Contract in `src/contract/`: schemas, endpoints, tagged errors. Constants the UI also needs (limits,
    lengths) go in `src/contract/limits.ts`, which stays free of Effect so client bundles do not pull in
    the schema runtime.
-3. Repository (for example `src/server/posts/repo.ts`) and handler in `src/server/api/handlers.ts`.
+3. Repository (for example `src/server/posts/repo.ts`) and handler in `src/server/api/handlers.ts`. A
+   repository takes its client per statement from `Database.client`; a write of several statements runs in
+   `Database.transaction(effect)` (`src/server/db/client.ts`, proven in `tests/db/transaction.test.ts`).
 4. `pnpm codegen`.
 5. Map every new error tag to a message in `src/lib/api-error.ts`. Its error union is derived from the
    generated SDK, so `pnpm typecheck` fails until the switch in `describeApiError` handles the new tag.
