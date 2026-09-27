@@ -263,9 +263,9 @@ Regenerate these files; never edit them by hand:
   `src/contract`, `src/server/api`, and `scripts/openapi.ts`; when upgrading, rewrite them there, run
   `pnpm codegen`, and review the `openapi.json` diff. Core `effect` is also imported by `src/server/posts`
   and `src/server/db/client.ts`.
-- **TypeScript.** `tsc` is TS 7 (`@typescript/native`). The package named `typescript` is the
-  `@typescript/typescript6@6.0.2` shim, which loads `typescript@6.0.3`, because Hey API 0.99 crashes on
-  TS 7 ([ADR 0002](docs/decisions/0002-typescript-7-with-typescript-6-alias.md)).
+- **TypeScript.** The project has one TypeScript, 7.0.2 (no JS compiler API). Hey API is pinned to the
+  `next` snapshot `0.0.0-next-20260824173136` because the stable 0.99.0 needs that API and crashes on TS 7.
+  Do not "upgrade" it to 0.99.0; Dependabot ignores it ([ADR 0002](docs/decisions/0002-typescript-7.md)).
   `scripts/*.ts` run through Node's type stripping, so use erasable syntax only (no enums, namespaces,
   or constructor parameter properties).
 - **Prerender.** Static routes go in `nitro({ prerender: { routes } })` in `vite.config.ts`: Nitro, the

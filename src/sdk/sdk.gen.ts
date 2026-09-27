@@ -5,17 +5,17 @@ import { client } from './client.gen';
 import type { MyPostsCreateData, MyPostsCreateErrors, MyPostsCreateResponses, MyPostsListData, MyPostsListErrors, MyPostsListResponses, MyPostsRemoveData, MyPostsRemoveErrors, MyPostsRemoveResponses, MyPostsUpdateData, MyPostsUpdateErrors, MyPostsUpdateResponses, PublicPostsListData, PublicPostsListErrors, PublicPostsListResponses, SystemHealthData, SystemHealthResponses, SystemReadyData, SystemReadyErrors, SystemReadyResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
-    /**
-     * You can provide a client instance returned by `createClient()` instead of
-     * individual options. This might be also useful if you want to implement a
-     * custom client.
-     */
-    client?: Client;
-    /**
-     * You can pass arbitrary values through the `meta` object. This can be
-     * used to access values that aren't defined as part of the SDK function.
-     */
-    meta?: keyof ClientMeta extends never ? Record<string, unknown> : ClientMeta;
+  /**
+   * You can provide a client instance returned by `createClient()` instead of
+   * individual options. This might be also useful if you want to implement a
+   * custom client.
+   */
+  client?: Client;
+  /**
+   * You can pass arbitrary values through the `meta` object. This can be
+   * used to access values that aren't defined as part of the SDK function.
+   */
+  meta?: keyof ClientMeta extends never ? Record<string, unknown> : ClientMeta;
 };
 
 export const systemHealth = <ThrowOnError extends boolean = false>(options?: Options<SystemHealthData, ThrowOnError>): RequestResult<SystemHealthResponses, unknown, ThrowOnError> => (options?.client ?? client).get<SystemHealthResponses, unknown, ThrowOnError>({ url: '/api/health', ...options });
@@ -25,65 +25,65 @@ export const systemReady = <ThrowOnError extends boolean = false>(options?: Opti
 export const publicPostsList = <ThrowOnError extends boolean = false>(options?: Options<PublicPostsListData, ThrowOnError>): RequestResult<PublicPostsListResponses, PublicPostsListErrors, ThrowOnError> => (options?.client ?? client).get<PublicPostsListResponses, PublicPostsListErrors, ThrowOnError>({ url: '/api/posts', ...options });
 
 export const myPostsList = <ThrowOnError extends boolean = false>(options?: Options<MyPostsListData, ThrowOnError>): RequestResult<MyPostsListResponses, MyPostsListErrors, ThrowOnError> => (options?.client ?? client).get<MyPostsListResponses, MyPostsListErrors, ThrowOnError>({
-    security: [{
-            in: 'cookie',
-            name: 'better-auth.session_token',
-            type: 'apiKey'
-        }, {
-            in: 'cookie',
-            name: '__Secure-better-auth.session_token',
-            type: 'apiKey'
-        }],
-    url: '/api/me/posts',
-    ...options
+  security: [{
+      in: 'cookie',
+      name: 'better-auth.session_token',
+      type: 'apiKey'
+    }, {
+      in: 'cookie',
+      name: '__Secure-better-auth.session_token',
+      type: 'apiKey'
+    }],
+  url: '/api/me/posts',
+  ...options
 });
 
 export const myPostsCreate = <ThrowOnError extends boolean = false>(options: Options<MyPostsCreateData, ThrowOnError>): RequestResult<MyPostsCreateResponses, MyPostsCreateErrors, ThrowOnError> => (options.client ?? client).post<MyPostsCreateResponses, MyPostsCreateErrors, ThrowOnError>({
-    security: [{
-            in: 'cookie',
-            name: 'better-auth.session_token',
-            type: 'apiKey'
-        }, {
-            in: 'cookie',
-            name: '__Secure-better-auth.session_token',
-            type: 'apiKey'
-        }],
-    url: '/api/me/posts',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
+  security: [{
+      in: 'cookie',
+      name: 'better-auth.session_token',
+      type: 'apiKey'
+    }, {
+      in: 'cookie',
+      name: '__Secure-better-auth.session_token',
+      type: 'apiKey'
+    }],
+  url: '/api/me/posts',
+  ...options,
+  headers: {
+    'Content-Type': 'application/json',
+    ...options.headers
+  }
 });
 
 export const myPostsRemove = <ThrowOnError extends boolean = false>(options: Options<MyPostsRemoveData, ThrowOnError>): RequestResult<MyPostsRemoveResponses, MyPostsRemoveErrors, ThrowOnError> => (options.client ?? client).delete<MyPostsRemoveResponses, MyPostsRemoveErrors, ThrowOnError>({
-    security: [{
-            in: 'cookie',
-            name: 'better-auth.session_token',
-            type: 'apiKey'
-        }, {
-            in: 'cookie',
-            name: '__Secure-better-auth.session_token',
-            type: 'apiKey'
-        }],
-    url: '/api/me/posts/{id}',
-    ...options
+  security: [{
+      in: 'cookie',
+      name: 'better-auth.session_token',
+      type: 'apiKey'
+    }, {
+      in: 'cookie',
+      name: '__Secure-better-auth.session_token',
+      type: 'apiKey'
+    }],
+  url: '/api/me/posts/{id}',
+  ...options
 });
 
 export const myPostsUpdate = <ThrowOnError extends boolean = false>(options: Options<MyPostsUpdateData, ThrowOnError>): RequestResult<MyPostsUpdateResponses, MyPostsUpdateErrors, ThrowOnError> => (options.client ?? client).patch<MyPostsUpdateResponses, MyPostsUpdateErrors, ThrowOnError>({
-    security: [{
-            in: 'cookie',
-            name: 'better-auth.session_token',
-            type: 'apiKey'
-        }, {
-            in: 'cookie',
-            name: '__Secure-better-auth.session_token',
-            type: 'apiKey'
-        }],
-    url: '/api/me/posts/{id}',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
+  security: [{
+      in: 'cookie',
+      name: 'better-auth.session_token',
+      type: 'apiKey'
+    }, {
+      in: 'cookie',
+      name: '__Secure-better-auth.session_token',
+      type: 'apiKey'
+    }],
+  url: '/api/me/posts/{id}',
+  ...options,
+  headers: {
+    'Content-Type': 'application/json',
+    ...options.headers
+  }
 });
