@@ -12,7 +12,7 @@ changes to the contract, database, auth, or UI flows.
 | `src/contract/` | Effect `HttpApi` contract: schemas, endpoints, tagged errors, middleware tags | `effect` and other `src/contract` modules only |
 | `src/server/` | Server-only: Effect handlers (`api/`), Better Auth (`auth.ts`), Drizzle (`db/`), repositories, `env.ts`, shutdown `lifecycle.ts` | contract, sdk |
 | `src/sdk/` | Hey API client and TanStack Query options (generated) | nothing |
-| `src/lib/` | Shared plumbing: `api-client.ts` (isomorphic SDK client), `api-error.ts`, `auth-client.ts`, `utils.ts`. `*.functions.ts` are server functions (`createServerFn`) | contract, sdk. The server adapters (`*.functions.ts`, `api-client.ts`) also import server and lib |
+| `src/lib/` | Shared plumbing: `api-client.ts` (isomorphic SDK client), `api-error.ts`, `utils.ts`. `*.functions.ts` are server functions (`createServerFn`): `session.functions.ts` (route guards), `auth.functions.ts` (every account action) | contract, sdk. The server adapters (`*.functions.ts`, `api-client.ts`) also import server and lib |
 | `src/components/` | Shared UI that knows no feature: `ui/` (shadcn primitives, Radix, style `radix-nova`), `errors/` (router error and not-found states, `ApiErrorAlert`), `layouts/` (site header, pending state) | lib, contract, sdk |
 | `src/features/<name>/` | One feature each (`posts`, `auth`): `api/` (query options and mutation hooks), `components/`, `utils/` | components, lib, server adapters, contract, sdk. Never another feature |
 | `src/routes/`, `router.tsx`, `start.ts`, `styles/` | The app layer. Page routes define the route (loader, guards, head) and compose features. `api/$.ts` hands requests to the Effect API; `api/auth/$.ts` to Better Auth | Page routes: features, components, lib, server adapters, contract, sdk. `api/**` is a server adapter: server, contract, sdk, lib |
@@ -20,7 +20,9 @@ changes to the contract, database, auth, or UI flows.
 - Every module in `src/server/` starts with `import '@tanstack/react-start/server-only'`. The exceptions
   are `nitro/` plugins and `db/schema/`, which drizzle-kit and Better Auth's CLI load outside Start.
 - UI and page routes reach data only through the SDK (`#/sdk/...`) or a server function in
-  `#/lib/*.functions.ts`. They never import `src/server`, `drizzle-orm`, `pg`, or `better-auth` directly.
+  `#/lib/*.functions.ts`. They never import `src/server`, `drizzle-orm`, `pg`, or `better-auth` (its client
+  included) directly: account actions are server functions that run Better Auth's router in-process
+  (`callAuthEndpoint` in `src/server/http/auth-handler.ts`), so rate limits and the endpoint allowlist apply.
   Only the server adapters import `src/server`: `src/routes/api/**`, `src/lib/*.functions.ts`, and
   `src/lib/api-client.ts` (Fallow zone `server-adapters`).
 - SSR loaders call the same SDK. On the server it dispatches in-process to the Effect handler
@@ -88,11 +90,17 @@ column, nullability and default the configuration writes exists. To see what Bet
 difference; never write its output over `auth.ts`.
 
 **Users.** Run `pnpm user:create <email> <name>`. The password comes from `PROOFSTACK_USER_PASSWORD`,
-otherwise from stdin: a hidden prompt (asked twice) in a terminal, or the whole input of a pipe. Public
-sign-up is closed ([ADR 0003](docs/decisions/0003-closed-sign-up-cli-user-creation.md)).
+otherwise from stdin: a hidden prompt (asked twice) in a terminal, or the whole input of a pipe. The account
+is created verified. Public sign-up is `AUTH_SIGN_UP=closed` by default
+([ADR 0003](docs/decisions/0003-sign-up-policy.md)).
+
+**Auth endpoint.** A new account action is a server function in `src/lib/auth.functions.ts` calling
+`callAuthEndpoint`, plus its `METHOD /path` in the allowlist (`src/server/http/auth-endpoints.ts`), a hook in
+`src/features/auth/api/`, and a message for any new Better Auth error code in
+`src/features/auth/utils/describe-auth-failure.ts`. Mail goes through `authMail` (`src/server/mail/`).
 
 **First setup.** Run `pnpm install && pnpm bootstrap`. This creates `.env` with a secret, starts
-Postgres, and applies migrations.
+Postgres and Mailpit (`pnpm mail:up`, the local inbox for account emails), and applies migrations.
 
 ## Verify
 
@@ -117,8 +125,13 @@ is not gated on `/login` and `/dashboard` (noindex). CI runs `pnpm lighthouse --
 
 - Install the test browser once: `pnpm exec playwright install chromium`. `verify:app` and `lighthouse`
   use `CHROME_PATH` instead when it is set.
-- `verify:app` starts one server on one database per run. The integration tests and then the E2E tests
-  run against it, so both suites see each other's data.
+- `verify:app` needs Mailpit (`pnpm mail:up`; `MAILPIT_SMTP_PORT`/`MAILPIT_HTTP_PORT` from `.env`). It
+  starts two servers on one database per run: `APP_URL` with `AUTH_SIGN_UP=open` and loopback in
+  `TRUSTED_PROXIES`, and `CLOSED_APP_URL` with the default closed sign-up and a proxy list that excludes the
+  test process. The integration tests and then the E2E tests run against them, so both suites see each
+  other's data. Account flows that change or delete an account create their own throwaway account
+  (`tests/e2e/auth-helpers.ts`), never the two test authors. Only `auth-client-ip.test.ts` signs in on
+  `CLOSED_APP_URL`: every request there shares the bucket of 127.0.0.1.
 - Integration files run in parallel against the same two test users. Each file creates its own client IP
   sequence with `clientIps('<prefix>')` from `tests/integration/helpers.ts` (for example `192.0.2`), sent
   as `X-Forwarded-For`, so each file has its own sign-in rate-limit buckets. Use a prefix no other file
@@ -191,8 +204,12 @@ Regenerate these files; never edit them by hand:
 - **Tailwind.** Keep `@import "tailwindcss" source("../")` in `src/styles/app.css`. Without it, Tailwind
   scans `.output`, SSR and client CSS hashes diverge, and the CSS returns 404 in production.
   `tests/integration/assets.test.ts` guards this.
-- **Better Auth.** `auth.api.signUpEmail` reports success for an email that already exists, so check for
-  existence first (`scripts/create-user.ts`). Keep `tanstackStartCookies()` last in `plugins`.
+- **Better Auth.** `auth.api.*` skips rate limiting, `disabledPaths` and plugin `onRequest` hooks (the
+  endpoint allowlist); use it only for trusted server-side reads (`getSession`) and the CLI. Browser-triggered
+  actions go through `callAuthEndpoint`. Sign-up answers success for an email that already exists
+  (enumeration protection), so `scripts/create-user.ts` checks first. Its `storage: 'database'` rate limit is
+  not atomic on Postgres, hence `src/server/auth-rate-limit.ts`. Keep `tanstackStartCookies()` last in
+  `plugins`.
 - **Origin.** `APP_URL` must be the public origin. SSR uses it as the SDK base URL, and a mismatch
   changes TanStack Query keys and causes a refetch after hydration. `src/start.ts` rejects
   state-changing requests from any other origin.

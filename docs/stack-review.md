@@ -37,7 +37,7 @@ Closed = decided and proven in repo. Hypothesis = chosen, needs more evidence. O
 | SSR data | Loaders call the generated SDK; on the server it dispatches in-process to the Effect handler with the request cookie | Every business operation goes through the contract. Query keys include `baseUrl`, so `APP_URL` must equal the public origin; E2E asserts no refetch after hydration. | Medium | Closed |
 | tRPC, Zod, DaloyJS | Not adopted | HttpApi + OpenAPI + Hey API cover the typed client and TanStack Query hooks; missing: subscriptions and batching, not needed. | Low | Closed ([ADR 0007](decisions/0007-no-trpc-no-zod.md)) |
 | Auth | Better Auth 1.7.6 + Drizzle adapter, email/password; HTTP allowlist (sign-in, sign-out, get-session); per-IP sign-in rate limit with a server-pinned client IP | Reviews found and fixed: rate-limit bypass/lockout, about 30 unneeded endpoints exposed, a sign-in that logged users out with a stale cookie. `signUpEmail` reports success for existing emails. | Medium | Closed |
-| Sign-up | Closed over HTTP; `pnpm user:create` (hidden prompt, stdin or env) | Decided on the owner's behalf. | — | **Owner** ([ADR 0003](decisions/0003-closed-sign-up-cli-user-creation.md)) |
+| Sign-up | Closed over HTTP; `pnpm user:create` (hidden prompt, stdin or env) | Decided on the owner's behalf. | — | **Owner** ([ADR 0003](decisions/0003-sign-up-policy.md)) |
 | Persistence | Postgres 18.6, Drizzle ORM 0.45.3 + drizzle-kit 0.31.11, `pg` 8.23; `scripts/migrate.ts` with advisory lock and bounded DDL lock timeout | Drizzle 1.0 is RC; its Effect integration targets Effect v3. | Low | Closed ([ADR 0005](decisions/0005-drizzle-0-45-stable.md)) |
 | SDK | Hey API 0.99.0 (fetch client + TanStack Query plugin), committed in `src/sdk` | Deterministic; new error tags break typecheck until the UI maps them. | Low | Closed |
 | Lint / format / architecture | Oxlint 1.85 + tsgolint (no ESLint), `@shadcn/lint` via `jsPlugins`, Oxfmt 0.70 (beta), Fallow 3.29 zones | All in `pnpm check`. A config that stopped ignoring `node_modules` once made tsgolint reach 17 GB; ignores now include it and tools are run with explicit scope. | Low | Closed |
@@ -56,7 +56,7 @@ integration gates to catch breakage.
 
 ## Open items
 
-- Owner decisions: closed sign-up ([ADR 0003](decisions/0003-closed-sign-up-cli-user-creation.md)), dropping
+- Owner decisions: closed sign-up ([ADR 0003](decisions/0003-sign-up-policy.md)), dropping
   the Geist font, `inlineCss`, and whether to allow shell execution in the shadcn skill (`npx shadcn@latest`
   inside `SKILL.md`; `AGENTS.md` tells agents to use the pinned CLI).
 - First GitHub Actions run (Lighthouse on slower runners, Dependabot with pnpm 12 lockfiles).
