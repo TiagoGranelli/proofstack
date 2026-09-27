@@ -81,6 +81,6 @@ describe('draining', () => {
     expect(isDraining()).toBe(false)
     setDraining(true)
     expect(isDraining()).toBe(true)
-    expect((globalThis as Record<symbol, unknown>)[Symbol.for('proofstack.draining')]).toBe(true)
+    expect((globalThis as Record<symbol, unknown>)[Symbol.for('app.draining')]).toBe(true)
   })
 })

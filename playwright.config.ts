@@ -5,8 +5,10 @@ const baseURL = process.env.APP_URL ?? 'http://localhost:3000'
 // Every flow runs on every project. WebKit (and with it iPhone 15) needs Ubuntu's libraries and does not run
 // on every Linux host, so outside CI the default is the two desktop engines that run anywhere; `pnpm ci:local`
 // and CI run all five. Choose with PW_PROJECTS: a comma-separated list of names, or `all`. Each starts after
-// the `seed` project, which writes the data the specs share (tests/e2e/seed.setup.ts).
-const dependencies = ['seed']
+// the `setup` projects, which write the data the specs share.
+// tests/e2e/seed.setup.ts: more posts than fit on a page, for the pagination spec.
+const setup = [{ name: 'seed', testMatch: /seed\.setup\.ts$/ }]
+const dependencies = setup.map((project) => project.name)
 const PROJECTS = [
   { name: 'chromium', dependencies, use: { ...devices['Desktop Chrome'] } },
   {
@@ -52,5 +54,5 @@ export default defineConfig({
     baseURL,
     trace: 'retain-on-failure',
   },
-  projects: [{ name: 'seed', testMatch: /seed\.setup\.ts$/ }, ...PROJECTS.filter((p) => names.includes(p.name))],
+  projects: [...setup, ...PROJECTS.filter((p) => names.includes(p.name))],
 })

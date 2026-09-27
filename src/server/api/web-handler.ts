@@ -4,10 +4,11 @@ import { HttpRouter, HttpServer, HttpServerRequest, HttpServerResponse } from 'e
 import { HttpApiBuilder, HttpApiError } from 'effect/unstable/httpapi'
 import { Api } from '#/contract/api.ts'
 import { Database } from '../db/client.ts'
+import { DatabaseHealth } from '../db/health.ts'
 import { onShutdown } from '../lifecycle.ts'
 import { log } from '../log.ts'
 import { PostsRepo } from '../posts/repo.ts'
-import { MyPostsHandlers, PublicPostsHandlers, SystemHandlers } from './handlers.ts'
+import { MeHandlers, MyPostsHandlers, PublicPostsHandlers, SystemHandlers } from './handlers.ts'
 import { AuthenticationLive, RequestValidationLive } from './middleware.ts'
 import { RateLimitStore, WriteRateLimitLive } from './rate-limit.ts'
 
@@ -57,8 +58,9 @@ const ServerMiddleware = HttpRouter.middleware(
 )
 
 const ApiLive = HttpApiBuilder.layer(Api, { openapiPath: '/api/openapi.json' }).pipe(
-  Layer.provide([SystemHandlers, PublicPostsHandlers, MyPostsHandlers]),
+  Layer.provide([SystemHandlers, MeHandlers, PublicPostsHandlers, MyPostsHandlers]),
   Layer.provide([
+    DatabaseHealth.layer.pipe(Layer.provide(Database.layer)),
     PostsRepo.layer.pipe(Layer.provide(Database.layer)),
     AuthenticationLive,
     RequestValidationLive,

@@ -1,4 +1,4 @@
 # Vendored upstream snapshots are local reference material, fetched on demand with
-# `node scripts/vendor-source.ts <preset>`. See docs/agents/dependency-sources.md.
+# partial, sparse git clones. See docs/agents/dependency-sources.md.
 *
 !.gitignore

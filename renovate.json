@@ -1,0 +1,58 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", "docker:pinDigests", "helpers:pinGitHubActionDigests"],
+  "minimumReleaseAge": "7 days",
+  "osvVulnerabilityAlerts": true,
+  "ignoreDeps": ["app", "app-eval"],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "The image pins in scripts/images.ts. The same depName in compose files, ci.yml and the Dockerfiles lands in the same PR, so the copies stay equal (`pnpm ci:workflows` checks).",
+      "managerFilePatterns": ["/^scripts/images\\.ts$/"],
+      "matchStrings": ["'(?<depName>[a-z0-9./-]+):(?<currentValue>[\\w.-]+)@(?<currentDigest>sha256:[a-f0-9]{64})'"],
+      "datasourceTemplate": "docker"
+    },
+    {
+      "customType": "regex",
+      "description": "The Node version pnpm downloads (package.json devEngines.runtime).",
+      "managerFilePatterns": ["/^package\\.json$/"],
+      "matchStrings": ["\"runtime\":\\s*\\{\\s*\"name\":\\s*\"node\",\\s*\"version\":\\s*\"(?<currentValue>[^\"]+)\""],
+      "depNameTemplate": "node",
+      "datasourceTemplate": "node-version"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "Docker Hub and GHCR do not always report a release time; without this, image updates would wait forever.",
+      "matchDatasources": ["docker"],
+      "minimumReleaseAgeBehaviour": "timestamp-optional"
+    },
+    {
+      "description": "Effect 4 is on the rc dist-tag; npm latest is still v3.",
+      "matchPackageNames": ["effect", "@effect/vitest"],
+      "followTag": "rc",
+      "groupName": "effect"
+    },
+    {
+      "description": "The stable 0.99.0 crashes on TypeScript 7 (ADR 0002); stay on the next snapshots.",
+      "matchPackageNames": ["@hey-api/openapi-ts"],
+      "followTag": "next"
+    },
+    {
+      "description": "The node image and devEngines move together.",
+      "matchDepNames": ["node"],
+      "groupName": "node"
+    },
+    {
+      "description": "The Playwright image ships the browsers of one library version.",
+      "matchDepNames": ["mcr.microsoft.com/playwright", "@playwright/test", "playwright"],
+      "groupName": "playwright"
+    },
+    {
+      "description": "@types/node follows the Node major in devEngines.",
+      "matchPackageNames": ["@types/node"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
+    }
+  ]
+}

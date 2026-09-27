@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { pageTitle } from '#/config/app.ts'
 import { ResendVerificationForm } from '#/features/auth/components/resend-verification-form.tsx'
 import { VerifyEmailForm } from '#/features/auth/components/verify-email-form.tsx'
 
@@ -8,7 +9,7 @@ import { VerifyEmailForm } from '#/features/auth/components/verify-email-form.ts
 export const Route = createFileRoute('/verify-email')({
   validateSearch: (search: Record<string, unknown>): { token?: string } =>
     typeof search.token === 'string' && search.token ? { token: search.token } : {},
-  head: () => ({ meta: [{ title: 'Confirm your email · ProofStack' }, { name: 'robots', content: 'noindex' }] }),
+  head: () => ({ meta: [{ title: pageTitle('Confirm your email') }, { name: 'robots', content: 'noindex' }] }),
   headers: () => ({ 'cache-control': 'private, no-store' }),
   component: VerifyEmail,
 })

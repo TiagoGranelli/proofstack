@@ -9,6 +9,7 @@ import { setupWorker } from 'msw/browser'
 import type { AuthOutcome } from '#/lib/auth.functions.ts'
 import { createMswHandlers, type MswHandlerFactories } from '#/sdk/msw.gen.ts'
 import type {
+  MeGetErrors,
   MyPostsCreateErrors,
   MyPostsListErrors,
   MyPostsRemoveErrors,
@@ -24,8 +25,8 @@ import { type AuthFunctionName, authFunctionPath } from './stubs/auth-functions.
 export const worker = setupWorker()
 
 /**
- * One factory per contract operation, e.g. `api.myPostsCreate({ body: post })` for a success, or
- * `api.myPostsCreate(resolver)` for full control. Without a response a handler answers 501.
+ * One factory per contract operation, e.g. `api.meGet({ body: user })` for a success, or `api.meGet(resolver)`
+ * for full control. Without a response a handler answers 501.
  */
 export const api = createMswHandlers().pick
 
@@ -34,15 +35,16 @@ export const api = createMswHandlers().pick
  * generated operations: `api[operation]` below does not compile otherwise.
  */
 type ErrorsByOperation = {
+  systemReady: SystemReadyErrors
+  meGet: MeGetErrors
   publicPostsList: PublicPostsListErrors
   myPostsList: MyPostsListErrors
   myPostsCreate: MyPostsCreateErrors
   myPostsUpdate: MyPostsUpdateErrors
   myPostsRemove: MyPostsRemoveErrors
-  systemReady: SystemReadyErrors
 }
 
-/** A documented error response, e.g. `apiError('myPostsUpdate', 404, { _tag: 'PostNotFound', id })`. */
+/** A documented error response, e.g. `apiError('meGet', 401, { _tag: 'Unauthorized', message })`. */
 export const apiError = <Op extends keyof ErrorsByOperation, Status extends keyof ErrorsByOperation[Op] & number>(
   operation: Op,
   status: Status,

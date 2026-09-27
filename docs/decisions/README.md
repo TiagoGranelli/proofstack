@@ -18,3 +18,6 @@ later decision supersedes it.
 | [0010](0010-content-security-policy.md) | Content-Security-Policy without 'unsafe-inline' (nonce for SSR, hashes for prerendered pages); Trusted Types deferred | Accepted |
 | [0011](0011-lighthouse-over-https-http2.md) | Lighthouse measures the edge over HTTPS and HTTP/2; stock head tags and preload priority | Accepted |
 | [0012](0012-node-permission-model.md) | The production server runs under Node's permission model: read its bundle, use the network, nothing else | Accepted |
+| [0013](0013-three-request-surfaces.md) | Three request surfaces: business operations in the Effect HttpApi, account actions and guards as server functions, Better Auth HTTP only for get-session and sign-in/out | Accepted |
+| [0014](0014-uuidv7-ids-keyset-on-created-at.md) | Post ids from Postgres 18 `uuidv7()`; lists keep the `(created_at, id)` keyset, on ascending indexes | Accepted |
+| [0015](0015-login-without-javascript.md) | The login form posts itself to a FormData server function before hydration and without JavaScript | Accepted |

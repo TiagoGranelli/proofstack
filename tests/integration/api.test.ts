@@ -3,34 +3,16 @@
 import { readFileSync } from 'node:fs'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { createClient } from '#/sdk/client/index.ts'
-import {
-  myPostsCreate,
-  myPostsList,
-  myPostsRemove,
-  myPostsUpdate,
-  publicPostsList,
-  systemHealth,
-  systemReady,
-} from '#/sdk/sdk.gen.ts'
+import { meGet, systemHealth, systemReady } from '#/sdk/sdk.gen.ts'
 import { appUrl, clientIps, sdkClient, signIn, users } from './helpers.ts'
 
 const nextIp = clientIps('192.0.2')
 const anonymous = sdkClient()
-let author: ReturnType<typeof sdkClient>
-let other: ReturnType<typeof sdkClient>
 let authorCookie: string
 
 beforeAll(async () => {
   authorCookie = await signIn(users.author, nextIp())
-  author = sdkClient(authorCookie)
-  other = sdkClient(await signIn(users.other, nextIp()))
 })
-
-const create = async (client: ReturnType<typeof sdkClient>, body: string) => {
-  const res = await myPostsCreate({ client, body: { body } })
-  expect(res.response?.status).toBe(201)
-  return res.data!
-}
 
 describe('contract', () => {
   it('serves exactly the committed openapi.json', async () => {
@@ -66,8 +48,9 @@ describe('contract', () => {
     expect(operations.length).toBeGreaterThan(0)
     for (const { id, path, op } of operations) {
       const alternatives = (op.security ?? []).flatMap((requirement) => Object.keys(requirement)).toSorted()
-      expect(alternatives, id).toEqual(path.startsWith('/api/me/') ? Object.keys(schemes).toSorted() : [])
-      // A path id is any string (a malformed one is a 404, like a missing post), so it never makes a 400.
+      const privatePath = path === '/api/me' || path.startsWith('/api/me/')
+      expect(alternatives, id).toEqual(privatePath ? Object.keys(schemes).toSorted() : [])
+      // A path id is any string (a malformed one answers like a missing one), so it never makes a 400.
       const query = (op.parameters ?? []).filter((parameter) => (parameter as { in: string }).in === 'query')
       const hasInput = op.requestBody !== undefined || query.length > 0
       expect('400' in op.responses, id).toBe(hasInput)
@@ -80,143 +63,27 @@ describe('contract', () => {
   })
 })
 
-describe('posts', () => {
-  it('reads public posts anonymously', async () => {
-    const { data, response } = await publicPostsList({ client: anonymous })
+describe('me', () => {
+  it('answers the signed-in user, without credentials or session data', async () => {
+    const { data, response } = await meGet({ client: sdkClient(authorCookie) })
     expect(response?.status).toBe(200)
-    expect(Array.isArray(data?.items)).toBe(true)
+    expect(Object.keys(data ?? {}).toSorted()).toEqual(['email', 'id', 'name'])
+    expect(data).toMatchObject({ name: users.author.name, email: users.author.email })
+    expect(response?.headers.get('cache-control')).toBe('no-store')
   })
 
-  it('rejects private operations without a session', async () => {
-    const { error, response } = await myPostsList({ client: anonymous })
-    expect(response?.status).toBe(401)
-    expect(error).toMatchObject({ _tag: 'Unauthorized' })
-  })
-
-  // With our Origin, so the CSRF check passes and authentication is what refuses them (not a 403).
-  it('rejects every write without a session, or with a forged one, as Unauthorized', async () => {
-    const post = await create(author, `401 target ${crypto.randomUUID()}`)
+  it('answers 401 without a session or with a forged one', async () => {
     for (const cookie of [undefined, 'better-auth.session_token=forged.token']) {
-      const client = createClient({ baseUrl: appUrl, headers: { origin: appUrl, ...(cookie ? { cookie } : {}) } })
-      for (const [name, call] of [
-        ['create', () => myPostsCreate({ client, body: { body: 'no session' } })],
-        ['update', () => myPostsUpdate({ client, path: { id: post.id }, body: { body: 'no session' } })],
-        ['remove', () => myPostsRemove({ client, path: { id: post.id } })],
-      ] as const) {
-        const { error, response } = await call()
-        expect(response?.status, `${name} with ${cookie ?? 'no cookie'}`).toBe(401)
-        expect(error).toEqual({ _tag: 'Unauthorized', message: 'Authentication required' })
-      }
+      const client = createClient({ baseUrl: appUrl, headers: cookie ? { cookie } : {} })
+      const { error, response } = await meGet({ client })
+      expect(response?.status, cookie ?? 'no cookie').toBe(401)
+      expect(error).toEqual({ _tag: 'Unauthorized', message: 'Authentication required' })
     }
-    const own = (await myPostsList({ client: author })).data!.items
-    expect(own.find((p) => p.id === post.id)).toEqual(post)
-    await myPostsRemove({ client: author, path: { id: post.id } })
-  })
-
-  it('performs authenticated CRUD and exposes it publicly', async () => {
-    const created = await create(author, 'sdk integration post')
-    const { id } = created
-    expect(created.updatedAt).toBe(created.createdAt)
-
-    const updated = await myPostsUpdate({ client: author, path: { id }, body: { body: 'edited' } })
-    expect(updated.data).toMatchObject({ id, body: 'edited', authorName: users.author.name })
-    // An edit moves updatedAt (the column the UI marks "edited" from) and leaves createdAt, the sort key, alone.
-    expect(updated.data!.createdAt).toBe(created.createdAt)
-    expect(Date.parse(updated.data!.updatedAt)).toBeGreaterThan(Date.parse(created.updatedAt))
-    const listed = (await myPostsList({ client: author })).data!.items.find((p) => p.id === id)
-    expect(listed).toEqual(updated.data)
-
-    const pub = await publicPostsList({ client: anonymous })
-    expect(pub.data?.items.some((p) => p.id === id && p.body === 'edited')).toBe(true)
-
-    expect((await myPostsRemove({ client: author, path: { id } })).response?.status).toBe(204)
-    const again = await myPostsRemove({ client: author, path: { id } })
-    expect(again.response?.status).toBe(404)
-    expect(again.error).toMatchObject({ _tag: 'PostNotFound', id })
-  })
-
-  it('returns documented validation errors', async () => {
-    for (const body of ['', '   ', 'x'.repeat(281)]) {
-      const invalid = await myPostsCreate({ client: author, body: { body } })
-      expect(invalid.response?.status).toBe(400)
-      expect(invalid.error).toMatchObject({ _tag: 'ValidationError' })
-    }
-  })
-
-  it('treats malformed ids as not found, on edit and delete alike', async () => {
-    for (const id of ['not-a-uuid', '00000000-0000-4000-8000-00000000000', "1' or '1'='1", '%00']) {
-      const update = await myPostsUpdate({ client: author, path: { id }, body: { body: 'x' } })
-      expect(update.response?.status, `PATCH ${id}`).toBe(404)
-      expect(update.error).toEqual({ _tag: 'PostNotFound', id })
-      const remove = await myPostsRemove({ client: author, path: { id } })
-      expect(remove.response?.status, `DELETE ${id}`).toBe(404)
-      expect(remove.error).toEqual({ _tag: 'PostNotFound', id })
-    }
-  })
-})
-
-describe('author isolation', () => {
-  it("never lets an author list, edit or delete another author's post", async () => {
-    const theirs = await create(other, `other author's post ${crypto.randomUUID()}`)
-
-    const mine = await myPostsList({ client: author })
-    expect(mine.response?.status).toBe(200)
-    expect(mine.data!.items.map((p) => p.id)).not.toContain(theirs.id)
-
-    const update = await myPostsUpdate({ client: author, path: { id: theirs.id }, body: { body: 'hijacked' } })
-    expect(update.response?.status).toBe(404)
-    expect(update.error).toMatchObject({ _tag: 'PostNotFound', id: theirs.id })
-    const remove = await myPostsRemove({ client: author, path: { id: theirs.id } })
-    expect(remove.response?.status).toBe(404)
-    expect(remove.error).toMatchObject({ _tag: 'PostNotFound', id: theirs.id })
-
-    // Still there, unchanged, and still theirs.
-    const own = await myPostsList({ client: other })
-    expect(own.data!.items.find((p) => p.id === theirs.id)).toEqual(theirs)
-    const pub = await publicPostsList({ client: anonymous })
-    expect(pub.data!.items.find((p) => p.id === theirs.id)).toMatchObject({
-      body: theirs.body,
-      authorName: users.other.name,
-    })
-
-    expect((await myPostsRemove({ client: other, path: { id: theirs.id } })).response?.status).toBe(204)
-  })
-
-  it("lists only the signed-in author's posts, under their own name", async () => {
-    const mine = await create(author, `mine ${crypto.randomUUID()}`)
-    const theirs = await create(other, `theirs ${crypto.randomUUID()}`)
-    for (const [client, own, foreign, name] of [
-      [author, mine, theirs, users.author.name],
-      [other, theirs, mine, users.other.name],
-    ] as const) {
-      const list = (await myPostsList({ client })).data!.items
-      expect(list.map((p) => p.id)).toContain(own.id)
-      expect(list.map((p) => p.id)).not.toContain(foreign.id)
-      expect(new Set(list.map((p) => p.authorName))).toEqual(new Set([name]))
-    }
-    await myPostsRemove({ client: author, path: { id: mine.id } })
-    await myPostsRemove({ client: other, path: { id: theirs.id } })
-  })
-
-  it('shows author names publicly and never emails or internal ids', async () => {
-    const mine = await create(author, `public by author ${crypto.randomUUID()}`)
-    const theirs = await create(other, `public by other ${crypto.randomUUID()}`)
-    const res = await fetch(`${appUrl}/api/posts`)
-    const text = await res.text()
-    for (const user of Object.values(users)) expect(text).not.toContain(user.email)
-    expect(text).not.toMatch(/authorId|author_id|email/i)
-
-    const { items: posts } = JSON.parse(text) as { items: Array<Record<string, unknown>> }
-    for (const post of posts)
-      expect(Object.keys(post).toSorted()).toEqual(['authorName', 'body', 'createdAt', 'id', 'updatedAt'])
-    expect(posts.find((p) => p.id === mine.id)?.authorName).toBe(users.author.name)
-    expect(posts.find((p) => p.id === theirs.id)?.authorName).toBe(users.other.name)
-    await myPostsRemove({ client: author, path: { id: mine.id } })
-    await myPostsRemove({ client: other, path: { id: theirs.id } })
   })
 })
 
 describe('security', () => {
+  // The CSRF check in src/start.ts runs before routing, so it answers for any /api path and method.
   const attempts: Array<[string, Record<string, string>]> = [
     ['cross-site fetch metadata', { origin: 'https://evil.example', 'sec-fetch-site': 'cross-site' }],
     // Older browsers and non-browser clients send no Sec-Fetch-Site: Origin alone must decide.
@@ -224,25 +91,26 @@ describe('security', () => {
     ['no Origin, Referer or fetch metadata', {}],
   ]
 
-  it.each(attempts)('rejects /api mutations with %s', async (_, headers) => {
-    const post = await create(author, `csrf target ${crypto.randomUUID()}`)
-    const requests: Array<[string, string, string?]> = [
-      ['POST', '/api/me/posts', JSON.stringify({ body: 'csrf' })],
-      ['PATCH', `/api/me/posts/${post.id}`, JSON.stringify({ body: 'csrf' })],
-      ['DELETE', `/api/me/posts/${post.id}`],
-    ]
-    for (const [method, path, body] of requests) {
-      const res = await fetch(appUrl + path, {
+  it.each(attempts)('rejects /api writes with %s before they reach the API', async (_, headers) => {
+    for (const method of ['POST', 'PATCH', 'DELETE']) {
+      const res = await fetch(`${appUrl}/api/me`, {
         method,
         headers: { cookie: authorCookie, 'content-type': 'application/json', ...headers },
-        ...(body ? { body } : {}),
+        body: '{}',
       })
-      expect(res.status, `${method} ${path}`).toBe(403)
+      expect(res.status, method).toBe(403)
     }
-    const own = (await myPostsList({ client: author })).data!.items
-    expect(own.find((p) => p.id === post.id)?.body).toBe(post.body)
-    expect(own.filter((p) => p.body === 'csrf')).toEqual([])
-    await myPostsRemove({ client: author, path: { id: post.id } })
+  })
+
+  it('lets the same writes from our own origin through to the API', async () => {
+    const res = await fetch(`${appUrl}/api/me`, {
+      method: 'POST',
+      headers: { cookie: authorCookie, 'content-type': 'application/json', origin: appUrl },
+      body: '{}',
+    })
+    // GET is the only method of /api/me: the router, not the CSRF check, refuses it.
+    expect(res.status).not.toBe(403)
+    expect(res.status).toBeGreaterThanOrEqual(400)
   })
 
   it('sends security headers and keeps private pages out of shared caches', async () => {

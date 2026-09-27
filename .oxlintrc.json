@@ -51,6 +51,15 @@
     "reportUnusedDisableDirectives": "error"
   },
   "rules": {
+    // On Windows pnpm, npm and node_modules/.bin tools are `.cmd` shims, which Node refuses to start without a shell
+    // (CVE-2024-27980); tinyexec resolves them and escapes their arguments for cmd.exe.
+    "eslint-js/no-restricted-syntax": [
+      "error",
+      {
+        "selector": "CallExpression:matches([callee.name=/^(spawn|spawnSync|execFile|execFileSync)$/], [callee.property.name=/^(spawn|spawnSync|execFile|execFileSync)$/])[arguments.0.value=/^(pnpm|npm|npx|yarn)$|^node_modules/]",
+        "message": "Start pnpm, npm or a node_modules/.bin tool with `xSync` or `x` from tinyexec, not node:child_process: on Windows it is a `.cmd` shim, which Node refuses to start without a shell (CVE-2024-27980)."
+      }
+    ],
     "react/react-in-jsx-scope": "off",
     "unicorn/filename-case": ["error", { "case": "kebabCase" }],
     "oxc/no-barrel-file": ["error", { "threshold": 0 }],
@@ -287,8 +296,8 @@
           {
             "patterns": [
               {
-                "group": ["*", "!effect", "!effect/**", "!./*", "!\\#/contract/*"],
-                "message": "src/contract is the pure API contract: it may import only `effect` and other src/contract modules."
+                "group": ["*", "!effect", "!effect/**", "!./*", "!\\#/contract/*", "!\\#/config/*"],
+                "message": "src/contract is the pure API contract: it may import only `effect`, other src/contract modules and src/config."
               }
             ]
           }
@@ -358,6 +367,10 @@
         "eslint-js/no-restricted-syntax": [
           "error",
           {
+            "selector": "CallExpression:matches([callee.name=/^(spawn|spawnSync|execFile|execFileSync)$/], [callee.property.name=/^(spawn|spawnSync|execFile|execFileSync)$/])[arguments.0.value=/^(pnpm|npm|npx|yarn)$|^node_modules/]",
+            "message": "Start pnpm, npm or a node_modules/.bin tool with `xSync` or `x` from tinyexec, not node:child_process: on Windows it is a `.cmd` shim, which Node refuses to start without a shell (CVE-2024-27980)."
+          },
+          {
             "selector": "TSAsExpression > TSAsExpression.expression[typeAnnotation.type='TSUnknownKeyword']",
             "message": "`as unknown as` switches the type checker off. Decode the value with Effect Schema, or fix the type where it comes from."
           },
@@ -382,6 +395,10 @@
       "rules": {
         "eslint-js/no-restricted-syntax": [
           "error",
+          {
+            "selector": "CallExpression:matches([callee.name=/^(spawn|spawnSync|execFile|execFileSync)$/], [callee.property.name=/^(spawn|spawnSync|execFile|execFileSync)$/])[arguments.0.value=/^(pnpm|npm|npx|yarn)$|^node_modules/]",
+            "message": "Start pnpm, npm or a node_modules/.bin tool with `xSync` or `x` from tinyexec, not node:child_process: on Windows it is a `.cmd` shim, which Node refuses to start without a shell (CVE-2024-27980)."
+          },
           {
             "selector": "TSAsExpression > TSAsExpression.expression[typeAnnotation.type='TSUnknownKeyword']",
             "message": "`as unknown as` switches the type checker off. Decode the value with Effect Schema, or fix the type where it comes from."
@@ -411,6 +428,10 @@
         "eslint-js/no-restricted-syntax": [
           "error",
           {
+            "selector": "CallExpression:matches([callee.name=/^(spawn|spawnSync|execFile|execFileSync)$/], [callee.property.name=/^(spawn|spawnSync|execFile|execFileSync)$/])[arguments.0.value=/^(pnpm|npm|npx|yarn)$|^node_modules/]",
+            "message": "Start pnpm, npm or a node_modules/.bin tool with `xSync` or `x` from tinyexec, not node:child_process: on Windows it is a `.cmd` shim, which Node refuses to start without a shell (CVE-2024-27980)."
+          },
+          {
             "selector": "Program",
             "message": "src/routes/api holds only the two raw routes, api/$.ts (the Effect API) and api/auth/$.ts (Better Auth). Add an endpoint to src/contract and src/server/api/handlers.ts instead."
           }
@@ -423,6 +444,10 @@
       "rules": {
         "eslint-js/no-restricted-syntax": [
           "error",
+          {
+            "selector": "CallExpression:matches([callee.name=/^(spawn|spawnSync|execFile|execFileSync)$/], [callee.property.name=/^(spawn|spawnSync|execFile|execFileSync)$/])[arguments.0.value=/^(pnpm|npm|npx|yarn)$|^node_modules/]",
+            "message": "Start pnpm, npm or a node_modules/.bin tool with `xSync` or `x` from tinyexec, not node:child_process: on Windows it is a `.cmd` shim, which Node refuses to start without a shell (CVE-2024-27980)."
+          },
           {
             "selector": "TSAsExpression > TSAsExpression.expression[typeAnnotation.type='TSUnknownKeyword']",
             "message": "`as unknown as` switches the type checker off. Decode the value with Effect Schema, or fix the type where it comes from."
@@ -444,6 +469,10 @@
         "eslint-js/no-restricted-syntax": [
           "error",
           {
+            "selector": "CallExpression:matches([callee.name=/^(spawn|spawnSync|execFile|execFileSync)$/], [callee.property.name=/^(spawn|spawnSync|execFile|execFileSync)$/])[arguments.0.value=/^(pnpm|npm|npx|yarn)$|^node_modules/]",
+            "message": "Start pnpm, npm or a node_modules/.bin tool with `xSync` or `x` from tinyexec, not node:child_process: on Windows it is a `.cmd` shim, which Node refuses to start without a shell (CVE-2024-27980)."
+          },
+          {
             "selector": "CallExpression[callee.name='expect'][arguments.0.type='Literal'], CallExpression[callee.name='expect'][arguments.0.type='TemplateLiteral'][arguments.0.expressions.length=0], CallExpression[callee.name='expect'][arguments.0.type='Identifier'][arguments.0.name='undefined']",
             "message": "expect(<literal>) asserts on a constant, so it can never fail. Put the value under test in expect(...)."
           }
@@ -456,6 +485,10 @@
       "rules": {
         "eslint-js/no-restricted-syntax": [
           "error",
+          {
+            "selector": "CallExpression:matches([callee.name=/^(spawn|spawnSync|execFile|execFileSync)$/], [callee.property.name=/^(spawn|spawnSync|execFile|execFileSync)$/])[arguments.0.value=/^(pnpm|npm|npx|yarn)$|^node_modules/]",
+            "message": "Start pnpm, npm or a node_modules/.bin tool with `xSync` or `x` from tinyexec, not node:child_process: on Windows it is a `.cmd` shim, which Node refuses to start without a shell (CVE-2024-27980)."
+          },
           {
             "selector": "CallExpression[callee.name='expect'][arguments.0.type='Literal'], CallExpression[callee.name='expect'][arguments.0.type='TemplateLiteral'][arguments.0.expressions.length=0], CallExpression[callee.name='expect'][arguments.0.type='Identifier'][arguments.0.name='undefined']",
             "message": "expect(<literal>) asserts on a constant, so it can never fail. Put the value under test in expect(...)."

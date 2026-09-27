@@ -18,7 +18,7 @@ type Allowlist = { unobserved: AllowEntry[]; undeclared: AllowEntry[] }
 
 export const ALLOWLIST = 'tests/contract-coverage-allowlist.json'
 
-/** `GET /api/me/posts/{id}` and a pattern matching concrete paths of it. */
+/** `GET /api/items/{id}` and a pattern matching concrete paths of it. */
 export const operations = (spec: {
   paths: Record<string, Record<string, { responses: Record<string, unknown> }>>
 }): Operation[] =>

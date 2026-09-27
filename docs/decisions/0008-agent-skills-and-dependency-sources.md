@@ -17,8 +17,9 @@ licensed for redistribution, and excluded from tooling.
   pins those versions.
 - Better Auth's skills have no license, so they are loaded on demand only (`skills use`) and never
   committed.
-- Do not commit upstream sources. `scripts/vendor-source.ts` fetches filtered snapshots (1–2 MB each) at
-  the lockfile's version into the git-ignored `repos/`.
+- Do not commit upstream sources. Partial, sparse git clones fetch filtered snapshots (1–2 MB each) at
+  the lockfile's version into the git-ignored `repos/` (since 2026-09-27; before, `scripts/vendor-source.ts`
+  read GitHub tarballs).
 
 ## Evidence
 

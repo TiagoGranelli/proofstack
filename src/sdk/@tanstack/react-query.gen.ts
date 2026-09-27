@@ -4,8 +4,8 @@
 import { type DefaultError, type InfiniteData, infiniteQueryOptions, queryOptions, type UseMutationOptions } from '@tanstack/react-query';
 
 import { client } from '../client.gen';
-import { myPostsCreate, myPostsList, myPostsRemove, myPostsUpdate, type Options, publicPostsList, systemHealth, systemReady } from '../sdk.gen';
-import type { MyPostsCreateData, MyPostsCreateError, MyPostsCreateResponse, MyPostsListData, MyPostsListError, MyPostsListResponse, MyPostsRemoveData, MyPostsRemoveError, MyPostsRemoveResponse, MyPostsUpdateData, MyPostsUpdateError, MyPostsUpdateResponse, PageCursor, PublicPostsListData, PublicPostsListError, PublicPostsListResponse, SystemHealthData, SystemHealthResponse, SystemReadyData, SystemReadyError, SystemReadyResponse } from '../types.gen';
+import { meGet, myPostsCreate, myPostsList, myPostsRemove, myPostsUpdate, type Options, publicPostsList, systemHealth, systemReady } from '../sdk.gen';
+import type { MeGetData, MeGetError, MeGetResponse, MyPostsCreateData, MyPostsCreateError, MyPostsCreateResponse, MyPostsListData, MyPostsListError, MyPostsListResponse, MyPostsRemoveData, MyPostsRemoveError, MyPostsRemoveResponse, MyPostsUpdateData, MyPostsUpdateError, MyPostsUpdateResponse, PageCursor, PublicPostsListData, PublicPostsListError, PublicPostsListResponse, SystemHealthData, SystemHealthResponse, SystemReadyData, SystemReadyError, SystemReadyResponse } from '../types.gen';
 
 export type QueryKey<TOptions extends Options> = [
   Pick<TOptions, 'baseUrl' | 'body' | 'headers' | 'path' | 'query'> & {
@@ -68,6 +68,21 @@ export const systemReadyOptions = (options?: Options<SystemReadyData>) => queryO
     return data;
   },
   queryKey: systemReadyQueryKey(options)
+});
+
+export const meGetQueryKey = (options?: Options<MeGetData>) => createQueryKey('meGet', options);
+
+export const meGetOptions = (options?: Options<MeGetData>) => queryOptions<MeGetResponse, MeGetError, MeGetResponse, ReturnType<typeof meGetQueryKey>>({
+  queryFn: async ({ queryKey, signal }) => {
+    const { data } = await meGet({
+      ...options,
+      ...queryKey[0],
+      signal,
+      throwOnError: true
+    });
+    return data;
+  },
+  queryKey: meGetQueryKey(options)
 });
 
 export const publicPostsListQueryKey = (options?: Options<PublicPostsListData>) => createQueryKey('publicPostsList', options);

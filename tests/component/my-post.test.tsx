@@ -123,45 +123,55 @@ describe('MyPost', () => {
           message: 'Invalid request payload',
           issues: [{ path: ['body'], message: 'Too long.' }],
         }),
-      message: 'Could not save the post: Too long.',
+      message: 'Too long.',
+      fieldLevel: true,
     },
     {
       name: 'a PostNotFound',
       handler: () => apiError('myPostsUpdate', 404, { _tag: 'PostNotFound', id: original.id }),
       message: 'This post no longer exists. It may have been deleted elsewhere.',
+      fieldLevel: false,
     },
     {
       name: 'an ended session',
       handler: () => apiError('myPostsUpdate', 401, { _tag: 'Unauthorized', message: 'Authentication required' }),
       message: 'Your session has ended. Sign in again to continue. Sign in',
+      fieldLevel: false,
     },
     {
       name: 'a network failure',
       handler: () => apiFailure('myPostsUpdate', { network: true }),
       message: 'Could not save the post. Check your connection and try again.',
+      fieldLevel: false,
     },
   ]
-  it.each(saveFailures)('keeps the draft on $name, then Cancel clears the error', async ({ handler, message }) => {
-    worker.use(handler())
-    const onUpdated = vi.fn<() => void>()
-    await renderInApp(<MyPost post={original} onUpdated={onUpdated} />)
-    await startEditing()
-    await field().fill('my draft')
-    await save().click()
+  it.each(saveFailures)(
+    'keeps the draft on $name, then Cancel clears the error',
+    async ({ handler, message, fieldLevel }) => {
+      worker.use(handler())
+      const onUpdated = vi.fn<() => void>()
+      await renderInApp(<MyPost post={original} onUpdated={onUpdated} />)
+      await startEditing()
+      await field().fill('my draft')
+      await save().click()
 
-    await expect.element(page.getByRole('alert')).toHaveTextContent(message)
-    await expect.element(field()).toHaveValue('my draft')
-    await expect.element(field()).toHaveAttribute('aria-invalid', 'true')
-    await expect
-      .element(field())
-      .toHaveAttribute('aria-describedby', `edit-post-${original.id}-count edit-post-${original.id}-error`)
-    expect(onUpdated).not.toHaveBeenCalled()
+      await expect.element(page.getByRole('alert')).toHaveTextContent(message)
+      await expect.element(field()).toHaveValue('my draft')
+      // A ValidationError is shown next to the field it names and marks it invalid; any other failure goes under the
+      // form and still describes the draft.
+      const id = `edit-post-${original.id}`
+      expect(field().element().getAttribute('aria-invalid')).toBe(fieldLevel ? 'true' : null)
+      await expect
+        .element(field())
+        .toHaveAttribute('aria-describedby', `${id}-count ${fieldLevel ? `${id}-error` : `${id}-alert`}`)
+      expect(onUpdated).not.toHaveBeenCalled()
 
-    await cancel().click()
-    await startEditing()
-    await expect.element(page.getByRole('alert')).not.toBeInTheDocument()
-    await expect.element(field()).not.toHaveAttribute('aria-invalid')
-  })
+      await cancel().click()
+      await startEditing()
+      await expect.element(page.getByRole('alert')).not.toBeInTheDocument()
+      await expect.element(field()).not.toHaveAttribute('aria-invalid')
+    },
+  )
 
   it('clears a failed save’s error when the next attempt starts, and shows it only if that one fails too', async () => {
     worker.use(apiFailure('myPostsUpdate', { network: true }))

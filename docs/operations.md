@@ -1,6 +1,6 @@
 # Operations
 
-How to configure, deploy and run ProofStack in production. The app is a single Node process
+How to configure, deploy and run the app in production. The app is a single Node process
 (Nitro `node-server` output in `.output/`) in front of PostgreSQL.
 
 ## Environment
@@ -23,7 +23,7 @@ without validation: a non-numeric port silently falls back to 3000, and a non-nu
 | `DATABASE_URL_POOLED` | behind a pooler | `true` when `DATABASE_URL` is a connection pooler (PgBouncer, Neon's `-pooler` host, Supabase's pooler). Default `false`. See [Connection poolers](#connection-poolers). |
 | `AUTH_SIGN_UP` | no | `closed` (default): accounts come from `pnpm user:create`. `open`: anyone can sign up at `/sign-up`; needs `SMTP_URL`. See [Accounts and mail](#accounts-and-mail). |
 | `SMTP_URL` | for mail | `smtps://user:password@smtp.example.com:465` (TLS) or `smtp://...:587` (STARTTLS when offered); credentials percent-encoded. Unset: mail is only logged. |
-| `MAIL_FROM` | with `SMTP_URL` | Sender, such as `ProofStack <no-reply@example.com>`. |
+| `MAIL_FROM` | with `SMTP_URL` | Sender, such as `Acme <no-reply@example.com>`. |
 | `PORT`, `HOST` | no | Listen address. Default port 3000 on all interfaces. `NITRO_PORT` and `NITRO_HOST` take precedence when set. |
 | `NITRO_SSL_CERT`, `NITRO_SSL_KEY` | no | Serve HTTPS from Node: PEM text or file paths. Both must be set; with only one, the server silently serves plain HTTP. File paths need an `--allow-fs-read` for each in the image's `CMD` ([ADR 0012](decisions/0012-node-permission-model.md)). |
 | `SERVER_SHUTDOWN_TIMEOUT` | no | Seconds to drain requests on SIGTERM. Default 5. |
@@ -60,7 +60,7 @@ The `Dockerfile` builds with the locked dependencies (`pnpm install --frozen-loc
 image with only `.output/` and `drizzle/`, running as the unprivileged `node` user.
 
 ```sh
-docker build -t proofstack .
+docker build -t app .
 ```
 
 `.output/` contains the server bundle, the public assets, and two operator commands bundled with their
@@ -73,7 +73,7 @@ Three recipes put this sequence together: [one server with Docker Compose](#depl
 1. Build the image (or `pnpm build && node scripts/bundle-cli.ts` outside Docker).
 2. Run the migrations once per deploy, before the new version receives traffic:
    ```sh
-   docker run --rm -e DATABASE_URL=... proofstack node .output/migrate.mjs
+   docker run --rm -e DATABASE_URL=... app node .output/migrate.mjs
    ```
    Several copies may start at once (for example as an init container per replica). Each run is one
    transaction that first takes a transaction-scoped advisory lock (`pg_advisory_xact_lock`), so the
@@ -151,12 +151,12 @@ Dropping an index works the same way with `DROP INDEX CONCURRENTLY IF EXISTS` an
 
 With the default `AUTH_SIGN_UP=closed`, accounts come from the operator. The image runs the bundled
 command with the app's own environment (`DATABASE_URL`, `APP_URL`, `BETTER_AUTH_SECRET`, and
-`DATABASE_URL_POOLED` behind a pooler). The password comes from `PROOFSTACK_USER_PASSWORD`, otherwise from
+`DATABASE_URL_POOLED` behind a pooler). The password comes from `CREATE_USER_PASSWORD`, otherwise from
 stdin: a hidden prompt, asked twice, with a terminal (`-it`), or the whole input of a pipe (`-i`):
 
 ```sh
-docker run --rm -it --env-file app.env proofstack node .output/create-user.mjs you@example.com "Your Name"
-printf %s "$PASSWORD" | docker run --rm -i --env-file app.env proofstack node .output/create-user.mjs you@example.com "Your Name"
+docker run --rm -it --env-file app.env app node .output/create-user.mjs you@example.com "Your Name"
+printf %s "$PASSWORD" | docker run --rm -i --env-file app.env app node .output/create-user.mjs you@example.com "Your Name"
 ```
 
 Each deploy recipe below shows its form of the command. From a checkout, `pnpm user:create <email> <name>`
@@ -211,22 +211,22 @@ record for your domain pointing at it, and ports 80 and 443 (TCP, and UDP for HT
 2. Once, copy the recipe to a directory on the server and create its settings from the example
    (`$DEPLOY_HOST` is your `user@host`):
    ```sh
-   ssh "$DEPLOY_HOST" mkdir -p proofstack
-   scp deploy/compose.production.yaml deploy/Caddyfile deploy/postgres-init.sh deploy/deploy.env.example "$DEPLOY_HOST":proofstack/
-   ssh "$DEPLOY_HOST" 'cd proofstack && cp deploy.env.example deploy.env && chmod 600 deploy.env'
+   ssh "$DEPLOY_HOST" mkdir -p app
+   scp deploy/compose.production.yaml deploy/Caddyfile deploy/postgres-init.sh deploy/deploy.env.example "$DEPLOY_HOST":app/
+   ssh "$DEPLOY_HOST" 'cd app && cp deploy.env.example deploy.env && chmod 600 deploy.env'
    ```
    Edit `deploy.env` there: `APP_IMAGE`, `DOMAIN`, the two database passwords and `BETTER_AUTH_SECRET`
    (generate them as its comments say), and SMTP. It is gitignored; keep it only on the server.
 3. Deploy, and again for every new image (set its tag in `deploy.env` first):
    ```sh
-   ssh "$DEPLOY_HOST" 'cd proofstack && docker compose -f compose.production.yaml --env-file deploy.env pull && docker compose -f compose.production.yaml --env-file deploy.env up -d'
+   ssh "$DEPLOY_HOST" 'cd app && docker compose -f compose.production.yaml --env-file deploy.env pull && docker compose -f compose.production.yaml --env-file deploy.env up -d'
    ```
    `up -d` runs `migrate` to completion before it starts the new app container, and the app before Caddy.
    The old container stops before the new one starts, so each deploy has a few seconds of 502 from Caddy;
    use Fly.io or Kubernetes for rolling deploys.
 4. Create the first account (a hidden prompt asks for the password):
    ```sh
-   ssh -t "$DEPLOY_HOST" 'cd proofstack && docker compose -f compose.production.yaml --env-file deploy.env run --rm --no-deps app node .output/create-user.mjs you@example.com "Your Name"'
+   ssh -t "$DEPLOY_HOST" 'cd app && docker compose -f compose.production.yaml --env-file deploy.env run --rm --no-deps app node .output/create-user.mjs you@example.com "Your Name"'
    ```
 
 On the first start, `postgres-init.sh` creates the role `app`, which owns the database but is not a
@@ -265,9 +265,9 @@ kubeconform against the Kubernetes 1.33 schemas (strict: an unknown field fails)
 a cluster.
 
 ```sh
-kubectl create secret generic proofstack --from-literal=DATABASE_URL=... --from-literal=BETTER_AUTH_SECRET=...
+kubectl create secret generic app --from-literal=DATABASE_URL=... --from-literal=BETTER_AUTH_SECRET=...
 kubectl apply -f deploy/kubernetes.yaml
-kubectl exec -it deploy/proofstack -c app -- node .output/create-user.mjs you@example.com "Your Name"
+kubectl exec -it deploy/app -c app -- node .output/create-user.mjs you@example.com "Your Name"
 ```
 
 - **Migrations** run in an init container of every pod: concurrent runs queue on the advisory lock, and the
@@ -354,7 +354,7 @@ pgBackRest or WAL-G to object storage.
 
 ```sh
 docker compose -f compose.production.yaml --env-file deploy.env exec -T db \
-  pg_dump -U postgres --format=custom --exclude-extension=pg_stat_statements proofstack >"proofstack-$(date +%F).dump"
+  pg_dump -U postgres --format=custom --exclude-extension=pg_stat_statements app >"app-$(date +%F).dump"
 ```
 
 `pg_stat_statements` stays out of the dump because only a superuser may create it, and the restore runs as
@@ -367,7 +367,7 @@ data:
 ```sh
 dc() { docker compose -f compose.production.yaml --env-file deploy.env "$@"; }
 dc exec -T db psql -U postgres -c 'create database restore_drill owner app'
-dc exec -T db pg_restore -U postgres --dbname=restore_drill --no-owner --role=app <proofstack-2026-09-27.dump
+dc exec -T db pg_restore -U postgres --dbname=restore_drill --no-owner --role=app <app-2026-09-27.dump
 dc exec -T db psql -U postgres -d restore_drill -c 'select count(*) from "user"'
 . ./deploy.env && dc run --rm --no-deps -e "DATABASE_URL=postgres://app:$APP_DB_PASSWORD@db:5432/restore_drill" migrate
 dc exec -T db psql -U postgres -c 'drop database restore_drill'
@@ -507,15 +507,19 @@ requests per 10 seconds per IP; `/request-password-reset` and `/send-verificatio
 other auth endpoints 100 per minute. `/get-session` is not limited. A limited request gets 429 with
 `X-Retry-After` (the UI says how many seconds to wait). Server functions go through the same limits.
 
-The counters live in the `rate_limit` table, so every instance shares them and restarts keep them. Each
-request is one atomic `INSERT ... ON CONFLICT DO UPDATE` (`src/server/auth-rate-limit.ts`): Better Auth's
-own database storage lets concurrent requests past the limit on Postgres (Drizzle adapter 1.7.6), so it is
-replaced through `rateLimit.customStorage`. Rows idle for 10 minutes are deleted in the background.
-Requests for endpoints outside the allowlist are not counted and write nothing.
+The counters live in the `rate_limit` table, so every instance shares them. Each request is one atomic
+`INSERT ... ON CONFLICT DO UPDATE` on its `key` (`src/server/auth-rate-limit.ts`): Better Auth's own database
+storage lets concurrent requests past the limit on Postgres (Drizzle adapter 1.7.6), so it is replaced through
+`rateLimit.customStorage`. Rows idle for 10 minutes are deleted in the background. Requests for endpoints
+outside the allowlist are not counted and write nothing.
+
+The table is `UNLOGGED`: its writes (one per rate-limited request) skip the WAL, and it is not replicated to
+standbys. A clean Postgres restart keeps it; a crash or a failover empties it, which only lets every client
+start a fresh window. Counters that last at most ten minutes are not worth the WAL traffic of durability.
 
 The business API limits writes per user, not per IP, because with open sign-up anyone can hold a session:
 creating, editing and deleting posts (`POST`, `PATCH` and `DELETE /api/me/posts`) count together against
-60 per 60 seconds per account (`POST_WRITES_PER_WINDOW` in `src/contract/limits.ts`), in every build.
+60 per 60 seconds per account (`WRITES_PER_WINDOW` in `src/contract/limits.ts`), in every build.
 Past that they answer 429 with a `RateLimited` body whose `retryAfter` is the wait in seconds, as the
 contract documents. The Effect middleware `WriteRateLimit` (`src/server/api/rate-limit.ts`) runs after
 authentication and before the body is read, on the same table and upsert with keys `api-write|<user id>`.
@@ -764,7 +768,7 @@ browsers, Postgres and (for `verify`) Mailpit, and moves artifacts. The logic li
 | Script | Job |
 | --- | --- |
 | `pnpm ci:workflows` | actionlint 1.7.12 and zizmor 1.30.1 (images pinned by digest, offline, read-only), a check that `compose.yaml`, `deploy/compose.production.yaml`, `ci.yml` and the `Dockerfile` pin the same images as `scripts/images.ts`, and the deploy recipes (`docker compose config` on the production compose file, kubeconform 0.8.0 on `deploy/kubernetes.yaml`, which downloads the schemas). Needs Docker. |
-| `pnpm ci:secrets` | gitleaks 8.30.1 (image pinned by digest, offline, read-only) over every commit reachable from HEAD, with `.gitleaks.toml`. Needs Docker and a full clone (`fetch-depth: 0`). |
+| `pnpm ci:secrets` | gitleaks 8.30.1 (image pinned by digest, offline, read-only) over every commit reachable from HEAD, with `.gitleaks.toml`. A fake value in the tree follows that file's naming convention; `.gitleaksignore` lists, by fingerprint and with a reason, only findings in history that cannot be rewritten. Needs Docker and a full clone (`fetch-depth: 0`). |
 | `pnpm ci:static` | `pnpm check` without its drift gate (so with the migration lint and the license gate) |
 | `pnpm ci:supply-chain` | `pnpm audit signatures` (registry signatures of every installed package) and `pnpm audit:check`. The frozen install before it already verified the lockfile against `minimumReleaseAge` and `trustPolicy`. Needs the npm registry. |
 | `pnpm ci:drift` | `pnpm check:drift`, all four checks (`DATABASE_URL`) |
@@ -776,7 +780,7 @@ browsers, Postgres and (for `verify`) Mailpit, and moves artifacts. The logic li
 `pnpm ci:local [job ...]` is the faithful local equivalent (default: every job, in CI order). It runs the
 container jobs (`static`, `supply-chain`, `drift`, `build`, `verify`, `lighthouse`) in the official Playwright image
 for `@playwright/test` 1.63.0 (Ubuntu 24.04, all browsers including WebKit), with Node from
-`.node-version`, pnpm from `packageManager` and the pinned Caddy binary added, next to Postgres 18.6 and
+the `node` image (the version in `devEngines`), pnpm from `packageManager` and the pinned Caddy binary added, next to Postgres 18.6 and
 Mailpit (`MAILPIT_HOST=mailpit` for `verify:app`) on a private Docker network. The host jobs (`workflows`, `secrets`, `docker`) drive Docker and run on the host.
 
 - The repository is mounted read-only. The container copies what a CI checkout would contain (tracked
@@ -791,7 +795,7 @@ Mailpit (`MAILPIT_HOST=mailpit` for `verify:app`) on a private Docker network. T
 - Reports are copied to `test-results/ci-local/<job>/`. The summary lists every job's time and the
   runner container's peak memory (cgroup `memory.current`, including page cache, and anonymous memory).
 - Containers and the network are named `<prefix>-local-<pid>-*` and removed at the end, also on Ctrl-C.
-  `PROOFSTACK_DOCKER_PREFIX` sets the prefix (default `proofstack-ci`). The runner image
+  `CI_DOCKER_PREFIX` sets the prefix (default `<package name>-ci`). The runner image
   (`<prefix>-runner:<hash>`) and the store volume stay for the next run; remove them with
   `docker image rm` and `docker volume rm`.
 
@@ -805,10 +809,10 @@ The tooling targets Linux, macOS and Windows; CI runs everything on Linux and `p
 (`static-windows`, not blocking yet, on main and on demand).
 
 - **Starting pnpm and tools.** On Windows, `pnpm`, `npm` and the files in `node_modules/.bin` are `.cmd`
-  shims, which Node refuses to start without a shell (CVE-2024-27980). The scripts start them through
-  `scripts/spawn.ts`: pnpm itself when pnpm runs the script (`npm_execpath`), the `.bin` tools through
-  `pnpm exec` on Windows, and a shim through `cmd.exe` only as the last resort, with every argument quoted
-  and one that `cmd.exe` could still expand (`"`, `%`) refused.
+  shims, which Node refuses to start without a shell (CVE-2024-27980). The scripts start them with
+  [tinyexec](https://github.com/tinylibs/tinyexec)'s `xSync`, which puts `node_modules/.bin` first on PATH and,
+  on Windows, resolves the command through PATHEXT and runs a shim through `cmd.exe` with every argument
+  escaped (twice for `node_modules/.bin` shims, which re-parse them), as cross-spawn does.
 - **Line endings.** `.gitattributes` keeps text files LF on every platform; with the CRLF that Git for
   Windows checks out by default, the format check would fail.
 - **The pre-commit hook** is lefthook, a Go binary from npm; it runs each job through `sh`, which Git for
@@ -840,25 +844,29 @@ What guards the dependencies, the image and the repository, and where each gate 
 | --- | --- | --- |
 | pnpm policies (`pnpm-workspace.yaml`) | every `pnpm install --frozen-lockfile` (CI setup, Dockerfile) | a lockfile entry younger than `minimumReleaseAge` (one day, strict) or published with weaker provenance than an earlier version (`trustPolicy: no-downgrade`, for versions under 30 days old); an unmet peer (`strictPeerDependencies`); a dependency build script not listed in `allowBuilds` |
 | `pnpm audit signatures` | CI `supply-chain` | a package whose registry signature does not verify |
-| `pnpm audit:check` | CI `supply-chain` | a high or critical advisory in any package, production or development, not in `security/audit-allowlist.json`; an expired or stale allowlist entry |
+| `pnpm audit:check` | CI `supply-chain` | a high or critical advisory in any package, production or development, not in `auditConfig.ignoreGhsas` (`pnpm-workspace.yaml`) |
 | `pnpm licenses:check` | `pnpm check` | a production dependency whose license is not allowed (`scripts/licenses.ts`) |
 | `pnpm check:migrations` | `pnpm check` | a migration statement that locks or rewrites a busy table ([Migration safety](#migration-safety)) |
 | `pnpm ci:secrets` | CI `secrets`; the pre-commit hook when a `gitleaks` binary is installed | a secret anywhere in the history (`.gitleaks.toml`) |
 | grype in `pnpm ci:docker` | CI `docker` | a high or critical vulnerability with a released fix in the production image, not in `security/image-allowlist.json` |
 
-- **Allowlists.** Both files in `security/` take `{ <id>, package, reason, expires }`; the expiry is at most
-  180 days ahead. A finding goes there only when it cannot apply here (the reason says why); the usual fix is
-  an upgrade, an exact `overrides` entry in `pnpm-workspace.yaml` naming the advisory, or a newer base image.
-- **Dependabot** proposes npm and GitHub Actions updates after a 7-day cooldown. It does not raise security
-  alerts for this project: GitHub's dependency graph reads pnpm 12 lockfiles as empty
-  (dependabot/dependabot-core#15904), so `pnpm audit:check` is the vulnerability gate. It does not update
-  container images either (the docker ecosystems would change only some of the copies of a pin, see
-  `.github/dependabot.yml`): `pnpm images:check` reports newer tags and rebuilt digests, and after editing
-  `scripts/images.ts`, `pnpm images:sync` rewrites the copies. A grype failure in `ci:docker` is usually fixed
-  by a rebuilt base image digest.
+- **Exceptions.** An advisory goes in `auditConfig.ignoreGhsas` (`pnpm-workspace.yaml`, with a comment giving the
+  reason and a review date), and an image finding in `security/image-allowlist.json` (`{ <id>, package, reason,
+  expires }`, at most 180 days ahead), only when it cannot apply here. The usual fix is an upgrade, an exact
+  `overrides` entry in `pnpm-workspace.yaml` naming the advisory, or a newer base image.
+- **Renovate** (`renovate.json`; install the Renovate GitHub App to turn it on) proposes updates for the npm
+  packages, pnpm (`packageManager`), Node (`devEngines`), every container image and the GitHub Actions, the
+  last two pinned by digest. An image pinned in several files (`scripts/images.ts`, the compose files, `ci.yml`,
+  the Dockerfiles) moves in one PR. It waits 7 days after a release, except for a vulnerability fix: its OSV
+  alerts (osv.dev) open that PR at once, since GitHub's dependency graph reads pnpm 12 lockfiles as empty
+  (dependabot/dependabot-core#15904) and GitHub's own alerts miss this project. A grype failure in `ci:docker`
+  is usually fixed by a rebuilt base image digest, which Renovate proposes.
 - **Runtime image.** Only `node`, `.output/` and `drizzle/`: the runtime stage deletes npm and npx, and the
   process runs as the unprivileged `node` user, under Node's permission model: it may read `.output/` and
   use the network, and nothing else (no file writes, child processes, workers or addons;
   [ADR 0012](decisions/0012-node-permission-model.md)). The tests run the server with the same flags.
-- **SBOM.** `pnpm sbom:release` writes CycloneDX documents for the production npm dependencies and for the
-  whole image (syft) into `sbom/`, to attach to a release.
+- **SBOM.** `pnpm sbom:release` runs pnpm's `pnpm sbom` and writes a CycloneDX document of the production npm
+  dependencies (with their licenses) to `sbom/npm.cdx.json`, to attach to a release. Nothing publishes
+  an image yet; a workflow that does should build it with `docker buildx build --sbom=true
+  --provenance=mode=max`, which attaches the image's SBOM (OS packages included) and a SLSA provenance
+  attestation to the pushed image.

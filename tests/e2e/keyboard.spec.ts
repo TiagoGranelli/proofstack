@@ -2,6 +2,7 @@
 // past the page's last control (no trap, see `tabThrough`); editing works from the keyboard and puts focus
 // back; alerts and status messages appear where the design says. Pointer-free, so skipped on touch projects.
 import type { Page } from '@playwright/test'
+import { APP_NAME } from '#/config/app.ts'
 import { tabOrder, tabThrough } from './support/a11y.ts'
 import { createAccount } from './support/accounts.ts'
 import {
@@ -19,7 +20,7 @@ import {
 
 test.skip(({ isMobile }) => isMobile, 'keyboard navigation is a desktop concern')
 
-const NAV = ['link "ProofStack"', 'link "About"', 'link "Dashboard"']
+const NAV = [`link "${APP_NAME}"`, 'link "About"', 'link "Dashboard"']
 
 /**
  * WebKit leaves links out of the Tab order by default (Safari's "Press Tab to highlight each item" setting),
@@ -78,15 +79,19 @@ test.describe('tab order', () => {
         // Sign out other sessions is disabled without other sessions.
         'button "Sign out everywhere"',
         'textbox "Password"',
-        'checkbox "I understand that my account and all my posts are deleted for good."',
+        'checkbox "I understand that my account and all its data are deleted for good."',
         'button "Delete account"',
       ],
     ],
-    ['not found', (page) => visit(page, '/no-such-page'), [...NAV, 'link "Go to latest posts"']],
+    ['not found', (page) => visit(page, '/no-such-page'), [...NAV, 'link "Go to the home page"']],
     [
       'error page',
-      (page) => navigateWithApiResponse(page, '/api/posts', { status: 503, json: {} }),
-      [...NAV, 'button "Try again"', 'link "Go to latest posts"'],
+      async (page, author) => {
+        await signIn(page, author)
+        await navigateWithApiResponse(page, '/api/posts', { status: 503, json: {} })
+        await expect(page.getByRole('button', { name: 'Try again' })).toBeVisible()
+      },
+      [...NAV, 'button "Try again"', 'link "Go to the home page"'],
     ],
     [
       'dashboard',
@@ -188,9 +193,11 @@ test.describe('editing from the keyboard', () => {
     await field.fill('x'.repeat(281))
     await page.getByRole('button', { name: 'Save' }).press('Enter')
     const alert = page.getByRole('alert')
-    await expect(alert).toContainText('Could not save the post')
+    await expect(alert).toContainText('Use at most 280 characters')
     await expect(field).toHaveAttribute('aria-invalid', 'true')
-    await expect(field).toHaveAccessibleDescription(/Over the 280-character limit\..*Could not save the post/)
+    await expect(field).toHaveAccessibleDescription(/Over the 280-character limit\..*Use at most 280 characters/)
+    // Refused before sending, and focus is on the draft to fix.
+    await expect(field).toBeFocused()
   })
 })
 

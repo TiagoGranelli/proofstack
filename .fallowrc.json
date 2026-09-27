@@ -90,6 +90,8 @@
   // Zones are matched in order: the first zone whose pattern matches a file wins.
   "boundaries": {
     "zones": [
+      // The app's public name (src/config/app.ts): plain constants anything may import.
+      { "name": "config", "patterns": ["src/config/**"] },
       // Pure Effect HttpApi contract, shared by server, OpenAPI generation and tests.
       { "name": "contract", "patterns": ["src/contract/**"] },
       // Generated Hey API client (browser + SSR).
@@ -126,14 +128,15 @@
     ],
     // Imports point one way: components -> features -> app, and everything may use lib, contract and sdk.
     "rules": [
-      { "from": "contract", "allow": [] },
+      { "from": "config", "allow": [] },
+      { "from": "contract", "allow": ["config"] },
       { "from": "sdk", "allow": [] },
-      { "from": "server", "allow": ["contract", "sdk"] },
-      { "from": "server-adapters", "allow": ["server", "contract", "sdk", "lib"] },
-      { "from": "lib", "allow": ["contract", "sdk"] },
-      { "from": "components", "allow": ["lib", "contract", "sdk"] },
-      { "from": "features", "allow": ["components", "lib", "server-adapters", "contract", "sdk"] },
-      { "from": "app", "allow": ["features", "components", "lib", "server-adapters", "contract", "sdk"] }
+      { "from": "server", "allow": ["config", "contract", "sdk"] },
+      { "from": "server-adapters", "allow": ["server", "config", "contract", "sdk", "lib"] },
+      { "from": "lib", "allow": ["config", "contract", "sdk"] },
+      { "from": "components", "allow": ["lib", "config", "contract", "sdk"] },
+      { "from": "features", "allow": ["components", "lib", "server-adapters", "config", "contract", "sdk"] },
+      { "from": "app", "allow": ["features", "components", "lib", "server-adapters", "config", "contract", "sdk"] }
     ],
     "coverage": {
       // A new top-level src/ directory must be given a zone before it can be used.

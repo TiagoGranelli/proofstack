@@ -38,8 +38,9 @@ export const pageRoutes = (root = ROUTES): string[] =>
  * without naming it.
  */
 const HELPERS: Array<[RegExp, string]> = [
+  // Every API call under /api/me is made by a page of the dashboard.
+  [/navigateWithApiResponse\(page, '\/api\/me[/']/, '/dashboard'],
   [/\bdashboardWithMyPost\(/, '/dashboard'],
-  [/navigateWithApiResponse\(page, '\/api\/me\/posts'/, '/dashboard'],
   [/navigateWithApiResponse\(page, '\/api\/posts'/, '/'],
 ]
 export const reachedPaths = (block: string): Set<string> => {
@@ -55,10 +56,10 @@ const reaches = (reached: Set<string>, route: string) => {
   return [...reached].some((path) => pattern.test(path))
 }
 
-/** The text between two markers of a file, which must both be there (a renamed block fails loudly). */
+/** The text from `start` to the next `end` after it; both must be there (a renamed block fails loudly). */
 const between = (file: string, text: string, start: string, end?: string) => {
   const from = text.indexOf(start)
-  const to = end === undefined ? text.length : text.indexOf(end, from)
+  const to = end === undefined ? text.length : text.indexOf(end, from + start.length)
   if (from === -1 || to === -1)
     throw new Error(`${file}: cannot find the block from "${start}" to "${end ?? 'the end'}"`)
   return text.slice(from, to)
@@ -73,7 +74,7 @@ export const routeCoverageProblems = (): string[] => {
     [`a landmark snapshot (${A11Y})`, reachedPaths(between(A11Y, a11y, "test.describe('landmarks'"))],
     [
       `a tab-order row (${KEYBOARD})`,
-      reachedPaths(between(KEYBOARD, keyboard, "test.describe('tab order'", "test.describe('editing")),
+      reachedPaths(between(KEYBOARD, keyboard, "test.describe('tab order'", "test.describe('")),
     ],
   ]
   return pageRoutes().flatMap((path) => {

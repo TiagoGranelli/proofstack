@@ -79,9 +79,9 @@ pre-commit:
         fix the failing test or the code it covers (one layer: `pnpm test:unit|test:api|test:component [filter]`).
         A coverage failure names a module in COVERAGE_GATE: cover every line and branch coverage/index.html shows
 
-    # Repository rules no linter checks (tests/unit/repo-policy.test.ts), also for commits without code.
+    # Repository rules no linter checks (tests/unit/repo-policy.test.ts), under a second. No glob: the app's name
+    # must stay out of every file, and the AGENTS.md budget applies to commits without code.
     - name: repo-policy
-      glob: ['**/AGENTS.md', 'package.json', 'pnpm-workspace.yaml', 'drizzle/**', 'src/**']
       run: pnpm exec vitest run --project unit repo-policy
       fail_text: each failed test lists the files and what to do
 

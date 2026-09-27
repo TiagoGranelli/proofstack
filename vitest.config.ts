@@ -49,10 +49,10 @@ const COVERAGE_GATE = [
   'src/lib/content-security-policy.ts',
 ]
 /**
- * Whole-project floor, a little under the measured coverage of `pnpm test:fast` (lines 70.4%, branches 68.5%,
- * functions 60.3%, statements 70.3% when set): it only stops a regression, such as a module added without
- * tests. Raise it when coverage grows.
+ * Whole-project floor, a little under the measured coverage of `pnpm test:fast`: it only stops a regression, such
+ * as a module added without tests. Raise it when coverage grows.
  */
+// Measured lines 70.4%, branches 68.5%, functions 60.3%, statements 70.3% when set.
 const COVERAGE_FLOOR = { lines: 69, branches: 67, functions: 59, statements: 69 }
 for (const file of COVERAGE_GATE) {
   // A renamed file would otherwise drop out of the gate silently: a threshold glob that matches nothing passes.
@@ -64,7 +64,7 @@ for (const file of COVERAGE_GATE) {
  * the library version and never sits in public/ (which would ship it with the app).
  */
 const mswWorkerScript = (): Plugin => ({
-  name: 'proofstack:msw-worker-script',
+  name: 'msw-worker-script',
   configureServer(server) {
     const script = createRequire(import.meta.url).resolve('msw/mockServiceWorker.js')
     server.middlewares.use('/mockServiceWorker.js', (_req, res) => {
@@ -122,8 +122,10 @@ export default defineConfig({
             'react/jsx-dev-runtime',
             'react-dom/client',
             'react-dom/server',
+            '@tanstack/react-form',
             '@tanstack/react-query',
             '@tanstack/react-router',
+            'effect',
             'class-variance-authority',
             'cn',
             'radix-ui',
@@ -163,7 +165,7 @@ export default defineConfig({
         test: {
           name: 'db',
           include: ['tests/db/**/*.test.ts'],
-          // Creates a fresh, migrated proofstack_db_<pid>_test next to DATABASE_URL (or .env's) and hands its URL
+          // Creates a fresh, migrated app_db_<pid>_test next to DATABASE_URL (or .env's) and hands its URL
           // to the workers as DATABASE_URL; dropped afterwards. Needs Postgres, no build, no running app.
           globalSetup: ['tests/db/global-setup.ts'],
           // Everything src/server/env.ts requires except DATABASE_URL (see the global setup). Outgoing mail

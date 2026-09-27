@@ -60,6 +60,9 @@ const idOf = (name: string) =>
   createHash('sha256').update(`src/lib/auth.functions.ts--${name}_createServerFn_handler`).digest('hex')
 
 type AuthFunction = keyof typeof AuthFunctions
+
+/** The path a form posts to for server function `name` (its `url` in the app). */
+export const authFunctionPath = (name: AuthFunction) => `/_serverFn/${idOf(name)}`
 /** What a server function resolved with, as the browser would see it. */
 type Answer<F extends AuthFunction> = Awaited<ReturnType<(typeof AuthFunctions)[F]>>
 
@@ -74,7 +77,7 @@ export const callAuthFunction = async <F extends AuthFunction>(
   options: { method?: 'GET' | 'POST'; data?: Json; headers?: Record<string, string>; baseUrl?: string } = {},
 ): Promise<{ response: Response; value: Answer<F> | undefined; thrown?: string }> => {
   const method = options.method ?? 'POST'
-  const url = new URL(`/_serverFn/${idOf(name)}`, options.baseUrl ?? appUrl)
+  const url = new URL(authFunctionPath(name), options.baseUrl ?? appUrl)
   // The client sends Seroval's `toJSON` envelope (root node, feature flags, no marks); the answer is the root
   // node alone (`toCrossJSON`).
   const payload = JSON.stringify({ t: encode({ data: options.data }, { next: 0 }), f: 127, m: [] })

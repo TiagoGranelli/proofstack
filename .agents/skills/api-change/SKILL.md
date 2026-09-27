@@ -12,7 +12,9 @@ together and must agree; the running API and the tests must agree with all three
 
 1. Edit the contract in `src/contract/`: schemas, endpoints, tagged errors (`Schema.TaggedError` with
    `httpApiStatus`). Constants the UI also needs (limits, lengths) go in `src/contract/limits.ts`, which stays
-   free of Effect so client bundles do not pull in the schema runtime.
+   free of Effect so client bundles do not pull in the schema runtime. A user-supplied string that is stored
+   or looked up in Postgres starts its checks with `isFreeOfNul` (`src/contract/stored-text.ts`): Postgres text
+   cannot hold U+0000, and without the check a NUL answers 500 instead of 400.
 2. Put a new endpoint that needs a session in a group behind the `Authentication` middleware (as `MyPosts` in
    `src/contract/posts.ts`). A public endpoint is a deliberate edit to `PUBLIC_OPERATIONS` in
    `tests/api/public-operations.test.ts`, which expects 401 without a session from every other operation. Add
@@ -27,7 +29,7 @@ together and must agree; the running API and the tests must agree with all three
 6. Test, cheapest layer first (read `tests/AGENTS.md`): every handler branch in `tests/api/` through
    `clientAs(...)` (`handlers.ts` is in the 100% coverage gate), including each declared status, because the
    contract-coverage check after a full `verify:app` fails on a declared status no test provoked. A repository
-   method also gets a query budget in `tests/db/query-budget.test.ts`. `tests/api/database-down.test.ts`
+   method also gets a query budget in `tests/db/<feature>-query-budget.test.ts`. `tests/api/database-down.test.ts`
    covers a new operation without edits.
 
 ## Done when

@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { RouteError } from '#/components/errors/route-error.tsx'
 import { SectionErrorBoundary } from '#/components/errors/section-error-boundary.tsx'
+import { pageTitle } from '#/config/app.ts'
 import { getSessionsQueryOptions } from '#/features/auth/api/get-sessions.ts'
 import { ChangePasswordForm } from '#/features/auth/components/change-password-form.tsx'
 import { DeleteAccountForm } from '#/features/auth/components/delete-account-form.tsx'
@@ -8,7 +9,7 @@ import { SessionList } from '#/features/auth/components/session-list.tsx'
 
 export const Route = createFileRoute('/_authed/account')({
   loader: ({ context }) => context.queryClient.query({ ...getSessionsQueryOptions(), staleTime: 'static' }),
-  head: () => ({ meta: [{ title: 'Account · ProofStack' }, { name: 'robots', content: 'noindex' }] }),
+  head: () => ({ meta: [{ title: pageTitle('Account') }, { name: 'robots', content: 'noindex' }] }),
   // The loader's failures. Once the page is up, each section fails on its own (SectionErrorBoundary).
   errorComponent: (props) => (
     <RouteError {...props} title="Your account could not be loaded" action="load your account" />

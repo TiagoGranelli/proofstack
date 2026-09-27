@@ -1,4 +1,4 @@
-// Router defaults (src/router.tsx). PostList's empty and paged states are in post-list.test.tsx.
+// Router defaults (src/router.tsx): the error, not-found and pending states every route falls back to.
 import type { ErrorComponentProps } from '@tanstack/react-router'
 import { describe, expect, it, vi } from 'vitest'
 import { page } from 'vitest/browser'
@@ -25,7 +25,7 @@ describe('RouteError', () => {
     expect(reset).toHaveBeenCalledOnce()
     await expect.poll(() => invalidate.mock.calls.length).toBe(1)
 
-    await page.getByRole('link', { name: 'Go to latest posts' }).click()
+    await page.getByRole('link', { name: 'Go to the home page' }).click()
     await expect.poll(() => router.state.location.pathname).toBe('/')
   })
 
@@ -43,7 +43,7 @@ describe('RouteNotFound', () => {
   it('says so and links home', async () => {
     await renderInApp(<RouteNotFound />, { url: '/nowhere' })
     await expect.element(page.getByRole('heading', { level: 1 })).toHaveTextContent('Page not found')
-    await expect.element(page.getByRole('link', { name: 'Go to latest posts' })).toHaveAttribute('href', '/')
+    await expect.element(page.getByRole('link', { name: 'Go to the home page' })).toHaveAttribute('href', '/')
   })
 })
 

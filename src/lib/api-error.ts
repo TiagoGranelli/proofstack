@@ -1,3 +1,4 @@
+import type { RateLimited, ValidationError } from '#/contract/errors.ts'
 import type * as Sdk from '#/sdk/sdk.gen.ts'
 
 /** Distributes over the SDK's result union and keeps the `error` member of each variant. */
@@ -6,13 +7,21 @@ type ErrorBody<Result> = Result extends { error: infer E } ? E : never
 type ErrorOf<F> = F extends (...args: never[]) => infer R ? ErrorBody<Awaited<R>> : never
 
 /**
+ * The errors of the shared middleware (RequestValidation, WriteRateLimit), from the contract: handled even while no
+ * endpoint uses that middleware, so the first endpoint that does needs no new case.
+ */
+type MiddlewareError = (typeof ValidationError)['Encoded'] | (typeof RateLimited)['Encoded']
+
+/**
  * Every tagged error the contract can return, derived from the generated SDK: a new error on any endpoint
  * joins this union after `pnpm codegen`, and `describeApiError` stops compiling until it handles it.
  */
-type TaggedApiError = {
-  // Per function: an endpoint without declared errors yields `unknown`, which would swallow the whole union.
-  [Fn in keyof typeof Sdk]: Extract<ErrorOf<(typeof Sdk)[Fn]>, { _tag: string }>
-}[keyof typeof Sdk]
+type TaggedApiError =
+  | {
+      // Per function: an endpoint without declared errors yields `unknown`, which would swallow the whole union.
+      [Fn in keyof typeof Sdk]: Extract<ErrorOf<(typeof Sdk)[Fn]>, { _tag: string }>
+    }[keyof typeof Sdk]
+  | MiddlewareError
 
 interface ApiErrorView {
   /** Sentence shown to the user. Never contains raw server output. */
@@ -27,6 +36,15 @@ const isTaggedApiError = (error: unknown): error is TaggedApiError =>
 /** The contract error tag of an SDK error, or undefined for transport failures and non-JSON bodies. */
 export const apiErrorTag = (error: unknown): TaggedApiError['_tag'] | undefined =>
   isTaggedApiError(error) ? error._tag : undefined
+
+/**
+ * The message of the first issue of a ValidationError that names `field` (its first path segment, a payload key
+ * such as `body`), for a form that shows it next to that field; undefined for any other error.
+ */
+export function fieldIssue(error: unknown, field: string): string | undefined {
+  if (!isTaggedApiError(error) || error._tag !== 'ValidationError') return undefined
+  return error.issues.find((issue) => issue.path[0] === field)?.message
+}
 
 /**
  * Turns whatever the SDK threw into a user-facing message. The SDK throws the parsed JSON body for API

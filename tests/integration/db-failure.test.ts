@@ -85,9 +85,9 @@ describe.runIf(production)('database failure', () => {
   })
 
   it('answers the API and Better Auth with an empty 500', async () => {
-    const api = await fetch(`${app.url}/api/me/posts`, { headers: { cookie } })
+    const api = await fetch(`${app.url}/api/me`, { headers: { cookie } })
     expect(api.status).toBe(500)
-    expectNoLeak(await api.text(), 'GET /api/me/posts')
+    expectNoLeak(await api.text(), 'GET /api/me')
 
     const signIn = await fetch(`${app.url}/api/auth/sign-in/email`, {
       method: 'POST',

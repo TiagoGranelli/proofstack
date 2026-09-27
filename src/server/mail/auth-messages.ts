@@ -1,4 +1,5 @@
 import '@tanstack/react-start/server-only'
+import { APP_NAME } from '#/config/app.ts'
 import type { MailMessage } from './mailer.ts'
 
 interface Recipient {
@@ -6,7 +7,7 @@ interface Recipient {
   readonly email: string
 }
 
-const signature = '\n\n— ProofStack'
+const signature = `\n\n— ${APP_NAME}`
 
 /**
  * The account emails, as plain text. Links point at the app's own pages (/verify-email, /reset-password) with

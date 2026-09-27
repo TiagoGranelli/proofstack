@@ -3,12 +3,19 @@
 // under both policies: the SSR nonce policy with 'strict-dynamic' and the hash policy of the prerendered
 // /about.
 import type { Page } from '@playwright/test'
+import { APP_NAME } from '#/config/app.ts'
 import { expect, signIn, test } from './support/app.ts'
 
 const hydrated = (page: Page) => expect(page.locator('body[data-hydrated="true"]')).toBeAttached()
 
 const navLink = (page: Page, name: string) =>
   page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name, exact: true })
+
+/** On the home page, rendered: its URL and its page heading. */
+const expectHome = async (page: Page) => {
+  await expect(page).toHaveURL(/\/$/)
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+}
 
 test('blocks and reports markup injected into a page', async ({ page, cspViolations }) => {
   // Simulates stored XSS: the server's response, with its real policy, plus inline code without the nonce.
@@ -47,9 +54,9 @@ test('SSR pages load every module and route chunk under the nonce policy', async
   await signIn(page, author)
   await page.goto('/dashboard')
   await hydrated(page)
-  await expect(page.getByLabel('New post')).toBeVisible()
-  await navLink(page, 'ProofStack').click()
-  await expect(page.getByRole('heading', { name: 'Latest posts' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible()
+  await navLink(page, APP_NAME).click()
+  await expectHome(page)
 
   const missing = await page.goto('/no-such-page')
   expect(missing?.status()).toBe(404)
@@ -63,8 +70,8 @@ test('the prerendered page runs under its hash policy and navigates on', async (
   expect(csp).toContain("'sha256-")
   expect(csp).not.toContain("'nonce-")
   await hydrated(page)
-  await navLink(page, 'ProofStack').click()
-  await expect(page.getByRole('heading', { name: 'Latest posts' })).toBeVisible()
+  await navLink(page, APP_NAME).click()
+  await expectHome(page)
   await navLink(page, 'About').click()
   await expect(page.getByRole('heading', { name: 'About' })).toBeVisible()
 })

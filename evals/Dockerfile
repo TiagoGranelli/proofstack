@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # Base image of the agent eval (docs/agents/evals.md): this repository at /app as one fresh commit, installed,
 # with Playwright's browsers. The eval tasks build on it. Build it from the repository root:
-#   docker build -f evals/Dockerfile -t proofstack-eval .
+#   docker build -f evals/Dockerfile -t app-eval .
 # Same images as scripts/ci-local.ts (`pnpm ci:workflows` checks the pins against scripts/images.ts).
 FROM node:26.10.0-slim@sha256:ec7758ee051e457b468b32bde57b0879010b325bb9862718e9615225ce4aaae1 AS node
 FROM mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27

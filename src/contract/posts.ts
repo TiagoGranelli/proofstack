@@ -1,13 +1,8 @@
 import { Schema, SchemaTransformation } from 'effect'
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from 'effect/unstable/httpapi'
-import {
-  POST_MAX_LENGTH,
-  POST_WRITE_WINDOW_SECONDS,
-  POST_WRITES_PER_WINDOW,
-  POSTS_PAGE_DEFAULT,
-  POSTS_PAGE_MAX,
-} from './limits.ts'
+import { POSTS_PAGE_DEFAULT, POSTS_PAGE_MAX, WRITE_WINDOW_SECONDS, WRITES_PER_WINDOW } from './limits.ts'
 import { Authentication, RequestValidation, WriteRateLimit } from './middleware.ts'
+import { PostInput } from './post-input.ts'
 
 const Post = Schema.Struct({
   id: Schema.String,
@@ -17,12 +12,6 @@ const Post = Schema.Struct({
   updatedAt: Schema.String,
 }).annotate({ identifier: 'Post' })
 export type Post = typeof Post.Type
-
-const PostInput = Schema.Struct({
-  body: Schema.String.pipe(
-    Schema.check(Schema.isTrimmed(), Schema.isMinLength(1), Schema.isMaxLength(POST_MAX_LENGTH)),
-  ),
-}).annotate({ identifier: 'PostInput' })
 
 // `Post.pipe(HttpApiSchema.status(201))` would be a second schema with the identifier `Post`, which the
 // OpenAPI generator emits as a duplicate component `Post_1`. The status goes on a suspended reference
@@ -133,6 +122,6 @@ export class MyPosts extends HttpApiGroup.make('myPosts')
       title: 'My posts',
       description:
         `CRUD for the signed-in author. Creating, editing and deleting count together against a limit of ` +
-        `${POST_WRITES_PER_WINDOW} per ${POST_WRITE_WINDOW_SECONDS} s per user; past it they answer 429.`,
+        `${WRITES_PER_WINDOW} per ${WRITE_WINDOW_SECONDS} s per user; past it they answer 429.`,
     }),
   ) {}

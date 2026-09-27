@@ -4,7 +4,7 @@
 //   workflows   actionlint + zizmor on .github, image pins (compose files, ci.yml, Dockerfile) consistent with
 //               scripts/images.ts, and the deploy recipes in deploy/ valid (Docker)
 //   static      pnpm check against the parent commit, without its drift job (the drift job runs every drift check)
-//   supply-chain registry signatures of every installed package, and the vulnerability gate (scripts/audit.ts)
+//   supply-chain registry signatures of every installed package, and the vulnerability gate (`pnpm audit:check`)
 //   secrets     gitleaks over every commit of HEAD's history (.gitleaks.toml; Docker, a full clone)
 //   drift       every drift check, including the database one (DATABASE_URL)
 //   build       the production build, with placeholder configuration
@@ -13,13 +13,18 @@
 //   docker      the Docker image end to end (scripts/docker-smoke.ts; Docker)
 import { spawnSync } from 'node:child_process'
 import { relative, resolve } from 'node:path'
+import { xSync } from 'tinyexec'
 import { pinProblems } from './image-pins.ts'
 import { IMAGES } from './images.ts'
-import { type Invocation, pnpmInvocation, runSync } from './spawn.ts'
 
-const run = (command: string | Invocation, args: string[] = [], env: NodeJS.ProcessEnv = {}) => {
-  const invocation = typeof command === 'string' ? { command, args, shell: false } : command
-  return runSync(invocation, { stdio: 'inherit', env: { ...process.env, ...env } }).status ?? 1
+/** Exit code of `command` with `env` on top of this process's; 1 when it cannot start (for example, no Docker). */
+const run = (command: string, args: string[] = [], env: NodeJS.ProcessEnv = {}) => {
+  try {
+    return xSync(command, args, { nodeOptions: { stdio: 'inherit', env } }).exitCode ?? 1
+  } catch (error) {
+    console.error(`${command} did not start: ${error instanceof Error ? error.message : String(error)}`)
+    return 1
+  }
 }
 
 // GitHub Actions tests the build job's artifact: its file times say nothing about the checkout's.
@@ -130,7 +135,7 @@ const secrets = (args: string[]) => {
 const imagePins = () => {
   const problems = pinProblems()
   for (const problem of problems) console.error(problem)
-  if (problems.length) console.error('Run `pnpm images:sync` to copy the pins from scripts/images.ts.')
+  if (problems.length) console.error('Copy the pin from scripts/images.ts into each file listed.')
   return problems.length ? 1 : 0
 }
 
@@ -138,22 +143,22 @@ const JOBS: Record<string, (args: string[]) => number> = {
   workflows,
   // The commit under test against its parent (the checkout fetches two commits). The drift job runs every drift check.
   static: (args) =>
-    run(pnpmInvocation(['check', ...args]), [], {
+    run('pnpm', ['check', ...args], {
       CHECK_BASE_REF: process.env.CHECK_BASE_REF ?? 'HEAD^',
       LEFTHOOK_EXCLUDE: 'drift',
     }),
   // The install before it already verified the lockfile against minimumReleaseAge and trustPolicy.
   'supply-chain': () =>
     sequence([
-      ['registry signatures', () => run(pnpmInvocation(['audit', 'signatures']))],
-      ['vulnerabilities', () => run('node', ['scripts/audit.ts'])],
+      ['registry signatures', () => run('pnpm', ['audit', 'signatures'])],
+      ['vulnerabilities', () => run('pnpm', ['audit:check'])],
     ]),
   secrets,
   drift: (args) => run('node', ['scripts/check-drift.ts', ...args]),
   // Nitro prerenders /about during the build, which loads the server configuration. The placeholders only
   // satisfy its validation (the same ones as the Dockerfile); nothing connects, nothing lands in .output.
   build: (args) =>
-    run(pnpmInvocation(['build', ...args]), [], {
+    run('pnpm', ['build', ...args], {
       DATABASE_URL: 'postgres://build:build@127.0.0.1:1/build',
       APP_URL: 'http://localhost:3000',
       BETTER_AUTH_SECRET: 'ci-build-placeholder-secret-not-used-at-runtime',

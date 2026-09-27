@@ -1,10 +1,10 @@
 # gitleaks configuration (`pnpm ci:secrets`, and the pre-commit hook when a local gitleaks binary exists):
 # gitleaks' default rules plus two for how this project handles secrets.
 # Values that are safe to commit follow a convention the allowlist knows: the fixed passwords of the
-# throwaway local, CI and smoke-test databases (proofstack-local, proofstack-ci, proofstack-smoke), build and
+# throwaway local, CI and smoke-test databases (app-local, app-ci, app-smoke), build and
 # test placeholders that say so (`...-placeholder-...`, `...-not-a-secret...`), and the documentation example
 # `user:password`. Name a new test value the same way instead of adding an allowlist entry.
-title = "proofstack"
+title = "gitleaks config"
 
 [extend]
 useDefault = true
@@ -31,7 +31,7 @@ targetRules = ["better-auth-secret", "url-credentials"]
 regexTarget = "secret"
 regexes = [
   # Fixed passwords of the throwaway local (compose.yaml), CI and smoke-test databases.
-  '''^proofstack-(local|ci|smoke)$''',
+  '''^app-(local|ci|smoke)$''',
   # Build-time and test placeholders that nothing connects with.
   '''placeholder''',
   '''not-a-secret''',

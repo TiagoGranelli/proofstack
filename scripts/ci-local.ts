@@ -6,7 +6,7 @@
 //   secrets docker.
 //   verify and lighthouse need build, which is added when missing (CI's `needs: build`).
 // Env: CI_LOCAL_CPUS (default 4, a GitHub-hosted runner), CI_LOCAL_MEMORY (6g), CI_LOCAL_SHM (2g),
-//      PROOFSTACK_DOCKER_PREFIX (default proofstack-ci) names every container, network, image and volume.
+//      CI_DOCKER_PREFIX (default <package name>-ci) names every container, network, image and volume.
 //
 // The repository is mounted read-only. The container gets a copy of what a CI checkout would contain
 // (tracked files plus untracked, non-ignored ones, as they are on disk) and installs its own node_modules
@@ -155,8 +155,8 @@ try {
     // Same database and credentials as the CI service; the data lives in memory and goes with the container.
     docker(
       ['run', '--detach', '--name', DB, '--network', NETWORK, '--network-alias', 'postgres', '--memory', '1g']
-        .concat(['--tmpfs', '/var/lib/postgresql:size=512m', '--env', 'POSTGRES_USER=proofstack'])
-        .concat(['--env', 'POSTGRES_PASSWORD=proofstack-ci', '--env', 'POSTGRES_DB=proofstack', IMAGES.postgres]),
+        .concat(['--tmpfs', '/var/lib/postgresql:size=512m', '--env', 'POSTGRES_USER=app'])
+        .concat(['--env', 'POSTGRES_PASSWORD=app-ci', '--env', 'POSTGRES_DB=app', IMAGES.postgres]),
       { quiet: true },
     )
     // verify:app sends account emails here and the E2E tests read them back (the CI service `mailpit`).
@@ -192,7 +192,7 @@ try {
           '--env',
           'CI=true',
           '--env',
-          'DATABASE_URL=postgres://proofstack:proofstack-ci@postgres:5432/proofstack',
+          'DATABASE_URL=postgres://app:app-ci@postgres:5432/app',
           '--env',
           'MAILPIT_HOST=mailpit',
           '--env',

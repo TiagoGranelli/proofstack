@@ -75,7 +75,7 @@ in and how each layer's harness works.
 | `pnpm ci:local [job ...]` | The CI jobs in the Playwright Ubuntu container (needs Docker) |
 
 Every gate's failure message says how to fix it. What each gate covers, how to make a reviewed exception, the
-Lighthouse policy and the less common commands (`deps:check`, `audit:check`, `images:*`, `sbom:release`) are in
+Lighthouse policy and the less common commands (`audit:check`, `sbom:release`) are in
 [docs/agents/gates.md](docs/agents/gates.md).
 
 ## Memory safety
@@ -89,7 +89,8 @@ A misconfigured lint once reached 17 GB and crashed the maintainer's laptop.
   lists all three in `ignorePatterns`. A new tool or config needs the same exclusions.
 - Run heavy commands one at a time (`pnpm build`, type-aware lint, `verify:app`, `lighthouse`); on Linux
   under a memory cap, see [docs/operations.md](docs/operations.md#linux-memory-caps).
-- Read upstream code with `gh api` or `node scripts/vendor-source.ts`, not by cloning repositories.
+- Read upstream code with `gh api` or a sparse clone of the listed paths into `repos/`
+  ([dependency-sources.md](docs/agents/dependency-sources.md)), never a full clone.
 
 ## Generated and vendored files
 
@@ -102,7 +103,7 @@ a refused edit means change the source and run the command.
   `tests/unit/repo-policy.test.ts` rejects edits to migrations already in the journal)
 - `.agents/skills/shadcn/**` and `skills-lock.json`: the `skills` CLI ([docs/agents/skills.md](docs/agents/skills.md)).
   The other skills in `.agents/skills/` are this repo's own and are edited by hand.
-- `repos/**`: `scripts/vendor-source.ts`
+- `repos/**`: the sparse clones in [dependency-sources.md](docs/agents/dependency-sources.md)
 
 ## Version policy
 

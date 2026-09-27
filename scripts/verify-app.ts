@@ -15,12 +15,12 @@
 //           that none of the filters match is skipped. Without filters every selected runner must find tests.
 //   --edge: run both suites through the reference edge (Caddy, deploy/Caddyfile) as in production; its log
 //           is test-results/edge.log. Playwright projects: PW_PROJECTS (see playwright.config.ts).
-// Env: TEST_DATABASE_URL overrides the database (default: proofstack_verify_<pid>_test next to DATABASE_URL,
+// Env: TEST_DATABASE_URL overrides the database (default: app_verify_<pid>_test next to DATABASE_URL,
 //      dropped afterwards unless KEEP_TEST_DB=1). ALLOW_STALE_BUILD=1 skips the build freshness check.
 //      MAILPIT_HOST (default 127.0.0.1), MAILPIT_SMTP_PORT and MAILPIT_HTTP_PORT locate Mailpit.
 import { readdirSync, readFileSync, rmSync } from 'node:fs'
+import { xSync } from 'tinyexec'
 import { assertChromium, LOOPBACK, startApp, stopWhileDraining, tail } from './app-server.ts'
-import { type Invocation, pnpmInvocation, runSync } from './spawn.ts'
 import { dropTestDatabase, openConnections, testDatabaseUrl } from './test-db.ts'
 
 const LOG_FILE = 'test-results/app-server.log'
@@ -45,12 +45,15 @@ const integration = !flags.has('--no-integration')
 const e2e = !flags.has('--no-e2e')
 const edge = flags.has('--edge')
 
-const listed = (command: string[], line: RegExp) => {
-  const { status, stdout, stderr } = runSync(pnpmInvocation(['exec', ...command]), { encoding: 'utf8' })
+/** A command, often from node_modules/.bin (tinyexec puts it first on PATH): the tool, then its arguments. */
+type Command = [tool: string, ...args: string[]]
+
+const listed = ([tool, ...toolArgs]: Command, line: RegExp) => {
+  const { exitCode, stdout, stderr } = xSync(tool, toolArgs)
   // Vitest lists nothing and exits 0 when nothing matches, Playwright exits 1 with "No tests found"; any other
   // failure is a broken config or test file.
-  if (status !== 0 && !/^Error: No tests found\./m.test(`${stdout}${stderr}`)) {
-    console.error(`${command.join(' ')} failed:\n${stdout}${stderr}`)
+  if (exitCode !== 0 && !/^Error: No tests found\./m.test(`${stdout}${stderr}`)) {
+    console.error(`${[tool, ...toolArgs].join(' ')} failed:\n${stdout}${stderr}`)
     process.exit(2)
   }
   return stdout.split('\n').filter((l) => line.test(l)).length
@@ -82,14 +85,14 @@ if (filters.length) {
 
 type Result = { name: string; ok: boolean; detail: string }
 const results: Result[] = []
-const timed = (name: string, invocation: Invocation, env: NodeJS.ProcessEnv) => {
+const timed = (name: string, [tool, ...toolArgs]: Command, env: NodeJS.ProcessEnv) => {
   const started = performance.now()
-  const { status, signal } = runSync(invocation, { stdio: 'inherit', env })
+  const { exitCode, signalCode } = xSync(tool, toolArgs, { nodeOptions: { stdio: 'inherit', env } })
   const seconds = ((performance.now() - started) / 1000).toFixed(1)
   results.push({
     name,
-    ok: status === 0,
-    detail: status === 0 ? `${seconds}s` : `exit ${status ?? signal}, ${seconds}s`,
+    ok: exitCode === 0,
+    detail: exitCode === 0 ? `${seconds}s` : `exit ${exitCode ?? signalCode}, ${seconds}s`,
   })
 }
 
@@ -104,14 +107,13 @@ try {
   if (e2e) await assertChromium()
   if (contractCoverage) {
     rmSync(CONTRACT_OBSERVATIONS, { recursive: true, force: true })
-    timed('api (vitest, recorded)', pnpmInvocation(['exec', 'vitest', 'run', '--project', 'api']), {
+    timed('api (vitest, recorded)', ['vitest', 'run', '--project', 'api'], {
       ...process.env,
       CONTRACT_OBSERVATIONS,
     })
   }
   // No app needed: the project creates and drops its own database (tests/db/global-setup.ts).
-  if (runs.has('db'))
-    timed('db (vitest)', pnpmInvocation(['exec', 'vitest', 'run', '--project', 'db', ...filters]), process.env)
+  if (runs.has('db')) timed('db (vitest)', ['vitest', 'run', '--project', 'db', ...filters], process.env)
   else if (dbTests) results.push({ name: 'db (vitest)', ok: true, detail: 'skipped: no file matches' })
   const databaseUrl = testDatabaseUrl('verify', process.env.TEST_DATABASE_URL)
   // Mail goes to Mailpit (`pnpm mail:up`); the E2E tests read the links from its API. MAILPIT_HOST is for
@@ -123,87 +125,87 @@ try {
   }
   const ready = await fetch(`${mailpit.api}/readyz`).catch(() => undefined)
   if (!ready?.ok) throw new Error(`Mailpit is not reachable at ${mailpit.api}. Start it with \`pnpm mail:up\`.`)
-  const mail = { SMTP_URL: mailpit.smtp, MAIL_FROM: 'ProofStack <no-reply@example.test>' }
-  const app = await startApp({
-    databaseUrl,
-    logFile: LOG_FILE,
-    port: process.env.VERIFY_PORT,
-    // The test process is the "proxy": each suite sends its own X-Forwarded-For and so gets its own sign-in
-    // rate-limit bucket. The server believes the header only from these peers.
-    trustedProxies: LOOPBACK,
-    // Behind the edge the test process is a proxy in front of Caddy instead: Caddy believes its
-    // X-Forwarded-For (it connects from loopback) and hands the resolved client IP to the app.
-    ...(edge ? { edge: { trustedProxies: 'private_ranges', logFile: 'test-results/edge.log' } } : {}),
-    // Open sign-up, so the E2E tests can create the throwaway accounts the account lifecycle flows consume.
-    settings: { AUTH_SIGN_UP: 'open', ...mail },
-  })
-  // The shipped defaults next to it, on the same database and never behind the edge: closed sign-up, and a
-  // proxy list that excludes the test process, whose X-Forwarded-For must then be ignored
-  // (tests/integration/auth-*.test.ts, tests/e2e/auth-closed.spec.ts).
-  const closed = await startApp({
-    databaseUrl,
-    logFile: CLOSED_LOG_FILE,
-    trustedProxies: '10.0.0.0/8',
-    settings: { AUTH_SIGN_UP: 'closed', ...mail },
-    alongside: app,
-  }).catch(async (error: unknown) => {
-    await app.stop()
-    throw error
-  })
-  console.log(
-    `app ${app.url}${edge ? ` (edge in front of ${app.directUrl})` : ''} (database ${new URL(databaseUrl).pathname.slice(1)}, ` +
-      `log ${LOG_FILE}), closed sign-up ${closed.url} (log ${CLOSED_LOG_FILE}), Mailpit ${mailpit.api}`,
-  )
+  const mail = { SMTP_URL: mailpit.smtp, MAIL_FROM: 'App <no-reply@example.test>' }
+  // startApp creates the database: it is dropped in this finally even when a server or create-user fails.
   try {
-    const testEnv = {
-      ...app.env,
-      TEST_USER_EMAIL: app.user.email,
-      TEST_USER_PASSWORD: app.user.password,
-      TEST_USER_NAME: app.user.name,
-      TEST_OTHER_USER_EMAIL: app.otherUser.email,
-      TEST_OTHER_USER_PASSWORD: app.otherUser.password,
-      TEST_OTHER_USER_NAME: app.otherUser.name,
-      CLOSED_APP_URL: closed.url,
-      MAILPIT_URL: mailpit.api,
-    }
-    // Neither runner may pass with no tests: every runner started here has matching tests (see `runs`).
-    if (runs.has('integration'))
-      timed(
-        'integration (vitest)',
-        pnpmInvocation(['exec', 'vitest', 'run', '--project', 'integration', ...filters]),
-        testEnv,
-      )
-    else if (integration) results.push({ name: 'integration (vitest)', ok: true, detail: 'skipped: no file matches' })
-    if (runs.has('e2e')) timed('e2e (playwright)', pnpmInvocation(['exec', 'playwright', 'test', ...filters]), testEnv)
-    else if (e2e) results.push({ name: 'e2e (playwright)', ok: true, detail: 'skipped: no test matches' })
-  } finally {
-    const [{ stopped, problems: drain }] = await Promise.all([stopWhileDraining(app), closed.stop()])
-    // The process exited, so its sockets are gone; Postgres may take a moment to reap the backends.
-    let leftover = await openConnections(databaseUrl)
-    for (let i = 0; i < 10 && leftover.length; i++) {
-      await new Promise((r) => setTimeout(r, 100))
-      leftover = await openConnections(databaseUrl)
-    }
-    const log = readFileSync(LOG_FILE, 'utf8')
-    const closedPool = log
-      .split('\n')
-      .some((line) => line.includes('"shutdown complete"') && line.includes('postgres-pool'))
-    const problems = [
-      ...drain,
-      // Every suite ran against a server under Node's permission model, as the image runs it.
-      log.includes('"permissionModel":true') ? '' : 'the server did not run under the permission model',
-      stopped.ms > MAX_SHUTDOWN_MS ? `took ${stopped.ms} ms (max ${MAX_SHUTDOWN_MS})` : '',
-      stopped.code === 0 ? '' : `exit ${stopped.code ?? stopped.signal}`,
-      closedPool ? '' : 'no "shutdown complete" log line listing postgres-pool',
-      leftover.length
-        ? `connections left: ${leftover.map((r) => `${r.application_name || '?'}×${r.n}`).join(', ')}`
-        : '',
-    ].filter(Boolean)
-    results.push({
-      name: 'graceful shutdown',
-      ok: problems.length === 0,
-      detail: problems.join('; ') || `${stopped.ms} ms`,
+    const app = await startApp({
+      databaseUrl,
+      logFile: LOG_FILE,
+      port: process.env.VERIFY_PORT,
+      // The test process is the "proxy": each suite sends its own X-Forwarded-For and so gets its own sign-in
+      // rate-limit bucket. The server believes the header only from these peers.
+      trustedProxies: LOOPBACK,
+      // Behind the edge the test process is a proxy in front of Caddy instead: Caddy believes its
+      // X-Forwarded-For (it connects from loopback) and hands the resolved client IP to the app.
+      ...(edge ? { edge: { trustedProxies: 'private_ranges', logFile: 'test-results/edge.log' } } : {}),
+      // Open sign-up, so the E2E tests can create the throwaway accounts the account lifecycle flows consume.
+      settings: { AUTH_SIGN_UP: 'open', ...mail },
     })
+    // The shipped defaults next to it, on the same database and never behind the edge: closed sign-up, and a
+    // proxy list that excludes the test process, whose X-Forwarded-For must then be ignored
+    // (tests/integration/auth-*.test.ts, tests/e2e/auth-closed.spec.ts).
+    const closed = await startApp({
+      databaseUrl,
+      logFile: CLOSED_LOG_FILE,
+      trustedProxies: '10.0.0.0/8',
+      settings: { AUTH_SIGN_UP: 'closed', ...mail },
+      alongside: app,
+    }).catch(async (error: unknown) => {
+      await app.stop()
+      throw error
+    })
+    console.log(
+      `app ${app.url}${edge ? ` (edge in front of ${app.directUrl})` : ''} (database ${new URL(databaseUrl).pathname.slice(1)}, ` +
+        `log ${LOG_FILE}), closed sign-up ${closed.url} (log ${CLOSED_LOG_FILE}), Mailpit ${mailpit.api}`,
+    )
+    try {
+      const testEnv = {
+        ...app.env,
+        TEST_USER_EMAIL: app.user.email,
+        TEST_USER_PASSWORD: app.user.password,
+        TEST_USER_NAME: app.user.name,
+        TEST_OTHER_USER_EMAIL: app.otherUser.email,
+        TEST_OTHER_USER_PASSWORD: app.otherUser.password,
+        TEST_OTHER_USER_NAME: app.otherUser.name,
+        CLOSED_APP_URL: closed.url,
+        MAILPIT_URL: mailpit.api,
+      }
+      // Neither runner may pass with no tests: every runner started here has matching tests (see `runs`).
+      if (runs.has('integration'))
+        timed('integration (vitest)', ['vitest', 'run', '--project', 'integration', ...filters], testEnv)
+      else if (integration) results.push({ name: 'integration (vitest)', ok: true, detail: 'skipped: no file matches' })
+      if (runs.has('e2e')) timed('e2e (playwright)', ['playwright', 'test', ...filters], testEnv)
+      else if (e2e) results.push({ name: 'e2e (playwright)', ok: true, detail: 'skipped: no test matches' })
+    } finally {
+      const [{ stopped, problems: drain }] = await Promise.all([stopWhileDraining(app), closed.stop()])
+      // The process exited, so its sockets are gone; Postgres may take a moment to reap the backends.
+      let leftover = await openConnections(databaseUrl)
+      for (let i = 0; i < 10 && leftover.length; i++) {
+        await new Promise((r) => setTimeout(r, 100))
+        leftover = await openConnections(databaseUrl)
+      }
+      const log = readFileSync(LOG_FILE, 'utf8')
+      const closedPool = log
+        .split('\n')
+        .some((line) => line.includes('"shutdown complete"') && line.includes('postgres-pool'))
+      const problems = [
+        ...drain,
+        // Every suite ran against a server under Node's permission model, as the image runs it.
+        log.includes('"permissionModel":true') ? '' : 'the server did not run under the permission model',
+        stopped.ms > MAX_SHUTDOWN_MS ? `took ${stopped.ms} ms (max ${MAX_SHUTDOWN_MS})` : '',
+        stopped.code === 0 ? '' : `exit ${stopped.code ?? stopped.signal}`,
+        closedPool ? '' : 'no "shutdown complete" log line listing postgres-pool',
+        leftover.length
+          ? `connections left: ${leftover.map((r) => `${r.application_name || '?'}×${r.n}`).join(', ')}`
+          : '',
+      ].filter(Boolean)
+      results.push({
+        name: 'graceful shutdown',
+        ok: problems.length === 0,
+        detail: problems.join('; ') || `${stopped.ms} ms`,
+      })
+    }
+  } finally {
     if (process.env.KEEP_TEST_DB !== '1' && !process.env.TEST_DATABASE_URL) await dropTestDatabase(databaseUrl)
   }
   if (contractCoverage) {
@@ -212,11 +214,7 @@ try {
       .map((name) => `test-results/${name}`)
     timed(
       'contract coverage',
-      {
-        command: process.execPath,
-        args: ['scripts/contract-coverage.ts', CONTRACT_OBSERVATIONS, ...logs],
-        shell: false,
-      },
+      [process.execPath, 'scripts/contract-coverage.ts', CONTRACT_OBSERVATIONS, ...logs],
       process.env,
     )
   } else results.push({ name: 'contract coverage', ok: true, detail: 'skipped: needs a full run' })

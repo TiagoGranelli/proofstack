@@ -5,7 +5,7 @@
 // licenses (GPL, LGPL, AGPL, SSPL, BUSL) and packages without a license.
 // Usage: pnpm licenses:check   (a gate of `pnpm check`)
 import satisfies from 'spdx-satisfies'
-import { pnpmInvocation, runSync } from './spawn.ts'
+import { xSync } from 'tinyexec'
 
 /** Licenses any production package may carry. `onlyFor` limits one to the packages named there. */
 const ALLOWED: Record<string, { why: string; onlyFor?: string[] }> = {
@@ -37,9 +37,8 @@ const EXCEPTIONS: Record<string, string> = {}
 
 type Package = { name: string; versions: string[]; license: string }
 
-const listed = runSync(pnpmInvocation(['licenses', 'list', '--json', '--prod']), {
-  encoding: 'utf8',
-  maxBuffer: 64 * 1024 * 1024,
+const listed = xSync('pnpm', ['licenses', 'list', '--json', '--prod'], {
+  nodeOptions: { maxBuffer: 64 * 1024 * 1024 },
 })
 let byLicense: Record<string, Package[]>
 try {

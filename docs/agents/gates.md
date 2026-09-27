@@ -20,18 +20,19 @@ summary with each failed job's fix. No database, no build; it needs Playwright's
 | `dupes` | any clone group outside generated code and tests (`fallow dupes --threshold 0.000001`) |
 | `security` | a new security-sink candidate in `src/` on a line changed since `CHECK_BASE_REF` (default `HEAD`). The generated SDK carries `// fallow-ignore-file security-sink` (Hey API `output.header`) |
 | `tests` | `pnpm test:fast`: Vitest projects `unit`, `api` and `component` with the coverage gate ([tests/AGENTS.md](../../tests/AGENTS.md)). Two of the tests are gates themselves: `tests/unit/repo-policy.test.ts` and `tests/api/public-operations.test.ts` (below) |
-| `repo-policy` | `tests/unit/repo-policy.test.ts` alone, so a commit without code still runs it |
+| `repo-policy` | `tests/unit/repo-policy.test.ts` alone, on every commit (under a second), so a commit without code runs it too |
 | `drift` | `check:drift contract migrations auth`. `contract` runs `pnpm codegen` in place and fails if it changed `openapi.json` or `src/sdk` (the regenerated files stay, ready to commit) |
 | `migrations` | `squawk drizzle/*.sql` (`squawk-cli` from npm) over the migrations after 0004 (`.squawk.toml`) |
 | `licenses` | a production dependency whose SPDX expression (`spdx-satisfies`) the list in `scripts/licenses.ts` does not allow |
 
 The pre-commit hook runs the same jobs, but only those whose `glob` matches a staged file: a Markdown-only commit
-runs `secrets` and, for an `AGENTS.md`, `repo-policy`, in about a second. `pnpm install` installs the hook
+runs `secrets` and `repo-policy`, in about a second. `pnpm install` installs the hook
 (`prepare`: `lefthook install --reset-hooks-path`, which also clears the `core.hooksPath` older clones set).
 
-**Working tree, not commit.** lefthook runs each job on the working tree, and every job checks the whole project:
-an unstaged edit or an untracked file is checked as if it were part of the commit, and a file left out of the
-commit can hide a problem the commit has. The old hook checked a copy of the exact commit, at the cost of a
+**Working tree, not commit.** lefthook runs each job on the working tree, and every job checks the whole project.
+It sets aside the unstaged part of a partially staged file while the jobs run, but a modified file that is not
+staged at all, or an untracked one, is checked as if it were part of the commit: a file left out of the commit
+can hide a problem the commit has. The old hook checked a copy of the exact commit, at the cost of a
 temporary checkout per commit. CI checks the exact commit: `pnpm ci:static` runs `pnpm check` with
 `CHECK_BASE_REF=HEAD^` (the commit under test against its parent) and without `drift`, which the `drift` job runs
 in full. A job subset: `pnpm check --job lint --job tests`, or `LEFTHOOK_EXCLUDE=tests pnpm check`.
@@ -60,7 +61,8 @@ gate files to review:
 - **Repository rules** (`tests/unit/repo-policy.test.ts`, no exceptions): a lint directive has its reason on the
   line above; every dependency is pinned exactly (`savePrefix: ''`); migrations in the journal at
   `CHECK_BASE_REF` are never edited or deleted (`git diff --diff-filter=MD`) and keep their journal entries;
-  `src/styles/app.css` keeps `source("../")`; folders under `src/` are kebab-case; the `AGENTS.md` files stay
+  `src/styles/app.css` keeps `source("../")`; folders under `src/` are kebab-case; the app's name appears only in
+  `package.json`, `src/config/app.ts` and prose (`APP_NAME`, docs/adopting.md); the `AGENTS.md` files stay
   within their size budget; every `-- squawk-ignore` has its reason on the line above.
 - **Public operations** (`tests/api/public-operations.test.ts`): every operation answers 401 without a session
   unless `PUBLIC_OPERATIONS` there lists it. A new public endpoint is a reviewed edit of that list.
@@ -73,7 +75,8 @@ gate files to review:
 - **migrations:** make the migration safe, or waive one statement with `-- squawk-ignore <rule>` under a comment
   line giving the reason ([docs/operations.md](../operations.md#migration-safety)). **licenses:** an
   acceptable license goes in `ALLOWED` in `scripts/licenses.ts`, one exact version in `EXCEPTIONS`, each with the
-  reason. **audit:check** and the image scan: `security/*-allowlist.json` entries need a reason and an expiry.
+  reason. **audit:check:** an `auditConfig.ignoreGhsas` entry in `pnpm-workspace.yaml` needs a comment with the reason
+  and a review date. The image scan: `security/image-allowlist.json` entries need a reason and an expiry.
 
 ## Claude Code hooks and permissions
 
@@ -128,9 +131,7 @@ production (needs Docker); see [ADR 0011](../decisions/0011-lighthouse-over-http
 
 | Command | Covers |
 | --- | --- |
-| `pnpm deps:check` | Report only, always exit 0: `pnpm outdated` (the release quarantine applies) and, for packages pinned from another dist-tag (`effect` and `@effect/vitest` on `rc`, `@hey-api/openapi-ts` on `next`), the pinned version against that tag. Needs the npm registry |
-| `pnpm audit:check` | Vulnerability gate over production and development packages (`pnpm audit`): fails on a high or critical advisory unless `security/audit-allowlist.json` accepts it (reason, expiry), and on an expired or stale entry. Needs the npm registry; CI job `supply-chain` |
-| `pnpm images:check`, `pnpm images:sync` | Report only: newer tags and rebuilt digests for every image in `scripts/images.ts` (needs the registries). `images:sync` copies the pins from `scripts/images.ts` into compose.yaml, the workflows and the Dockerfile |
-| `pnpm sbom:release [--image=<ref>] [--no-image]` | CycloneDX SBOMs in `sbom/` for a release: production npm dependencies, and the production image with syft (Docker). Not a gate |
+| `pnpm audit:check` | `pnpm audit --audit-level high` over production and development packages: fails on a high or critical advisory not in `auditConfig.ignoreGhsas` (`pnpm-workspace.yaml`). Needs the npm registry; CI job `supply-chain` |
+| `pnpm sbom:release` | `pnpm sbom`: a CycloneDX 1.7 SBOM of the production npm dependencies, with licenses, in `sbom/npm.cdx.json`, for a release. Needs `node_modules`. Not a gate |
 | `pnpm ci:local [job ...]` | The CI jobs (`workflows secrets static supply-chain drift build verify lighthouse docker`, default all) as `pnpm ci:<job>` scripts in the Playwright Ubuntu container next to Postgres and Mailpit, all five browser projects included. Needs Docker. See [docs/operations.md](../operations.md#ci-and-local-ci) |
 | `harbor run -p evals/tasks -a <agent> -m <model>` | The agent eval ([evals.md](evals.md)): an agent solves each task in a container, graded by `pnpm check`, drift and hidden checks. Needs Docker and Harbor, and runs a paid agent; not a gate |

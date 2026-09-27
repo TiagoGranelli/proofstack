@@ -16,7 +16,7 @@ Needs Docker and Harbor (`uv tool install harbor`). Build the base image from th
 copies the working tree, so commit or stash first), then run the tasks:
 
 ```sh
-docker build -f evals/Dockerfile -t proofstack-eval .
+docker build -f evals/Dockerfile -t app-eval .
 harbor run -p evals/tasks -a claude-code -m anthropic/<model>
 harbor run -p evals/tasks/add-post-title -a codex -m openai/<model>
 harbor view jobs
@@ -36,7 +36,7 @@ because the hidden checks fail on the baseline).
   - `instruction.md`: the prompt, with acceptance criteria that name every file, export and label the hidden
     checks rely on.
   - `task.toml`: timeouts and resources (4 CPUs, 6 GB).
-  - `environment/Dockerfile`: `FROM proofstack-eval`, plus the planted bug for a bug-fix task, folded into the
+  - `environment/Dockerfile`: `FROM app-eval`, plus the planted bug for a bug-fix task, folded into the
     baseline commit.
   - `tests/test.sh` runs `evals/grade.sh` (in the image at `/opt/eval/grade.sh`); the other files in `tests/` are
     the hidden checks, named `<layer>.test.ts[x]`.

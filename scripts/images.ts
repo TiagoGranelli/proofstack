@@ -1,18 +1,18 @@
 // Container images the CI scripts run, pinned by digest (tag kept for humans). compose.yaml,
 // the workflows in .github/workflows and the Dockerfiles repeat some of them; `pnpm ci:workflows` fails when a copy
-// differs from this file (scripts/image-pins.ts).
-// `pnpm images:check` reports newer tags and rebuilt digests. Update a pin here
-// (`docker buildx imagetools inspect <name>:<tag>` prints the index digest), then `pnpm images:sync` rewrites
-// the copies.
+// differs from this file (scripts/image-pins.ts). Renovate updates the pins here (a regex manager in
+// renovate.json) and every copy in the same PR. By hand, `docker buildx imagetools inspect <name>:<tag>` prints the
+// index digest.
 import { spawnSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
 
 export const IMAGES = {
   /** Same version as @playwright/test in package.json (browsers match the installed library). */
   playwright:
     'mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27',
   /**
-   * Same version as .node-version; its Node replaces the Playwright image's in the ci:local runner. Also the base
-   * of the Dockerfile.
+   * Same version as devEngines.runtime in package.json (Renovate's `node` group moves both); its Node replaces the
+   * Playwright image's in the ci:local runner. Also the base of the Dockerfile.
    */
   node: 'node:26.10.0-slim@sha256:ec7758ee051e457b468b32bde57b0879010b325bb9862718e9615225ce4aaae1',
   postgres: 'postgres:18.6@sha256:5a5a84b19854a9ffaa54082c166ff4ec27473a361e496e5ea167f298f2da9722',
@@ -31,18 +31,18 @@ export const IMAGES = {
   /** Validates deploy/kubernetes.yaml against the Kubernetes schemas in `pnpm ci:workflows`. */
   kubeconform:
     'ghcr.io/yannh/kubeconform:v0.8.0@sha256:faffaf43f95aa6425306e1ab8d6fcad72acb9049158f38e574c085ea1ec0f64e',
-  /** SBOM of the production image for a release (`pnpm sbom:release`). */
-  syft: 'anchore/syft:v1.52.0@sha256:500e2d872ac019436926e8322b4fc1f39441d94d21f6f4046c6ff29b30e8cb02',
   /** Secret scan over the git history (`pnpm ci:secrets`, .gitleaks.toml). */
   gitleaks: 'ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f',
 } as const
 
+/** The package name (package.json), which names the app's Docker artifacts. */
+export const packageName = () => (JSON.parse(readFileSync('package.json', 'utf8')) as { name: string }).name
+
 /**
  * Prefix for every container, network and volume the scripts create, so they are easy to find and never
- * collide with another checkout's (`docker ps --filter name=proofstack-ci`). Override with
- * PROOFSTACK_DOCKER_PREFIX.
+ * collide with another project's (`docker ps --filter name=<package name>-ci`). Override with CI_DOCKER_PREFIX.
  */
-export const dockerPrefix = () => process.env.PROOFSTACK_DOCKER_PREFIX || 'proofstack-ci'
+export const dockerPrefix = () => process.env.CI_DOCKER_PREFIX || `${packageName()}-ci`
 
 /**
  * Waits up to 30 s for the Postgres container `container` (IMAGES.postgres) to accept connections. -h forces
@@ -50,7 +50,7 @@ export const dockerPrefix = () => process.env.PROOFSTACK_DOCKER_PREFIX || 'proof
  */
 export const waitForPostgres = async (container: string) => {
   for (let i = 0; i < 60; i++) {
-    const ready = spawnSync('docker', ['exec', container, 'pg_isready', '-h', '127.0.0.1', '-U', 'proofstack'], {
+    const ready = spawnSync('docker', ['exec', container, 'pg_isready', '-h', '127.0.0.1', '-U', 'app'], {
       stdio: 'ignore',
     })
     if (ready.status === 0) return

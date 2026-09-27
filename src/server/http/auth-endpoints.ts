@@ -67,7 +67,7 @@ export const notFound = () => new Response('Not Found', { status: 404, headers: 
  * Better Auth has no built-in endpoint allowlist yet (better-auth#11078).
  */
 export const endpointAllowlist = (): BetterAuthPlugin => ({
-  id: 'proofstack-endpoint-allowlist',
+  id: 'endpoint-allowlist',
   onRequest: async (request) => (isExposedEndpoint(request) ? undefined : { response: notFound() }),
   onResponse: async (response) => {
     if (response.headers.has('cache-control')) return undefined

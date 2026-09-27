@@ -35,7 +35,7 @@ export function RouteError({
           Try again
         </Button>
         <Button asChild variant="outline">
-          <Link to="/">Go to latest posts</Link>
+          <Link to="/">Go to the home page</Link>
         </Button>
       </div>
     </main>

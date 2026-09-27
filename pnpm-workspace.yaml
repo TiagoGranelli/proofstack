@@ -15,10 +15,10 @@ savePrefix: ''
 
 # Release quarantine: no version younger than one day is resolved. Set explicitly, which makes it strict: a
 # release inside the window fails the install (or prompts) instead of being appended silently to
-# minimumReleaseAgeExclude, as pnpm's implicit default does. One day, not Dependabot's 7-day cooldown: the
-# cooldown already keeps automated updates a week behind, and a 7-day cutoff here would reject 125 entries of
-# the current lockfile (the tree is kept current by hand). `pnpm install --frozen-lockfile` checks every
-# lockfile entry against this and trustPolicy (about 5 s; needs the registry).
+# minimumReleaseAgeExclude, as pnpm's implicit default does. Renovate waits 7 days before proposing a direct
+# dependency (renovate.json); this day is the floor for everything else: transitive versions, updates by hand
+# and Renovate's security PRs, which skip its wait. `pnpm install --frozen-lockfile` checks every lockfile entry
+# against this and trustPolicy (about 5 s; needs the registry).
 minimumReleaseAge: 1440
 minimumReleaseAgeStrict: true
 # `pnpm install`, `add`, `update` and `remove` drop exclude entries the lockfile no longer resolves.
@@ -40,6 +40,16 @@ overrides:
   # GHSA-pm4m-ph32-ghv5 (high) and GHSA-724g-mxrg-4qvm (moderate): @hey-api/json-schema-ref-parser pins js-yaml
   # 5.2.0 exactly. 5.2.2 is the first release with both fixes, a patch release of the same line.
   'js-yaml@5.2.0': 5.2.2
+
+# Advisories `pnpm audit:check` (`pnpm audit --audit-level high`, CI `supply-chain`) accepts. Only one that cannot
+# apply here goes in, with the reason and a review date; the usual fix is an upgrade or an `overrides` entry.
+auditConfig:
+  ignoreGhsas:
+    # esbuild 0.18.20, only through drizzle-kit 0.31 (@esbuild-kit/esm-loader), a CLI the server bundle does not
+    # contain. The advisory is about `esbuild --serve`, which drizzle-kit never starts. Moderate, so below the
+    # gate; listed so a plain `pnpm audit` stays clean. drizzle-kit 1.0 drops @esbuild-kit (ADR 0005).
+    # Review by 2026-12-31.
+    - GHSA-67mh-4wv8-2f99
 
 # better-call (Better Auth's router) has an optional peer on zod ^4. pnpm fills a missing optional peer from any
 # version in the graph and chose shadcn's zod 3.25.76, which gave @better-auth/core a second copy of better-call

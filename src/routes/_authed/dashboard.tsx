@@ -2,6 +2,7 @@ import { Link, createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useRef, useState } from 'react'
 import { RouteError } from '#/components/errors/route-error.tsx'
 import { SectionErrorBoundary } from '#/components/errors/section-error-boundary.tsx'
+import { pageTitle } from '#/config/app.ts'
 import { useSignOut } from '#/features/auth/api/sign-out.ts'
 import { SignOutAlert, SignOutButton } from '#/features/auth/components/sign-out-button.tsx'
 import { getMyPostsQueryOptions } from '#/features/posts/api/get-my-posts.ts'
@@ -10,7 +11,7 @@ import { PostComposer } from '#/features/posts/components/post-composer.tsx'
 
 export const Route = createFileRoute('/_authed/dashboard')({
   loader: ({ context }) => context.queryClient.infiniteQuery({ ...getMyPostsQueryOptions(), staleTime: 'static' }),
-  head: () => ({ meta: [{ title: 'Dashboard · ProofStack' }, { name: 'robots', content: 'noindex' }] }),
+  head: () => ({ meta: [{ title: pageTitle('Dashboard') }, { name: 'robots', content: 'noindex' }] }),
   // The loader's failures. Once the page is up, the composer and the list fail on their own (SectionErrorBoundary).
   errorComponent: (props) => <RouteError {...props} title="Your posts could not be loaded" action="load your posts" />,
   component: Dashboard,

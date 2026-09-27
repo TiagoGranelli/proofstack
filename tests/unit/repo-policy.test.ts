@@ -4,6 +4,7 @@ import { spawnSync } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { APP_NAME } from '#/config/app.ts'
 
 const read = (file: string) => readFileSync(file, 'utf8')
 const git = (...args: string[]) => spawnSync('git', args, { encoding: 'utf8' })
@@ -100,6 +101,23 @@ describe('applied migrations', () => {
     const current = (JSON.parse(read(JOURNAL)) as Journal).entries
     expect(current.slice(0, applied.length), `${JOURNAL}: ${restore}`).toEqual(applied)
   })
+})
+
+/** Where the app's name may appear: its two homes, the generated API title, the license notice, and prose. */
+const NAME_ALLOWED = [/^package\.json$/, /^src\/config\/app\.ts$/, /^openapi\.json$/, /^LICENSE$/, /\.md$/]
+
+// The name lives in package.json (`name`) and src/config/app.ts (APP_NAME); everything else imports it or stays
+// neutral, so renaming the app is the short edit in docs/adopting.md. Docs may name the template.
+it('names the app only in package.json, src/config/app.ts and docs', () => {
+  const slug = (JSON.parse(read('package.json')) as { name: string }).name
+  const name = new RegExp(`${slug}|${APP_NAME.replaceAll(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i')
+  // Tracked and new files; a tracked link to a directory (a skill link) is not a file.
+  const offenders = git('ls-files', '-z', '--cached', '--others', '--exclude-standard')
+    .stdout.split('\0')
+    .filter((file) => file !== '' && !NAME_ALLOWED.some((pattern) => pattern.test(file)))
+    .filter((file) => existsSync(file) && statSync(file).isFile() && name.test(read(file)))
+    .map((file) => `${file}: import APP_NAME or pageTitle from #/config/app.ts, or use a neutral name (app_, CHECK_…)`)
+  expect(offenders).toEqual([])
 })
 
 it('keeps Tailwind from scanning the build output', () => {

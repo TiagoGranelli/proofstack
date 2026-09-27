@@ -1,7 +1,7 @@
 schema_version = "1.3"
 
 [task]
-name = "proofstack/add-post-title"
+name = "app/add-post-title"
 
 [metadata]
 category = "feature"

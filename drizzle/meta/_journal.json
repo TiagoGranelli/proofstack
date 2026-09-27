@@ -43,6 +43,34 @@
       "when": 1790519477058,
       "tag": "0005_session_expires_at_idx",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790519754495,
+      "tag": "0006_rate_limit_unlogged",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1790519892845,
+      "tag": "0007_post_id_uuidv7",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1790520089618,
+      "tag": "0008_post_keyset_asc_body_check",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790520098223,
+      "tag": "0009_post_body_check_validate",
+      "breakpoints": true
     }
   ]
 }
