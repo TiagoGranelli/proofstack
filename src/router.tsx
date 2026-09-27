@@ -16,8 +16,10 @@ const getSsrOptions = createIsomorphicFn().server(() => {
   return { nonce: Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('') }
 })
 
-// Called once per request on the server, so every request gets its own QueryClient and no cached
-// query (such as another user's data) can leak between requests.
+/**
+ * The app's router, with its own QueryClient. Called once per request on the server, so every request gets its
+ * own QueryClient and no cached query (such as another user's data) can leak between requests.
+ */
 export function getRouter() {
   const queryClient = createQueryClient({ defaultOptions: { queries: { staleTime: 30_000 } } })
   const router = createRouter({

@@ -27,6 +27,24 @@ releases.
 
 The example application publishes short posts publicly and lets an authenticated author create, edit, and delete them. This exercises rendering, the database, sessions, API validation, client generation, and end-to-end behavior in one project. The `minimal` branch is the same template without it (see [docs/adopting.md](docs/adopting.md)).
 
+## Architecture
+
+```mermaid
+flowchart LR
+  browser[Browser] -->|pages, server functions| start[TanStack Start: routes, SSR]
+  browser -->|SDK over HTTP /api| api[Effect HttpApi handlers]
+  start -->|same SDK in-process, reads only| api
+  start -->|account server functions| authfn[callAuthEndpoint]
+  browser -->|/api/auth/*, narrowed| ba[Better Auth]
+  authfn --> ba
+  api -->|Authentication middleware| ba
+  api --> repo[PostsRepo] --> pg[(PostgreSQL via Drizzle)]
+  ba --> pg
+  contract[src/contract] -->|pnpm codegen| openapi[openapi.json] --> sdk[src/sdk]
+```
+
+What each directory holds and may import: the architecture map in [AGENTS.md](AGENTS.md#architecture-map).
+
 ## Quick start
 
 Requirements: pnpm 12 and Docker (for the local database). `pnpm install` downloads the Node version in `package.json#devEngines` and runs every script with it.

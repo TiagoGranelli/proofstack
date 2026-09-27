@@ -29,7 +29,8 @@ const pruneIdleRows = (now: number): void => {
  * `incrementOne` updates `WHERE id IN (SELECT id ... WHERE count < max)`, and Postgres does not re-evaluate that
  * subquery after waiting for the row lock, so 20 concurrent sign-ins passed a limit of 3 about 10 times in a
  * reproduction. Replacing this with `storage: 'database'` once the adapter conditions the UPDATE itself also means
- * giving the table back Better Auth's `id` column.
+ * giving the table back Better Auth's `id` column. No upstream issue tracks it yet (better-auth/better-auth searched
+ * on 2026-09-27): the report belongs against `incrementOne` in `@better-auth/drizzle-adapter`.
  */
 export const postgresRateLimitStorage: RateLimitStorage = {
   async consume(key, rule) {

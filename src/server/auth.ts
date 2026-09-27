@@ -18,7 +18,8 @@ import { authMail } from './mail/auth-mail.ts'
 
 /**
  * Better Auth's /delete-user checks the password only when one is sent: without it, a session younger than
- * `freshAge` (a day) is enough, and a `token` takes the deletion-by-mail path this app does not use. Both are
+ * `freshAge` (a day) is enough, and a `token` takes the deletion-by-mail path this app does not use. That is its
+ * documented design (https://www.better-auth.com/docs/concepts/users-accounts#delete-user, 1.7.6), not a bug. Both are
  * refused here, before the endpoint runs, whoever calls it; the password itself is then verified by the
  * endpoint (INVALID_PASSWORD).
  */
