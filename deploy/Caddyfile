@@ -1,5 +1,5 @@
 # Reference edge in front of the Node server: TLS, compression, client IP. Used by
-# `docker compose --profile edge up`, `pnpm lighthouse` and `pnpm verify:app --edge`.
+# `docker compose --profile edge up`, `pnpm lighthouse` and the test servers with TEST_EDGE=1.
 # See docs/operations.md, "Edge proxy (Caddy)".
 #
 # Environment, read when Caddy starts:

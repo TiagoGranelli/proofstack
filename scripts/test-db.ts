@@ -28,7 +28,7 @@ export const baseDatabaseUrl = () => {
 }
 
 /**
- * URL of this process's test database: `override` (an env var such as TEST_DATABASE_URL) when set, otherwise
+ * URL of this process's test database: `override` (an env var such as DRIFT_DATABASE_URL) when set, otherwise
  * DATABASE_URL with the database name replaced by `app_<purpose>_<pid>_test`.
  */
 export const testDatabaseUrl = (purpose: string, override?: string) => {

@@ -37,7 +37,7 @@ test.describe('tab order', () => {
     [
       'login',
       (page) => visit(page, '/login'),
-      // verify:app's APP_URL server has open sign-up, so the page links to it.
+      // The open server (APP_URL) has open sign-up, so the page links to it.
       [
         ...NAV,
         'textbox "Email"',

@@ -70,7 +70,8 @@ in and how each layer's harness works.
 | `pnpm test:db [filter ...]` | The `db` layer on a throwaway Postgres database. Needs Postgres, no build |
 | `pnpm format`, `pnpm lint:fix` | Autofixes |
 | `pnpm check:drift [contract\|migrations\|auth\|database]` | Generated files match their sources, and the auth schema holds what Better Auth writes; `database` needs Postgres |
-| `pnpm build && pnpm verify:app [filter ...]` | The built app against a throwaway database: `db`, integration and E2E layers. Needs Postgres and Mailpit (`pnpm mail:up`) |
+| `pnpm test [filter ...]`, `pnpm test:e2e [filter ...]` | The integration or E2E layer against the built app; each starts its own servers on a throwaway database. Needs `pnpm build`, Postgres and Mailpit (`pnpm mail:up`) |
+| `pnpm build && pnpm verify:app` | The `db`, integration and E2E layers and contract coverage, one after another |
 | `pnpm build && pnpm lighthouse [--page=<name>]` | The Lighthouse gate behind the Caddy edge (needs Docker) |
 | `pnpm ci:local [job ...]` | The CI jobs in the Playwright Ubuntu container (needs Docker) |
 

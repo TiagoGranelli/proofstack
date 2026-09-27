@@ -31,7 +31,7 @@ export const runInBackground = (task: Promise<unknown>): void => {
  * can outlive the request: when a client disconnects during a sign-in, the response settles at once (logged as
  * 499 about 10 ms in), but Better Auth's handler keeps hashing the password and then writes the session. Without
  * this, a SIGTERM at that moment closed the pool under it ("Failed query: insert into session", found by a load
- * test and reproduced by verify:app's drain check, scripts/app-server.ts).
+ * test and reproduced by tests/integration/shutdown.test.ts).
  */
 export const finishBeforeShutdown = <A>(work: Promise<A>): Promise<A> => {
   // The caller handles the failure; the tracked copy only waits.

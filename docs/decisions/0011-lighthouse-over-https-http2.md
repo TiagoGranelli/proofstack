@@ -75,7 +75,7 @@ Same build, mobile, medians of 3 (docs/operations.md has the table): plain HTTP/
   inconclusive threshold) had 7 of 20 mobile runs at 99 and failed. Run the gate on an otherwise idle machine.
 - `pnpm lighthouse` needs no trust-store changes; the local CA lives in the edge's tmpfs (or a temporary
   `XDG_DATA_HOME` with `EDGE_RUNTIME=binary`) and is gone after the run.
-- `verify:app --edge` still uses plain HTTP; its tests are about headers and client IPs, not the protocol.
+- The test servers behind the edge (`TEST_EDGE=1`) still use plain HTTP; their tests are about headers and client IPs, not the protocol.
 
 ## Revisit when
 

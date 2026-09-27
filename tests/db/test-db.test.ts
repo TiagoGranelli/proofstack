@@ -36,7 +36,7 @@ const existing = (names: string[]) =>
 const abandoned = `app_sweep_${exitedPid()}_test`
 // The Vitest process that started this worker: a run that is still going.
 const running = `app_sweep_${process.ppid}_test`
-// A fixed name (TEST_DATABASE_URL), which carries no pid.
+// A fixed name (LIGHTHOUSE_DATABASE_URL, DRIFT_DATABASE_URL), which carries no pid.
 const fixed = 'app_fixed_sweep_test'
 
 afterAll(async () => {

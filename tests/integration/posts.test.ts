@@ -1,5 +1,5 @@
 // The example's posts through the generated SDK against the running app and a real, freshly migrated Postgres:
-// CRUD, validation, author isolation, and CSRF on each write. Run through `pnpm verify:app`.
+// CRUD, validation, author isolation, and CSRF on each write, against the running app (`pnpm test`).
 import { beforeAll, describe, expect, it } from 'vitest'
 import { createClient } from '#/sdk/client/index.ts'
 import { myPostsCreate, myPostsList, myPostsRemove, myPostsUpdate, publicPostsList } from '#/sdk/sdk.gen.ts'

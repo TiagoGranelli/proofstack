@@ -1,4 +1,4 @@
-// The account lifecycle on the main verify:app server (AUTH_SIGN_UP=open, mail to Mailpit). Every test works on
+// The account lifecycle on the open server (AUTH_SIGN_UP=open, mail to Mailpit). Every test works on
 // a throwaway account (./support/accounts.ts), never the worker's `author`, and every browser context has its
 // own client IP.
 import { createAccount, expectSignedOut, mailLink, newAccount, newClient, signInWithForm } from './support/accounts.ts'

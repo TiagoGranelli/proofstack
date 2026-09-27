@@ -1,5 +1,6 @@
 // Starts the reference edge (Caddy with deploy/Caddyfile) in front of an app on this machine, for
-// `pnpm lighthouse` and `pnpm verify:app --edge`. Two ways to run it (EDGE_RUNTIME):
+// `pnpm lighthouse` and the test servers with TEST_EDGE=1 (scripts/app-server.ts). Two ways to run it
+// (EDGE_RUNTIME):
 //   docker (default)  the pinned Caddy image. EDGE_DOCKER_NETWORK chooses how it reaches the app:
 //                     host (default on Linux): --network host, so the app is on 127.0.0.1 and the edge listens
 //                     on a host port; bridge (default on macOS and Windows, where Docker Desktop's host

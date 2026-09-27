@@ -400,7 +400,7 @@ default) send a length.
 ### Edge proxy (Caddy)
 
 `deploy/Caddyfile` is the reference edge, and the topology the tests measure: `pnpm lighthouse` always
-runs through it, `pnpm verify:app --edge` optionally, and `pnpm ci:docker` serves the image behind it.
+runs through it, the integration and E2E tests optionally (`TEST_EDGE=1`), and `pnpm ci:docker` serves the image behind it.
 It uses Caddy 2.11.4 (image pinned by digest in `compose.yaml` and `scripts/images.ts`) and does four
 things:
 
@@ -441,7 +441,7 @@ docker compose --profile edge down
 ```
 
 The profile keeps `pnpm dev` and `pnpm db:up` to Postgres only. In front of a locally running build
-(`pnpm lighthouse`, `pnpm verify:app --edge`), `scripts/edge.ts` starts the same Caddyfile, either from
+(`pnpm lighthouse`, and the test servers with `TEST_EDGE=1`), `scripts/edge.ts` starts the same Caddyfile, either from
 the pinned image (`EDGE_RUNTIME=docker`, the default) or from a `caddy` binary (`EDGE_RUNTIME=binary`,
 `CADDY_BIN`), which is what `pnpm ci:local` uses inside its container. The image runs on the host network
 on Linux; on macOS and Windows, where Docker Desktop's host networking differs, it runs on Docker's bridge
@@ -552,7 +552,7 @@ the subject, because links carry tokens. `AUTH_SIGN_UP=open` refuses to start wi
 
 Locally, `pnpm mail:up` (also run by `pnpm bootstrap`) starts Mailpit from `compose.yaml`, pinned by
 digest: SMTP on `MAILPIT_SMTP_PORT` (54325), the inbox and its API on `MAILPIT_HTTP_PORT` (54380). Nothing
-leaves the machine. `pnpm verify:app` needs it: the E2E tests read links from its API.
+leaves the machine. The integration and E2E runs need it: the E2E tests read links from its API.
 
 ## Data retention
 
@@ -617,20 +617,22 @@ then writes the session; a load test found such writes failing with `Failed quer
 closed. Every Better Auth call therefore counts as a background task until it finishes
 (`finishBeforeShutdown`, `src/server/background-tasks.ts`).
 
-`verify:app` stops its main server the hard way (`stopWhileDraining` in `scripts/app-server.ts`): a
-request to `/api/ready` that arrives at the moment of SIGTERM must get 503 with `Connection: close`, and a
-sign-in abandoned just before it must be logged as 499 before `shutdown complete`, with no failed query
-after. It also fails when `shutdown complete` is missing or lacks `postgres-pool`, or when a connection to
-the test database outlives the process.
+`tests/integration/shutdown.test.ts` stops a server of its own the hard way: a request to `/api/ready`
+that arrives at the moment of SIGTERM must get 503 with `Connection: close`, and a sign-in abandoned just
+before it must be logged as 499 before `shutdown complete`, with no failed query after. It also fails when
+`shutdown complete` is missing or lacks `postgres-pool`, or when a connection to the test database outlives
+the process.
 
 Measured with the Docker image: `docker stop` returns in about 1.2 s with exit code 0, including an idle
-keep-alive connection. Keep the orchestrator's grace period above `SERVER_SHUTDOWN_TIMEOUT` (Docker's
+keep-alive connection. After the server has rendered a form page (`/login`), it takes about 5 s instead: the
+drain and the close hook still finish at once, but TanStack Form's devtools event client leaves a connect
+loop (`setInterval`) running on the server, and srvx exits only when its 5 s timeout ends. Keep the orchestrator's grace period above `SERVER_SHUTDOWN_TIMEOUT` (Docker's
 default of 10 s is enough).
 
 srvx skips its signal handling when `CI` or `TEST` is set in the environment (and `TEST` also hides its
 startup line). Do not set either in production, or SIGTERM ends the process immediately without draining
 or closing the pool. The Dockerfile sets `CI=true` only in its build stage, not in the runtime image.
-`scripts/app-server.ts` (used by `verify:app` and `lighthouse`) removes both from the test server's
+`scripts/app-server.ts` (used by the test runners and `lighthouse`) removes both from the test server's
 environment, so the tests exercise the production shutdown path even on CI, which sets `CI=true`.
 
 ## Logs

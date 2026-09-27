@@ -20,7 +20,7 @@ const expectHome = async (page: Page) => {
 test('blocks and reports markup injected into a page', async ({ page, cspViolations }) => {
   // Simulates stored XSS: the server's response, with its real policy, plus inline code without the nonce.
   await page.route('/', async (route) => {
-    // Playwright's fetch cannot decode zstd, which Firefox accepts and the edge then uses (`verify:app --edge`).
+    // Playwright's fetch cannot decode zstd, which Firefox accepts and the edge then uses (`TEST_EDGE=1`).
     const response = await route.fetch({ headers: { ...route.request().headers(), 'accept-encoding': 'gzip' } })
     const injected = '<script>window.injected = true</script><style>body { color: red }</style>'
     // The body is passed decoded, so the edge's Content-Encoding must not describe it.
