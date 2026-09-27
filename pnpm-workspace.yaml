@@ -29,3 +29,10 @@ minimumReleaseAgeExclude: []
 # publishing, and a takeover shows up as a new version, which is always checked.
 trustPolicy: no-downgrade
 trustPolicyIgnoreAfter: 43200
+
+# Transitive versions forced for a security fix; each names the advisory. Remove an entry once the parent ships
+# the fix (`pnpm why <package>`).
+overrides:
+  # GHSA-pm4m-ph32-ghv5 (high) and GHSA-724g-mxrg-4qvm (moderate): @hey-api/json-schema-ref-parser pins js-yaml
+  # 5.2.0 exactly. 5.2.2 is the first release with both fixes, a patch release of the same line.
+  'js-yaml@5.2.0': 5.2.2
