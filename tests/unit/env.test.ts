@@ -54,7 +54,16 @@ describe('env', () => {
   it.each([
     ['DATABASE_URL', { DATABASE_URL: undefined }, 'Missing required environment variable DATABASE_URL'],
     ['a blank APP_URL', { APP_URL: '   ' }, 'Missing required environment variable APP_URL'],
-    ['a DATABASE_URL that is not postgres', { DATABASE_URL: 'mysql://db/app' }, 'DATABASE_URL must be a postgres://'],
+    [
+      'a DATABASE_URL that is not postgres',
+      { DATABASE_URL: 'mysql://user:secret@db/app' },
+      'DATABASE_URL must be a postgres:// connection string (got scheme "mysql")',
+    ],
+    [
+      'a DATABASE_URL without a scheme',
+      { DATABASE_URL: 'db/app' },
+      'DATABASE_URL must be a postgres:// connection string (got scheme "none")',
+    ],
     ['an APP_URL that is not a URL', { APP_URL: 'app.example.com' }, 'APP_URL must be an origin such as'],
     ['an APP_URL that is not http', { APP_URL: 'ftp://app.example.com' }, 'APP_URL must use http or https'],
     ['an APP_URL with a path', { APP_URL: 'https://app.example.com/app' }, 'APP_URL must be an origin'],
