@@ -1,7 +1,13 @@
 import { Schema, SchemaTransformation } from 'effect'
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from 'effect/unstable/httpapi'
-import { POST_MAX_LENGTH, POSTS_PAGE_DEFAULT, POSTS_PAGE_MAX } from './limits.ts'
-import { Authentication, RequestValidation } from './middleware.ts'
+import {
+  POST_MAX_LENGTH,
+  POST_WRITE_WINDOW_SECONDS,
+  POST_WRITES_PER_WINDOW,
+  POSTS_PAGE_DEFAULT,
+  POSTS_PAGE_MAX,
+} from './limits.ts'
+import { Authentication, RequestValidation, WriteRateLimit } from './middleware.ts'
 
 const Post = Schema.Struct({
   id: Schema.String,
@@ -100,19 +106,33 @@ export class MyPosts extends HttpApiGroup.make('myPosts')
     HttpApiEndpoint.post('create', '/me/posts', {
       payload: PostInput,
       success: Created,
-    }).middleware(RequestValidation),
+    })
+      .middleware(RequestValidation)
+      .middleware(WriteRateLimit),
     HttpApiEndpoint.patch('update', '/me/posts/:id', {
       params: PostPath,
       payload: PostInput,
       success: Post,
       error: PostNotFound,
-    }).middleware(RequestValidation),
+    })
+      .middleware(RequestValidation)
+      .middleware(WriteRateLimit),
     HttpApiEndpoint.delete('remove', '/me/posts/:id', {
       params: PostPath,
       success: HttpApiSchema.NoContent,
       error: PostNotFound,
-    }).middleware(RequestValidation),
+    })
+      .middleware(RequestValidation)
+      .middleware(WriteRateLimit),
   )
+  // Added last, so it runs first: WriteRateLimit counts by the CurrentUser it provides.
   .middleware(Authentication)
   .prefix('/api')
-  .annotateMerge(OpenApi.annotations({ title: 'My posts', description: 'CRUD for the signed-in author.' })) {}
+  .annotateMerge(
+    OpenApi.annotations({
+      title: 'My posts',
+      description:
+        `CRUD for the signed-in author. Creating, editing and deleting count together against a limit of ` +
+        `${POST_WRITES_PER_WINDOW} per ${POST_WRITE_WINDOW_SECONDS} s per user; past it they answer 429.`,
+    }),
+  ) {}

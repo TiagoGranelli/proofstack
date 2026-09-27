@@ -1,15 +1,13 @@
-// The sign-up policy (AUTH_SIGN_UP). The main server runs `open`, the second one the default `closed`.
+// The sign-up policy (AUTH_SIGN_UP). The main server runs `open`, the second one the default `closed`. The UI
+// signs up through the signUp server function; /api/auth/sign-up/email is not exposed in either mode.
 import { describe, expect, it } from 'vitest'
 import { appUrl, clientIps, closedAppUrl, postSignIn, users } from './helpers.ts'
+import { callAuthFunction } from './server-functions.ts'
 
 const nextIp = clientIps('100.64.3')
 
-const signUp = (base: string, account: { name: string; email: string; password: string }, ip: string) =>
-  fetch(`${base}/api/auth/sign-up/email`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', origin: base, 'x-forwarded-for': ip },
-    body: JSON.stringify(account),
-  })
+const signUp = (baseUrl: string, account: { name: string; email: string; password: string }, ip: string) =>
+  callAuthFunction('signUp', { baseUrl, data: account, headers: { origin: baseUrl, 'x-forwarded-for': ip } })
 
 const newAccount = () => ({
   name: 'Sign-up Test',
@@ -17,17 +15,10 @@ const newAccount = () => ({
   password: `pw-${crypto.randomUUID()}`,
 })
 
-/** What a sign-up answer reveals: whether it signed in, which user fields, and the verification state. */
-const shape = (body: { token: unknown; user: Record<string, unknown> }) => ({
-  token: body.token,
-  user: Object.keys(body.user).toSorted(),
-  emailVerified: body.user.emailVerified,
-})
-
 describe('closed sign-up', () => {
   it('has no sign-up endpoint', async () => {
-    const res = await signUp(closedAppUrl, newAccount(), nextIp())
-    expect(res.status).toBe(404)
+    const { value } = await signUp(closedAppUrl, newAccount(), nextIp())
+    expect(value).toEqual({ ok: false, failure: { code: 'NOT_FOUND' } })
   })
 
   it('has no sign-up page, and the sign-in page does not offer one', async () => {
@@ -44,13 +35,22 @@ describe('open sign-up', () => {
     expect(await (await fetch(`${appUrl}/login`)).text()).toContain('href="/sign-up"')
   })
 
+  it('is not exposed over HTTP either', async () => {
+    const res = await fetch(`${appUrl}/api/auth/sign-up/email`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: appUrl, 'x-forwarded-for': nextIp() },
+      body: JSON.stringify(newAccount()),
+    })
+    expect(res.status).toBe(404)
+  })
+
   it('creates an account that cannot sign in before its address is verified', async () => {
     const account = newAccount()
-    const res = await signUp(appUrl, account, nextIp())
-    expect(res.status).toBe(200)
+    const { response, value } = await signUp(appUrl, account, nextIp())
+    expect(value).toEqual({ ok: true, value: null })
     // No session before verification (requireEmailVerification, autoSignIn off).
     expect(
-      res.headers.getSetCookie().filter((cookie) => cookie.includes('session_token=') && !/=;/.test(cookie)),
+      response.headers.getSetCookie().filter((cookie) => cookie.includes('session_token=') && !/=;/.test(cookie)),
     ).toEqual([])
     const signIn = await postSignIn(account, { 'x-forwarded-for': nextIp() })
     expect(signIn.status).toBe(403)
@@ -60,7 +60,8 @@ describe('open sign-up', () => {
   it('answers a sign-up for an existing address like any other (no account enumeration)', async () => {
     const fresh = await signUp(appUrl, newAccount(), nextIp())
     const taken = await signUp(appUrl, { ...newAccount(), email: users.other.email }, nextIp())
-    expect([fresh.status, taken.status]).toEqual([200, 200])
-    expect(shape(await taken.json())).toEqual(shape(await fresh.json()))
+    expect([fresh.response.status, taken.response.status]).toEqual([200, 200])
+    expect(taken.value).toEqual(fresh.value)
+    expect(await taken.response.text()).toBe(await fresh.response.text())
   })
 })

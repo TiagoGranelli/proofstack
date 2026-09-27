@@ -4,6 +4,7 @@ import { Schema } from 'effect'
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '#/contract/limits.ts'
 import { env } from '#/server/env.ts'
 import { type AuthEndpointResult, callAuthEndpoint } from '#/server/http/auth-handler.ts'
+import { displayClientAddress } from '#/server/http/client-address.ts'
 
 // Every account action the UI offers, as server functions: the browser bundle carries no Better Auth client.
 // Each one validates its input with Effect Schema and calls Better Auth in-process through its router
@@ -114,6 +115,7 @@ export interface SessionView {
   readonly current: boolean
   readonly createdAt: string
   readonly lastActiveAt: string
+  /** An IPv4 address, or the IPv6 network Better Auth recorded, in CIDR notation (`2001:db8:1:2::/64`). */
   readonly ipAddress: string | null
   readonly userAgent: string | null
 }
@@ -139,7 +141,7 @@ export const listSessions = createServerFn({ method: 'GET' }).handler(
         current: session.id === currentId,
         createdAt: session.createdAt,
         lastActiveAt: session.updatedAt,
-        ipAddress: session.ipAddress ?? null,
+        ipAddress: session.ipAddress ? displayClientAddress(session.ipAddress) : null,
         userAgent: session.userAgent ?? null,
       }))
       .toSorted((a, b) => b.lastActiveAt.localeCompare(a.lastActiveAt))

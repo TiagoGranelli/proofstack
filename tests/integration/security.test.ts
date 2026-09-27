@@ -97,6 +97,18 @@ describe('auth surface', () => {
     ['POST', '/sign-in/email/'],
     ['POST', '/list-sessions'],
     ['GET', '/revoke-sessions'],
+    // Used by the account server functions in-process, never over HTTP (auth-account.test.ts).
+    ['POST', '/sign-up/email'],
+    ['POST', '/send-verification-email'],
+    ['GET', '/verify-email?token=x'],
+    ['POST', '/request-password-reset'],
+    ['POST', '/reset-password'],
+    ['POST', '/change-password'],
+    ['GET', '/list-sessions'],
+    ['POST', '/revoke-session'],
+    ['POST', '/revoke-other-sessions'],
+    ['POST', '/revoke-sessions'],
+    ['POST', '/delete-user'],
   ] as const
   // Sent without a session: an exposed endpoint then answers 400/401 instead of 404, and a regression that
   // re-exposes e.g. /update-user cannot change the users other tests are using.

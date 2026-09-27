@@ -3,16 +3,15 @@
 // only 10.0.0.0/8: the same header from 127.0.0.1 must be ignored, in the session and in the rate limit.
 import { describe, expect, it } from 'vitest'
 import { appUrl, closedAppUrl, postSignIn, sessionCookie, users } from './helpers.ts'
+import { callAuthFunction } from './server-functions.ts'
 
 const { email, password } = users.author
 
-/** The client IP Better Auth stored on the session the cookie belongs to. */
-const sessionIp = async (base: string, cookie: string) => {
-  const res = await fetch(`${base}/api/auth/list-sessions`, { headers: { cookie } })
-  expect(res.status).toBe(200)
-  const token = decodeURIComponent(cookie.slice(cookie.indexOf('=') + 1)).split('.')[0]
-  const sessions = (await res.json()) as Array<{ token: string; ipAddress: string | null }>
-  return sessions.find((session) => session.token === token)?.ipAddress
+/** The client IP Better Auth stored on the session the cookie belongs to, as the account page lists it. */
+const sessionIp = async (baseUrl: string, cookie: string) => {
+  const { value } = await callAuthFunction('listSessions', { method: 'GET', baseUrl, headers: { cookie } })
+  expect(value?.ok).toBe(true)
+  return value?.ok ? value.value.find((session) => session.current)?.ipAddress : undefined
 }
 
 describe('client IP behind a trusted proxy', () => {
@@ -20,6 +19,20 @@ describe('client IP behind a trusted proxy', () => {
     const res = await postSignIn(users.author, { 'x-forwarded-for': '203.0.113.50, 100.64.1.7' })
     expect(res.status).toBe(200)
     expect(await sessionIp(appUrl, sessionCookie(res)!)).toBe('100.64.1.7')
+  })
+
+  it('is an IPv6 client’s /64 network, which is also its rate-limit bucket', async () => {
+    const res = await postSignIn(users.author, { 'x-forwarded-for': '2001:db8:64:1:aaaa:bbbb:cccc:dddd' })
+    expect(res.status).toBe(200)
+    expect(await sessionIp(appUrl, sessionCookie(res)!)).toBe('2001:db8:64:1::/64')
+
+    // Other addresses in the same /64 count against the same bucket (3 sign-ins per 10 s, 1 already used).
+    const statuses: number[] = []
+    for (const address of ['2001:db8:64:1::2', '2001:db8:64:1:ffff::1', '2001:db8:64:1::3'])
+      statuses.push(
+        (await postSignIn({ email, password: 'wrong-password-123' }, { 'x-forwarded-for': address })).status,
+      )
+    expect(statuses).toEqual([401, 401, 429])
   })
 })
 

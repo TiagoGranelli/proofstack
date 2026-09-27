@@ -8,7 +8,8 @@ const pending = new Set<Promise<void>>()
  * Runs `task` without making the response wait for it. Better Auth's `advanced.backgroundTasks.handler`
  * (../auth.ts) and the auth mail senders (./mail/auth-mail.ts) use it, so an SMTP round trip, which only
  * happens for accounts that exist, never shows in response times. A failure is logged. Shutdown waits for
- * every pending task.
+ * every pending task
+ * before it closes the mail transport and the database pool (../lifecycle.ts).
  */
 export const runInBackground = (task: Promise<unknown>): void => {
   const tracked: Promise<void> = task
@@ -21,7 +22,7 @@ export const runInBackground = (task: Promise<unknown>): void => {
 }
 
 /** Resolves when no task is pending, including tasks scheduled while waiting. */
-export const drainBackgroundTasks = async (): Promise<void> => {
+const drainBackgroundTasks = async (): Promise<void> => {
   if (pending.size === 0) return
   await Promise.all(pending)
   return drainBackgroundTasks()

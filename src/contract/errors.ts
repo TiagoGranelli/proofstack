@@ -22,3 +22,12 @@ export class ServiceUnavailable extends Schema.TaggedError<ServiceUnavailable>()
   { message: Schema.String },
   { httpApiStatus: 503 },
 ) {}
+
+export class RateLimited extends Schema.TaggedError<RateLimited>()(
+  'RateLimited',
+  {
+    message: Schema.String,
+    retryAfter: Schema.Int.annotate({ description: 'Seconds until the next request can succeed.' }),
+  },
+  { httpApiStatus: 429 },
+) {}

@@ -1,6 +1,7 @@
 import '@tanstack/react-start/server-only'
 import { drizzleAdapter } from '@better-auth/drizzle-adapter'
 import { betterAuth } from 'better-auth'
+import { APIError, createAuthMiddleware } from 'better-auth/api'
 import { tanstackStartCookies } from 'better-auth/tanstack-start'
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '#/contract/limits.ts'
 import { postgresRateLimitStorage } from './auth-rate-limit.ts'
@@ -9,8 +10,22 @@ import { db } from './db/client.ts'
 import * as schema from './db/schema/index.ts'
 import { env } from './env.ts'
 import { AUTH_BASE_PATH, endpointAllowlist, isExposedEndpoint } from './http/auth-endpoints.ts'
+import { IPV6_SUBNET } from './http/client-address.ts'
 import { log } from './log.ts'
 import { authMail } from './mail/auth-mail.ts'
+
+/**
+ * Better Auth's /delete-user checks the password only when one is sent: without it, a session younger than
+ * `freshAge` (a day) is enough, and a `token` takes the deletion-by-mail path this app does not use. Both are
+ * refused here, before the endpoint runs, whoever calls it; the password itself is then verified by the
+ * endpoint (INVALID_PASSWORD).
+ */
+const requirePasswordToDelete = createAuthMiddleware(async (ctx) => {
+  if (ctx.path !== '/delete-user') return
+  const body: { password?: unknown; token?: unknown } = ctx.body ?? {}
+  if (typeof body.password !== 'string' || body.password === '' || body.token !== undefined)
+    throw APIError.from('BAD_REQUEST', { code: 'INVALID_PASSWORD', message: 'Deleting the account needs its password' })
+})
 
 export const auth = betterAuth({
   appName: 'ProofStack',
@@ -40,8 +55,9 @@ export const auth = betterAuth({
     // Following the link verifies the address; signing in stays a separate, rate-limited step.
     autoSignInAfterVerification: false,
   },
-  // Deletion needs the password (the UI always sends it); posts go with the user (foreign key cascade).
+  // Deletion needs the password (requirePasswordToDelete below); posts go with the user (foreign key cascade).
   user: { deleteUser: { enabled: true } },
+  hooks: { before: requirePasswordToDelete },
   // AUTH_SIGN_UP=closed (the default) keeps public sign-up off: accounts come from `pnpm user:create`, which
   // writes through Better Auth's internal adapter. disabledPaths answers 404 before anything else runs, on top of
   // the endpoint allowlist (./http/auth-endpoints.ts). See docs/decisions/0003-sign-up-policy.md.
@@ -67,7 +83,13 @@ export const auth = betterAuth({
     // Every request reaches Better Auth with the TCP peer as the last X-Forwarded-For hop
     // (./http/forwarded-for.ts). Hops inside TRUSTED_PROXIES are skipped from the right; the first address
     // outside them is the client. With no trusted proxies the header holds only the peer.
-    ipAddress: { ipAddressHeaders: ['x-forwarded-for'], trustedProxies: env.trustedProxies },
+    // IPv6 clients are recorded and rate-limited by their /64 network (./http/client-address.ts): one subscriber
+    // usually holds a whole /64 and could otherwise rotate through fresh buckets. Clients in one /64 share one.
+    ipAddress: {
+      ipAddressHeaders: ['x-forwarded-for'],
+      trustedProxies: env.trustedProxies,
+      ipv6Subnet: IPV6_SUBNET,
+    },
   },
   // Unexpected errors (e.g. database down) are thrown to src/server/http/auth-handler.ts, which logs
   // them as JSON without query parameters and answers an empty 500. Auth failures still answer normally.

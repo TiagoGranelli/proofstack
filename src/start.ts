@@ -1,4 +1,5 @@
 import { createCsrfMiddleware, createMiddleware, createStart } from '@tanstack/react-start'
+import { appOrigin } from '#/lib/app-origin.ts'
 import { serverFunctionErrors } from '#/lib/server-function-errors.ts'
 
 // Security headers and request logging live in the Nitro plugin src/server/nitro/http.ts, which also sees
@@ -11,12 +12,13 @@ const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
 const MAX_BODY_BYTES = 64 * 1024
 
 // Every state-changing request (server functions, /api/*, /api/auth/*) must come from our own origin:
-// Sec-Fetch-Site must be same-origin when present, otherwise Origin (or Referer) must equal APP_URL.
+// Sec-Fetch-Site must be same-origin when present, otherwise Origin (or Referer) must equal APP_URL, as
+// validated at startup (src/lib/app-origin.ts).
 // Requests with none of the three are rejected. Defining src/start.ts disables Start's implicit
 // server-function CSRF check, so this replaces it.
 const csrf = createCsrfMiddleware({
   filter: ({ request }) => !SAFE_METHODS.has(request.method),
-  origin: (value) => value === new URL(process.env.APP_URL ?? 'http://localhost:3000').origin,
+  origin: (value) => value === appOrigin(),
 })
 
 // Nothing downstream limits body size (srvx and Better Auth read whole bodies into memory).

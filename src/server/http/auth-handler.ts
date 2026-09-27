@@ -3,7 +3,7 @@ import { getRequestHeaders, getRequestIP, getResponseHeaders } from '@tanstack/r
 import { auth } from '../auth.ts'
 import { env } from '../env.ts'
 import { log } from '../log.ts'
-import { AUTH_BASE_PATH } from './auth-endpoints.ts'
+import { AUTH_BASE_PATH, isHttpEndpoint, notFound } from './auth-endpoints.ts'
 import { forwardedFor } from './forwarded-for.ts'
 
 /**
@@ -90,11 +90,33 @@ export const callAuthEndpoint = async (
   }
 }
 
-/** Handles /api/auth/* for the Start route in src/routes/api/auth/$.ts. */
-export const handleAuthRequest = (request: Request): Promise<Response> => {
+/**
+ * The session token stays in the HttpOnly cookie: Better Auth also puts it in the JSON of sign-in (`token`)
+ * and get-session (`session.token`), where page scripts could read it. Removed from those bodies.
+ */
+const withoutSessionTokens = async (response: Response): Promise<Response> => {
+  if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) return response
+  const body: unknown = parseJson(await response.text())
+  if (typeof body === 'object' && body !== null) {
+    if ('token' in body) delete body.token
+    if ('session' in body && typeof body.session === 'object' && body.session !== null && 'token' in body.session)
+      delete body.session.token
+  }
+  const headers = new Headers(response.headers)
+  headers.delete('content-length')
+  return new Response(JSON.stringify(body), { status: response.status, statusText: response.statusText, headers })
+}
+
+/**
+ * Handles /api/auth/* for the Start route in src/routes/api/auth/$.ts. Only the endpoints a client without the
+ * UI needs reach Better Auth (HTTP_ENDPOINTS in ./auth-endpoints.ts); the rest answer 404 before it runs, so
+ * they are neither counted by the rate limit nor stored.
+ */
+export const handleAuthRequest = async (request: Request): Promise<Response> => {
+  if (!isHttpEndpoint(request)) return notFound()
   const hasBody = request.method !== 'GET' && request.method !== 'HEAD'
   // A fresh Request: the incoming one is srvx's Node request wrapper, whose headers cannot be replaced.
-  return dispatch(
+  const response = await dispatch(
     new Request(request.url, {
       method: request.method,
       headers: withPeerAddress(request.headers),
@@ -102,4 +124,5 @@ export const handleAuthRequest = (request: Request): Promise<Response> => {
       ...(hasBody ? { body: request.body, duplex: 'half' } : {}),
     }),
   )
+  return withoutSessionTokens(response)
 }

@@ -24,7 +24,8 @@ changes to the contract, database, auth, or UI flows.
   included) directly: account actions are server functions that run Better Auth's router in-process
   (`callAuthEndpoint` in `src/server/http/auth-handler.ts`), so rate limits and the endpoint allowlist apply.
   Only the server adapters import `src/server`: `src/routes/api/**`, `src/lib/*.functions.ts`,
-  `src/lib/api-client.ts` and `src/lib/server-function-errors.ts`, the global function middleware
+  `src/lib/api-client.ts`, `src/lib/app-origin.ts` (the validated APP_URL for `src/start.ts`, through
+  `createServerOnlyFn`) and `src/lib/server-function-errors.ts`, the global function middleware
   (Fallow zone `server-adapters`).
 - SSR loaders call the same SDK. On the server it dispatches in-process to the Effect handler
   (`src/server/api/in-process-client.ts`), so every business operation goes through the contract.
@@ -98,7 +99,8 @@ is created verified. Public sign-up is `AUTH_SIGN_UP=closed` by default
 ([ADR 0003](docs/decisions/0003-sign-up-policy.md)).
 
 **Auth endpoint.** A new account action is a server function in `src/lib/auth.functions.ts` calling
-`callAuthEndpoint`, plus its `METHOD /path` in the allowlist (`src/server/http/auth-endpoints.ts`), a hook in
+`callAuthEndpoint`, plus its `METHOD /path` in `EXPOSED` (`src/server/http/auth-endpoints.ts`; not in
+`HTTP_ENDPOINTS`, which `/api/auth/*` answers from outside), a hook in
 `src/features/auth/api/`, and a message for any new Better Auth error code in
 `src/features/auth/utils/describe-auth-failure.ts`. Mail goes through `authMail` (`src/server/mail/`).
 
@@ -148,8 +150,8 @@ Test each behavior in the cheapest layer that can observe it:
   (or a list) chooses; `pnpm ci:local verify` runs all five.
 - **Coverage.** `pnpm test:fast` writes `coverage/index.html` for all of `src` (report only) and fails unless
   every module in `COVERAGE_GATE` is fully covered. Add security-critical pure modules there with their tests.
-- **api.** `tests/api/harness.ts`: `apiLayer({ databaseDown?, clockStepMicros? })` provides the real handlers and
-  `RequestValidation` over a fresh in-memory repository; `clientAs('alice' | 'bob' | 'forged' | 'none')`
+- **api.** `tests/api/harness.ts`: `apiLayer({ databaseDown?, clockStepMicros? })` provides the real handlers,
+  `RequestValidation` and `WriteRateLimit` over a fresh in-memory repository and rate-limit store; `clientAs('alice' | 'bob' | 'forged' | 'none')`
   is a typed client with that session (one client per identity: the client captures its middleware).
   The typed client refuses to encode invalid payloads, so send those through `webHandler()` as raw
   `Request`s. The project sets dummy env values (`vitest.config.ts`) because `src/server/env.ts` validates
@@ -180,7 +182,7 @@ Test each behavior in the cheapest layer that can observe it:
   `test` from `tests/e2e/support/app.ts`: every worker gets its own `author` (created verified through
   `scripts/create-user.ts`) and every browser and API context its own client IP (sign-in rate limit).
   Flows that change or delete an account use a throwaway one instead: `createAccount` from
-  `tests/e2e/support/accounts.ts` (sign-up through the API, confirmed from the Mailpit mail), and a
+  `tests/e2e/support/accounts.ts` (created verified the same way), and a
   second signed-in browser comes from `newClient`, which gets its own client IP too.
   Find your posts by a unique body. Data several specs need is written once by the `seed` project
   (`tests/e2e/seed.setup.ts`), which runs before the browser projects; today that is more than a page of
@@ -196,6 +198,10 @@ Test each behavior in the cheapest layer that can observe it:
   sequence with `clientIps('<prefix>')` from `tests/integration/helpers.ts` (for example `192.0.2`), sent
   as `X-Forwarded-For`, so each file has its own sign-in rate-limit buckets. Use a prefix no other file
   uses.
+- `/api/auth/*` only signs in, signs out and reads the session. Account actions in integration tests go
+  through the server functions over HTTP, `callAuthFunction(name, { data, headers })` from
+  `tests/integration/server-functions.ts`, on a throwaway account from `createUser(label)` (helpers.ts) when
+  the test changes or deletes it.
 - Assert only on posts the test created. An invariant over all of one author's posts (for example, an
   empty list) must be owned by a single file, because other files add posts for the same author
   concurrently.

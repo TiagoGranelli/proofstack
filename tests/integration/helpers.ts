@@ -1,4 +1,7 @@
 // Shared by the integration tests. `pnpm verify:app` provides every variable read here (see global-setup.ts).
+import { execFile } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
+import { promisify } from 'node:util'
 import { createClient } from '#/sdk/client/index.ts'
 
 export const appUrl = process.env.APP_URL!
@@ -61,3 +64,22 @@ export const signIn = async (credentials: { email: string; password: string }, i
 /** An SDK client that sends the session cookie and our Origin, like the browser app. */
 export const sdkClient = (cookie?: string) =>
   createClient({ baseUrl: appUrl, headers: cookie ? { cookie, origin: appUrl } : {} })
+
+const CREATE_USER = fileURLToPath(new URL('../../scripts/create-user.ts', import.meta.url))
+
+/**
+ * A throwaway verified account, created through scripts/create-user.ts (the operator path) with the app's
+ * environment that verify:app passes to the tests, named after `label`. For tests that change or delete an
+ * account, or write more than the shared `users` can absorb under the per-user write limit.
+ */
+export const createUser = async (label: string) => {
+  const account = {
+    email: `${label}-${crypto.randomUUID()}@example.test`,
+    name: `Integration ${label}`,
+    password: `pw-${crypto.randomUUID()}`,
+  }
+  await promisify(execFile)(process.execPath, [CREATE_USER, account.email, account.name], {
+    env: { ...process.env, PROOFSTACK_USER_PASSWORD: account.password },
+  })
+  return account
+}

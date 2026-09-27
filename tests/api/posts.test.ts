@@ -3,7 +3,12 @@
 // clause, rate limits, CSRF) is covered by tests/integration against the running app.
 import { assert, describe, it } from '@effect/vitest'
 import { Effect } from 'effect'
-import { POSTS_PAGE_DEFAULT, POSTS_PAGE_MAX } from '#/contract/limits.ts'
+import {
+  POST_WRITE_WINDOW_SECONDS,
+  POST_WRITES_PER_WINDOW,
+  POSTS_PAGE_DEFAULT,
+  POSTS_PAGE_MAX,
+} from '#/contract/limits.ts'
 import type { PageCursor, PostPage } from '#/contract/posts.ts'
 import { apiLayer, authors, clientAs } from './harness.ts'
 
@@ -108,6 +113,41 @@ describe('myPosts', () => {
         assert.strictEqual(response.status, 401)
         assert.deepStrictEqual(yield* response.json, { _tag: 'Unauthorized', message: 'Authentication required' })
       }
+    }).pipe(Effect.provide(apiLayer())),
+  )
+
+  // Create, edit and delete share one bucket per user; refused writes change nothing; reads are not counted.
+  it.effect('answers 429 past the write limit, per user, and keeps reading', () =>
+    Effect.gen(function* () {
+      const [alice, bob] = [yield* clientAs('alice'), yield* clientAs('bob')]
+      for (let i = 3; i < POST_WRITES_PER_WINDOW; i++) yield* alice.myPosts.create({ payload: { body: `post ${i}` } })
+      const post = yield* alice.myPosts.create({ payload: { body: 'kept' } })
+      yield* alice.myPosts.update({ params: { id: post.id }, payload: { body: 'edited' } })
+      // A write that finds nothing still counts.
+      yield* alice.myPosts.remove({ params: { id: MISSING_ID } }).pipe(Effect.flip)
+
+      for (const response of [
+        yield* alice.myPosts.create({ payload: { body: 'one too many' }, responseMode: 'response-only' }),
+        yield* alice.myPosts.update({
+          params: { id: post.id },
+          payload: { body: 'overwritten' },
+          responseMode: 'response-only',
+        }),
+        yield* alice.myPosts.remove({ params: { id: post.id }, responseMode: 'response-only' }),
+        // Counted before the body is read, so an invalid one is refused the same way.
+        yield* alice.myPosts.update({ params: { id: post.id }, payload: { body: 'x' }, responseMode: 'response-only' }),
+      ]) {
+        assert.strictEqual(response.status, 429)
+        assert.deepStrictEqual(yield* response.json, {
+          _tag: 'RateLimited',
+          message: 'Too many changes to your posts',
+          retryAfter: POST_WRITE_WINDOW_SECONDS,
+        })
+      }
+
+      const [newest] = (yield* alice.myPosts.list(firstPage)).items
+      assert.deepStrictEqual([newest?.id, newest?.body], [post.id, 'edited'])
+      assert.strictEqual((yield* bob.myPosts.create({ payload: { body: 'bob is not limited' } })).authorName, 'Bob')
     }).pipe(Effect.provide(apiLayer())),
   )
 })
