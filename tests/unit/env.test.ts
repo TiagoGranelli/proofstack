@@ -1,6 +1,7 @@
 // src/server/env.ts validates the environment once, at import, and stops the process with a message naming
 // the variable. Each test imports a fresh copy of the module under its own environment.
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import { stubEnvironment } from './process-fakes.ts'
 
 /** Valid values for every required variable; each test overrides what it checks. */
 const BASE = {
@@ -18,14 +19,10 @@ const BASE = {
 }
 
 const load = async (overrides: Partial<Record<keyof typeof BASE, string | undefined>> = {}) => {
-  for (const [name, value] of Object.entries({ ...BASE, ...overrides })) vi.stubEnv(name, value)
+  stubEnvironment({ ...BASE, ...overrides })
   vi.resetModules()
   return (await import('#/server/env.ts')).env
 }
-
-afterEach(() => {
-  vi.unstubAllEnvs()
-})
 
 describe('env', () => {
   it('reads a minimal environment with its defaults', async () => {
@@ -54,7 +51,16 @@ describe('env', () => {
   it.each([
     ['DATABASE_URL', { DATABASE_URL: undefined }, 'Missing required environment variable DATABASE_URL'],
     ['a blank APP_URL', { APP_URL: '   ' }, 'Missing required environment variable APP_URL'],
-    ['a DATABASE_URL that is not postgres', { DATABASE_URL: 'mysql://db/app' }, 'DATABASE_URL must be a postgres://'],
+    [
+      'a DATABASE_URL that is not postgres',
+      { DATABASE_URL: 'mysql://user:secret@db/app' },
+      'DATABASE_URL must be a postgres:// connection string (got scheme "mysql")',
+    ],
+    [
+      'a DATABASE_URL without a scheme',
+      { DATABASE_URL: 'db/app' },
+      'DATABASE_URL must be a postgres:// connection string (got scheme "none")',
+    ],
     ['an APP_URL that is not a URL', { APP_URL: 'app.example.com' }, 'APP_URL must be an origin such as'],
     ['an APP_URL that is not http', { APP_URL: 'ftp://app.example.com' }, 'APP_URL must use http or https'],
     ['an APP_URL with a path', { APP_URL: 'https://app.example.com/app' }, 'APP_URL must be an origin'],

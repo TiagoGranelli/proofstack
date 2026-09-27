@@ -26,7 +26,7 @@ const encode = (value: Json, ids: { next: number }): Node => {
   if (typeof value === 'number') return { t: 0, s: value }
   if (typeof value === 'string') return { t: 1, s: plain(value) }
   const i = ids.next++
-  if (Array.isArray(value)) return { t: 9, i, a: value.map((item) => encode(item, ids)), o: 0 }
+  if (Array.isArray(value)) return { t: 9, i, a: value.map((element) => encode(element, ids)), o: 0 }
   const keys = Object.keys(value).map((key) => plain(key))
   return { t: 10, i, p: { k: keys, v: keys.map((key) => encode(value[key], ids)) }, o: 0 }
 }
@@ -40,7 +40,7 @@ const decode = (node: Node): unknown => {
     case 2:
       return [null, undefined, true, false][node.s as number]
     case 9:
-      return (node.a as Node[]).map((item) => decode(item))
+      return (node.a as Node[]).map((element) => decode(element))
     // Objects; 11 is one without a prototype (Start's `context`).
     case 10:
     case 11: {
@@ -97,7 +97,8 @@ export const callAuthFunction = async <F extends AuthFunction>(
   expect(text, `server function ${name} has id ${idOf(name)}`).not.toContain('"unhandled":true')
   const answer = response.headers.get('content-type')?.includes('json') ? decode(JSON.parse(text) as Node) : undefined
   if (answer instanceof Error) return { response, value: undefined, thrown: answer.message }
-  const { result, error } = (answer ?? {}) as { result?: unknown; error?: unknown }
-  if (error instanceof Error) return { response, value: undefined, thrown: error.message }
-  return { response, value: result as Answer<F> | undefined }
+  // Start's envelope: `{ result }` when the function returned, `{ error }` when it threw.
+  const envelope = (answer ?? {}) as Partial<Record<'result' | 'error', unknown>>
+  if (envelope.error instanceof Error) return { response, value: undefined, thrown: envelope.error.message }
+  return { response, value: envelope.result as Answer<F> | undefined }
 }

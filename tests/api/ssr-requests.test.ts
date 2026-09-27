@@ -2,35 +2,26 @@
 // lookup, inside a real Start request context (`requestHandler`) with Better Auth's lookup stubbed. The db project
 // counts the same composition in SQL statements (tests/db/ssr-session.test.ts).
 import { requestHandler } from '@tanstack/react-start/server'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { meGet, systemHealth } from '#/sdk/sdk.gen.ts'
 import { createInProcessApiClient } from '#/server/api/in-process-client.ts'
-import { auth } from '#/server/auth.ts'
 import { env } from '#/server/env.ts'
 import { requestSession } from '#/server/http/request-session.ts'
-
-afterEach(() => {
-  vi.restoreAllMocks()
-})
+import { recordSessionLookups } from './better-auth-sessions.ts'
 
 /** Runs `work` as Start runs one request with `cookie` (none when null), and returns what `work` returned. */
 const serve = async <T>(work: () => Promise<T>, cookie: string | null = 'session=a'): Promise<T> => {
-  const results: T[] = []
+  const returned: T[] = []
   await requestHandler(async () => {
-    results.push(await work())
+    returned.push(await work())
     return new Response(null, { status: 204 })
   })(new Request(`${env.appUrl}/dashboard`, { headers: cookie === null ? {} : { cookie } }), {})
-  return results[0]!
-}
-
-const lookups = () => {
-  const getSession = vi.spyOn(auth.api, 'getSession').mockResolvedValue(null)
-  return () => getSession.mock.calls.map(([options]) => new Headers(options?.headers).get('cookie'))
+  return returned[0]!
 }
 
 describe('requestSession', () => {
   it('asks Better Auth once per request and cookie, and every time outside a request', async () => {
-    const cookies = lookups()
+    const cookies = recordSessionLookups()
     await serve(async () => {
       await Promise.all([
         requestSession(new Headers({ cookie: 'session=a' })),
@@ -53,7 +44,7 @@ describe('the in-process API client', () => {
   })
 
   it("reads as a visitor when the page request has no cookie, never with another request's session", async () => {
-    const cookies = lookups()
+    const cookies = recordSessionLookups()
     const { response } = await serve(() => meGet({ client: createInProcessApiClient() }), null)
     expect(response?.status).toBe(401)
     expect(cookies().every((cookie) => cookie === null)).toBe(true)

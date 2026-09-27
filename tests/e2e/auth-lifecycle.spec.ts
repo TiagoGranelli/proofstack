@@ -1,42 +1,58 @@
 // The account lifecycle on the open server (AUTH_SIGN_UP=open, mail to Mailpit). Every test works on
 // a throwaway account (./support/accounts.ts), never the worker's `author`, and every browser context has its
 // own client IP.
-import { createAccount, expectSignedOut, mailLink, newAccount, newClient, signInWithForm } from './support/accounts.ts'
-import { expect, signIn, test, visit } from './support/app.ts'
+import type { APIRequestContext, Locator } from '@playwright/test'
+import {
+  createAccount,
+  expectFormSignInRefused,
+  expectSignedOut,
+  mailLink,
+  newAccount,
+  requestPasswordReset,
+  setPasswordWithLink,
+  signedInElsewhere,
+  signedInHereAndElsewhere,
+  signInWithForm,
+  signUpWithForm,
+} from './support/accounts.ts'
+import { type Author, expect, followLink, signIn, test, visit } from './support/app.ts'
 
-test('signs up, confirms the address from the mail, then signs in', async ({ page, request }) => {
-  const account = newAccount()
-
-  await visit(page, '/login')
-  await page.getByRole('link', { name: 'Create one' }).click()
-  await expect(page).toHaveURL(/\/sign-up$/)
-  await expect(page.locator('body[data-hydrated="true"]')).toBeAttached()
-  await page.getByLabel('Name').fill(account.name)
-  await page.getByRole('textbox', { name: 'Email', exact: true }).fill(account.email)
-  await page.getByLabel('Password').fill(account.password)
-  await page.getByRole('button', { name: 'Create account' }).click()
-  await expect(page.getByRole('status')).toContainText(`Check your inbox at ${account.email}`)
-
-  // Not before the address is confirmed.
-  await visit(page, '/login')
-  await signInWithForm(page, account)
-  await expect(page.getByRole('alert')).toContainText('Confirm your email address first')
-
-  const link = await mailLink(account.email, 'Confirm your email address', '/verify-email')
-  // Following the link, as a mail scanner or a link preview does, confirms nothing.
-  expect((await request.get(link)).status()).toBe(200)
+/** Better Auth's own sign-in endpoint refuses `account` until its address is confirmed. */
+const expectApiSignInUnverified = async (request: APIRequestContext, account: Author) => {
   const early = await request.post('/api/auth/sign-in/email', {
     data: { email: account.email, password: account.password },
   })
   expect(early.status()).toBe(403)
   expect(await early.json()).toMatchObject({ code: 'EMAIL_NOT_VERIFIED' })
+}
+
+/** Types `password` into the delete-account form (`deletion`) and presses Delete account. */
+const submitDeletion = async (deletion: Locator, password: string) => {
+  await deletion.getByLabel('Password', { exact: true }).fill(password)
+  await deletion.getByRole('button', { name: 'Delete account' }).click()
+}
+
+test('signs up, confirms the address from the mail, then signs in', async ({ page, request }) => {
+  const account = newAccount()
+
+  await visit(page, '/login')
+  await followLink(page, 'Create one', /\/sign-up$/)
+  await signUpWithForm(page, account)
+  await expect(page.getByRole('status')).toContainText(`Check your inbox at ${account.email}`)
+
+  // Not before the address is confirmed.
+  await expectFormSignInRefused(page, account, 'Confirm your email address first')
+
+  const link = await mailLink(account.email, 'Confirm your email address', '/verify-email')
+  // Following the link, as a mail scanner or a link preview does, confirms nothing.
+  expect((await request.get(link)).status()).toBe(200)
+  await expectApiSignInUnverified(request, account)
 
   // Its owner confirms with the button (a POST).
   await visit(page, link)
   await page.getByRole('button', { name: 'Confirm email' }).click()
   await expect(page.getByRole('status')).toContainText('Your email address is confirmed')
-  await page.getByRole('link', { name: 'Sign in' }).click()
-  await expect(page.locator('body[data-hydrated="true"]')).toBeAttached()
+  await followLink(page, 'Sign in', /\/login$/)
   await signInWithForm(page, account)
   await expect(page).toHaveURL(/\/dashboard$/)
 })
@@ -47,43 +63,30 @@ test('resets a forgotten password from the mailed link, which ends every session
 }, testInfo) => {
   const account = await createAccount()
   // Signed in elsewhere before the reset.
-  const elsewhere = await newClient(browser, testInfo)
-  await signIn(elsewhere.request, account)
+  const elsewhere = await signedInElsewhere(browser, testInfo, account)
 
-  await visit(page, '/login')
-  await page.getByRole('link', { name: 'Forgot your password?' }).click()
-  await expect(page.locator('body[data-hydrated="true"]')).toBeAttached()
-  await page.getByRole('textbox', { name: 'Email', exact: true }).fill(account.email)
-  await page.getByRole('button', { name: 'Send reset link' }).click()
+  await requestPasswordReset(page, account.email)
   await expect(page.getByRole('status')).toContainText(account.email)
 
   const newPassword = `pw-${crypto.randomUUID()}`
   const link = await mailLink(account.email, 'Reset your password', '/reset-password')
-  await visit(page, link)
-  await page.getByLabel('New password').fill(newPassword)
-  await page.getByRole('button', { name: 'Set new password' }).click()
+  await setPasswordWithLink(page, link, newPassword)
   await expect(page.getByRole('status')).toContainText('Your password is changed')
 
   // The link works once.
-  await visit(page, link)
-  await page.getByLabel('New password').fill(`pw-${crypto.randomUUID()}`)
-  await page.getByRole('button', { name: 'Set new password' }).click()
+  await setPasswordWithLink(page, link, `pw-${crypto.randomUUID()}`)
   await expect(page.getByRole('alert')).toContainText('This link is invalid or has expired')
 
   await expectSignedOut(await elsewhere.newPage())
 
-  await visit(page, '/login')
-  await signInWithForm(page, account)
-  await expect(page.getByRole('alert')).toContainText('Wrong email or password')
+  await expectFormSignInRefused(page, account, 'Wrong email or password')
   await signInWithForm(page, { email: account.email, password: newPassword })
   await expect(page).toHaveURL(/\/dashboard$/)
   await elsewhere.close()
 })
 
 test('changing the password signs out the other sessions and keeps this one', async ({ browser, page }, testInfo) => {
-  const account = await createAccount()
-  const elsewhere = await newClient(browser, testInfo)
-  await Promise.all([signIn(page, account), signIn(elsewhere.request, account)])
+  const { account, elsewhere } = await signedInHereAndElsewhere(page, browser, testInfo)
 
   await visit(page, '/account')
   const newPassword = `pw-${crypto.randomUUID()}`
@@ -100,9 +103,7 @@ test('changing the password signs out the other sessions and keeps this one', as
 })
 
 test('lists the sessions and signs out another one', async ({ browser, page }, testInfo) => {
-  const account = await createAccount()
-  const elsewhere = await newClient(browser, testInfo)
-  await Promise.all([signIn(page, account), signIn(elsewhere.request, account)])
+  const { elsewhere } = await signedInHereAndElsewhere(page, browser, testInfo)
 
   await visit(page, '/account')
   const sessions = page.getByTestId('sessions').getByRole('listitem')
@@ -130,20 +131,16 @@ test('deletes the account after the password and an explicit confirmation', asyn
   await visit(page, '/account')
 
   const deletion = page.getByRole('region', { name: 'Delete account' })
-  await deletion.getByLabel('Password', { exact: true }).fill('not-the-password-123')
   // The confirmation checkbox is required: nothing is sent without it, and focus goes to it.
-  await deletion.getByRole('button', { name: 'Delete account' }).click()
+  await submitDeletion(deletion, 'not-the-password-123')
   await expect(deletion.getByRole('alert')).toHaveText('Confirm that you want to delete the account.')
   await expect(deletion.getByRole('checkbox')).toBeFocused()
   await deletion.getByRole('checkbox').check()
   await deletion.getByRole('button', { name: 'Delete account' }).click()
   await expect(deletion.getByRole('alert')).toContainText('That password is not correct')
 
-  await deletion.getByLabel('Password', { exact: true }).fill(account.password)
-  await deletion.getByRole('button', { name: 'Delete account' }).click()
+  await submitDeletion(deletion, account.password)
   await expect(page).toHaveURL(/\/$/)
   await expectSignedOut(page)
-  await visit(page, '/login')
-  await signInWithForm(page, account)
-  await expect(page.getByRole('alert')).toContainText('Wrong email or password')
+  await expectFormSignInRefused(page, account, 'Wrong email or password')
 })

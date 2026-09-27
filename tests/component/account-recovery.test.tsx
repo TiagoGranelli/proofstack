@@ -8,12 +8,10 @@ import type { AuthFailure } from '#/lib/auth.functions.ts'
 import { Route as ResetPasswordRoute } from '#/routes/reset-password.tsx'
 import { Route as VerifyEmailRoute } from '#/routes/verify-email.tsx'
 import { authCalls, authFunction, held, worker } from './api-mocks.ts'
-import { expectFocusedStatus, renderInApp, statusText } from './test-utils.tsx'
+import { expectFocusedStatus, formOf, renderInApp, statusText } from './test-utils.tsx'
 
 const unreachable = 'Could not reach the server. Check your connection and try again.'
 const expiredLink = 'This link is invalid or has expired. Ask for a new one.'
-const formOf = (label: string) =>
-  page.elementLocator(page.getByRole('button', { name: label }).element().closest('form')!)
 
 const renderReset = (url: string) =>
   renderInApp(null, { url, route: { path: '/reset-password', route: ResetPasswordRoute } })
@@ -24,6 +22,17 @@ const email = () => page.getByLabelText('Email')
 const password = () => page.getByLabelText('Password')
 const newPassword = () => page.getByLabelText('New password')
 const resend = () => button('Send a new link')
+
+/** While an account action is pending, its button is disabled and its form announces that it is busy. */
+const expectBusy = async (label: string) => {
+  await expect.element(button(label)).toBeDisabled()
+  await expect.element(formOf(button(label))).toHaveAttribute('aria-busy', 'true')
+}
+
+const setNewPassword = async () => {
+  await newPassword().fill('a brand new password')
+  await button('Set new password').click()
+}
 
 const signUp = async (typed = 'a long enough password') => {
   await page.getByLabelText('Name').fill('  Ada Lovelace ')
@@ -40,7 +49,7 @@ describe('SignUpForm', () => {
     await expect.element(password()).toHaveAttribute('autocomplete', 'new-password')
     for (const field of [page.getByLabelText('Name'), email(), password()]) await expect.element(field).toBeRequired()
     await expect.element(password()).toHaveAccessibleDescription('At least 12 characters.')
-    await expect.element(formOf('Create account')).toHaveAttribute('method', 'post')
+    await expect.element(formOf(button('Create account'))).toHaveAttribute('method', 'post')
   })
 
   it('does not send a password shorter than 12 characters: says why next to it and moves focus there', async () => {
@@ -75,8 +84,7 @@ describe('SignUpForm', () => {
     worker.use(calls.handler, authFunction('signUp', response))
     await renderInApp(<SignUpForm />, { url: '/sign-up' })
     await signUp()
-    await expect.element(button('Create account')).toBeDisabled()
-    await expect.element(formOf('Create account')).toHaveAttribute('aria-busy', 'true')
+    await expectBusy('Create account')
     await button('Create account').click({ force: true })
     response.release()
     await expect
@@ -101,7 +109,7 @@ describe('SignUpForm', () => {
     await renderInApp(<SignUpForm />, { url: '/sign-up' })
     await signUp()
     await expect.element(page.getByRole('alert')).toHaveTextContent(message)
-    await expect.element(formOf('Create account')).toHaveAccessibleDescription(message)
+    await expect.element(formOf(button('Create account'))).toHaveAccessibleDescription(message)
     await expect.element(button('Create account')).toHaveFocus()
     await expect.element(password()).toHaveValue('a long enough password')
     // No raw Better Auth code (SCREAMING_SNAKE_CASE) reaches the page, whatever the failure.
@@ -119,8 +127,7 @@ describe('ForgotPasswordForm', () => {
     await expect.element(email()).toBeRequired()
     await email().fill(' someone@example.test ')
     await button('Send reset link').click()
-    await expect.element(button('Send reset link')).toBeDisabled()
-    await expect.element(formOf('Send reset link')).toHaveAttribute('aria-busy', 'true')
+    await expectBusy('Send reset link')
     response.release()
     await expect
       .element(statusText('Check your inbox'))
@@ -171,10 +178,8 @@ describe('/reset-password', () => {
     queryClient.setQueryData(['my data'], ['private'])
     await expect.element(newPassword()).toHaveAttribute('autocomplete', 'new-password')
     await expect.element(newPassword()).toHaveAccessibleDescription('At least 12 characters.')
-    await newPassword().fill('a brand new password')
-    await button('Set new password').click()
-    await expect.element(button('Set new password')).toBeDisabled()
-    await expect.element(formOf('Set new password')).toHaveAttribute('aria-busy', 'true')
+    await setNewPassword()
+    await expectBusy('Set new password')
     response.release()
     await expect
       .element(statusText('Password changed'))
@@ -208,10 +213,9 @@ describe('/reset-password', () => {
     worker.use(authFunction('resetPassword', { ok: false, failure }))
     const { queryClient } = await renderReset('/reset-password?token=abc123')
     queryClient.setQueryData(['my data'], ['private'])
-    await newPassword().fill('a brand new password')
-    await button('Set new password').click()
+    await setNewPassword()
     await expect.element(page.getByRole('alert')).toHaveTextContent(message)
-    await expect.element(formOf('Set new password')).toHaveAccessibleDescription(message)
+    await expect.element(formOf(button('Set new password'))).toHaveAccessibleDescription(message)
     await expect.element(button('Set new password')).toHaveFocus()
     expect(document.body.textContent).not.toContain(failure.code)
     expect(queryClient.getQueryData(['my data'])).toEqual(['private'])
@@ -219,20 +223,24 @@ describe('/reset-password', () => {
 })
 
 describe('/verify-email', () => {
-  it('confirms the address only when the button is pressed, then offers to sign in', async () => {
+  // Opening the link is what a mail scanner does too.
+  it('sends nothing when the link is opened, and waits for the button', async () => {
+    const calls = authCalls('verifyEmail')
+    worker.use(calls.handler)
+    await renderVerify('/verify-email?token=tok-1')
+    await expect.element(page.getByRole('heading', { level: 1 })).toHaveTextContent('Confirm your email')
+    await expect.element(button('Confirm email')).toBeEnabled()
+    await expect.element(resend()).not.toBeInTheDocument()
+    expect(calls.data).toEqual([])
+  })
+
+  it('confirms the address when the button is pressed, busy meanwhile, then offers to sign in', async () => {
     const response = held()
     const calls = authCalls('verifyEmail')
     worker.use(calls.handler, authFunction('verifyEmail', response))
     const { router } = await renderVerify('/verify-email?token=tok-1')
-    await expect.element(page.getByRole('heading', { level: 1 })).toHaveTextContent('Confirm your email')
-    // Opening the link (what a mail scanner does too) sends nothing.
-    await expect.element(button('Confirm email')).toBeEnabled()
-    await expect.element(resend()).not.toBeInTheDocument()
-    expect(calls.data).toEqual([])
-
     await button('Confirm email').click()
-    await expect.element(button('Confirm email')).toBeDisabled()
-    await expect.element(formOf('Confirm email')).toHaveAttribute('aria-busy', 'true')
+    await expectBusy('Confirm email')
     response.release()
     await expect
       .element(statusText('Email confirmed'))
@@ -277,8 +285,7 @@ describe('/verify-email', () => {
     await expect.element(email()).toHaveAttribute('autocomplete', 'email')
     await email().fill(' new@example.test ')
     await resend().click()
-    await expect.element(resend()).toBeDisabled()
-    await expect.element(formOf('Send a new link')).toHaveAttribute('aria-busy', 'true')
+    await expectBusy('Send a new link')
     response.release()
     await expect
       .element(statusText('Check your inbox'))
@@ -293,7 +300,7 @@ describe('/verify-email', () => {
     await email().fill('new@example.test')
     await resend().click()
     await expect.element(page.getByRole('alert')).toHaveTextContent(unreachable)
-    await expect.element(formOf('Send a new link')).toHaveAccessibleDescription(unreachable)
+    await expect.element(formOf(button('Send a new link'))).toHaveAccessibleDescription(unreachable)
     await expect.element(resend()).toHaveFocus()
   })
 })

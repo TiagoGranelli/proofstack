@@ -74,6 +74,10 @@ export async function renderInApp(
   return { ...screen, router, queryClient }
 }
 
+/** The form that `button` submits, to assert on its `aria-busy` state and its error description. */
+export const formOf = (button: ReturnType<typeof page.getByRole>) =>
+  page.elementLocator(button.element().closest('form')!)
+
 /** The text of an account form's success message (a status named by its heading `title`), without the heading. */
 export const statusText = (title: string) => page.getByRole('status', { name: title }).getByRole('paragraph')
 

@@ -4,9 +4,7 @@
 // /about.
 import type { Page } from '@playwright/test'
 import { APP_NAME } from '#/config/app.ts'
-import { expect, signIn, test } from './support/app.ts'
-
-const hydrated = (page: Page) => expect(page.locator('body[data-hydrated="true"]')).toBeAttached()
+import { expect, signIn, test, visit } from './support/app.ts'
 
 const navLink = (page: Page, name: string) =>
   page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name, exact: true })
@@ -31,8 +29,7 @@ test('blocks and reports markup injected into a page', async ({ page, cspViolati
       body: (await response.text()).replace('</main>', `${injected}</main>`),
     })
   })
-  await page.goto('/')
-  await hydrated(page)
+  await visit(page, '/')
   await expect
     .poll(() => cspViolations.map((v) => v.directive).toSorted())
     .toEqual(['script-src-elem', 'style-src-elem'])
@@ -41,9 +38,8 @@ test('blocks and reports markup injected into a page', async ({ page, cspViolati
 })
 
 test('SSR pages load every module and route chunk under the nonce policy', async ({ page, author }) => {
-  const response = await page.goto('/')
+  const response = await visit(page, '/')
   expect(response?.headers()['content-security-policy']).toContain("'strict-dynamic'")
-  await hydrated(page)
   // Client-side navigation loads each route's chunks through dynamic import and Vite's preload helper.
   await navLink(page, 'About').click()
   await expect(page.getByRole('heading', { name: 'About' })).toBeVisible()
@@ -52,24 +48,21 @@ test('SSR pages load every module and route chunk under the nonce policy', async
   await expect(page.getByRole('button', { name: 'Sign in' })).toBeEnabled()
 
   await signIn(page, author)
-  await page.goto('/dashboard')
-  await hydrated(page)
+  await visit(page, '/dashboard')
   await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible()
   await navLink(page, APP_NAME).click()
   await expectHome(page)
 
-  const missing = await page.goto('/no-such-page')
+  const missing = await visit(page, '/no-such-page')
   expect(missing?.status()).toBe(404)
-  await hydrated(page)
   await expect(page.getByRole('heading', { name: 'Page not found' })).toBeVisible()
 })
 
 test('the prerendered page runs under its hash policy and navigates on', async ({ page }) => {
-  const response = await page.goto('/about')
+  const response = await visit(page, '/about')
   const csp = response?.headers()['content-security-policy'] ?? ''
   expect(csp).toContain("'sha256-")
   expect(csp).not.toContain("'nonce-")
-  await hydrated(page)
   await navLink(page, APP_NAME).click()
   await expectHome(page)
   await navLink(page, 'About').click()

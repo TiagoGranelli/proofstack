@@ -2,25 +2,11 @@
 // so the Postgres pool never closes under a background task that still queries it.
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { isDraining, onShutdown, runShutdown, setDraining } from '#/server/lifecycle.ts'
-
-const logged = () => {
-  const lines: Array<Record<string, unknown>> = []
-  const capture = (chunk: string | Uint8Array) => {
-    lines.push(JSON.parse(String(chunk)) as Record<string, unknown>)
-    return true
-  }
-  vi.spyOn(process.stdout, 'write').mockImplementation(capture)
-  vi.spyOn(process.stderr, 'write').mockImplementation(capture)
-  return lines
-}
-
-afterEach(() => {
-  vi.restoreAllMocks()
-})
+import { captureLog } from './process-fakes.ts'
 
 describe('runShutdown', () => {
   it('runs the steps one after another in their fixed order and logs that order', async () => {
-    const lines = logged()
+    const lines = captureLog()
     const events: string[] = []
     const step = (name: string, ms: number) => async () => {
       events.push(`${name} start`)
@@ -55,7 +41,7 @@ describe('runShutdown', () => {
   })
 
   it('logs a failed step and still runs the later ones, once', async () => {
-    const lines = logged()
+    const lines = captureLog()
     const pool = vi.fn<() => void>()
     onShutdown('mailer', () => {
       throw new Error('smtp gone')

@@ -5,22 +5,21 @@ import { HttpApiBuilder, HttpApiError } from 'effect/unstable/httpapi'
 import { Api } from '#/contract/api.ts'
 import { Database } from '../db/client.ts'
 import { DatabaseHealth } from '../db/health.ts'
+import { requestSession } from '../http/request-session.ts'
 import { onShutdown } from '../lifecycle.ts'
 import { log } from '../log.ts'
 import { PostsRepo } from '../posts/repo.ts'
 import { MeHandlers, MyPostsHandlers, PublicPostsHandlers, SystemHandlers } from './handlers.ts'
-import { AuthenticationLive, RequestValidationLive } from './middleware.ts'
+import { AuthenticationLive, issuePath, RequestValidationLive } from './middleware.ts'
 import { RateLimitStore, WriteRateLimitLive } from './rate-limit.ts'
+import { SessionLookup } from './session-lookup.ts'
 
 const formatIssues = SchemaIssue.makeFormatterStandardSchemaV1()
 
 /** A response that fails its own schema is logged by kind and field paths, never by value. */
-const describeDefect = (defect: unknown) => {
+const describeDefect = (defect: unknown): unknown => {
   if (!HttpApiError.HttpApiSchemaError.is(defect)) return defect
-  const paths = formatIssues(defect.cause.issue).issues.map(
-    (issue) =>
-      issue.path?.map((segment) => String(typeof segment === 'object' ? segment.key : segment)).join('.') ?? '',
-  )
+  const paths = formatIssues(defect.cause.issue).issues.map((issue) => issuePath(issue).join('.'))
   return Object.assign(
     new Error(`Response ${defect.kind.toLowerCase()} does not match its schema at: ${paths.join(', ')}`),
     {
@@ -57,12 +56,24 @@ const ServerMiddleware = HttpRouter.middleware(
   { global: true },
 )
 
+// Better Auth's session of the request's cookie, looked up once per incoming request (requestSession). Only the
+// fields CurrentUser declares reach the handlers.
+const SessionLookupLive = Layer.succeed(SessionLookup, {
+  userOf: (headers) =>
+    Effect.tryPromise(() => requestSession(headers)).pipe(
+      Effect.orDie,
+      Effect.map((session) =>
+        session ? { id: session.user.id, name: session.user.name, email: session.user.email } : null,
+      ),
+    ),
+})
+
 const ApiLive = HttpApiBuilder.layer(Api, { openapiPath: '/api/openapi.json' }).pipe(
   Layer.provide([SystemHandlers, MeHandlers, PublicPostsHandlers, MyPostsHandlers]),
   Layer.provide([
     DatabaseHealth.layer.pipe(Layer.provide(Database.layer)),
     PostsRepo.layer.pipe(Layer.provide(Database.layer)),
-    AuthenticationLive,
+    AuthenticationLive.pipe(Layer.provide(SessionLookupLive)),
     RequestValidationLive,
     WriteRateLimitLive.pipe(Layer.provide(RateLimitStore.postgres)),
   ]),

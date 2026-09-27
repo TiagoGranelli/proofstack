@@ -36,7 +36,7 @@ const serializeError = (error: unknown, depth = 0): unknown => {
  * One JSON object per line on stdout (stderr for errors), for log collectors.
  * Never pass request headers, cookies, bodies or query strings: they can carry credentials.
  */
-export const log = (level: Level, msg: string, fields: Fields = {}) => {
+export const log = (level: Level, msg: string, fields: Fields = {}): void => {
   const entry: Fields = { time: new Date().toISOString(), level, msg }
   for (const [key, value] of Object.entries(fields)) entry[key] = key === 'error' ? serializeError(value) : value
   const line = `${JSON.stringify(entry)}\n`

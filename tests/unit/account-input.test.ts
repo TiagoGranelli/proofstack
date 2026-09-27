@@ -12,9 +12,9 @@ const form = (fields: Record<string, string | Blob>) => {
 const decodePost = Schema.decodeUnknownExit(SignInFormPost)
 /** The messages of the issues the server function's validator (Standard Schema) reports for `input`. */
 const messagesOf = (input: unknown) => {
-  const result = Schema.toStandardSchemaV1(SignInFormPost)['~standard'].validate(input)
-  if (result instanceof Promise) throw new Error('SignInFormPost validates synchronously')
-  return result.issues?.map((issue) => issue.message) ?? []
+  const validation = Schema.toStandardSchemaV1(SignInFormPost)['~standard'].validate(input)
+  if (validation instanceof Promise) throw new Error('SignInFormPost validates synchronously')
+  return validation.issues?.map((issue) => issue.message) ?? []
 }
 
 describe('SignInFormPost', () => {

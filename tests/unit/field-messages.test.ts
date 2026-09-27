@@ -18,13 +18,13 @@ describe('fieldErrorMessage', () => {
   })
 
   it('returns one of the messages it was given, for any mix of results', () => {
-    const result = fc.oneof(
+    const validatorOutcome = fc.oneof(
       fc.string(),
       fc.record({ message: fc.oneof(fc.string(), fc.integer()) }),
       fc.constantFrom(undefined, null, 0, false),
     )
     fc.assert(
-      fc.property(fc.array(result), (errors) => {
+      fc.property(fc.array(validatorOutcome), (errors) => {
         const message = fieldErrorMessage(errors)
         const candidates = errors.flatMap((error) => {
           if (typeof error === 'string') return [error]

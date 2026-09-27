@@ -88,15 +88,14 @@ export function MyPost(props: { post: Post; onUpdated?: () => void; onDeleted?: 
   )
 }
 
-/**
- * The form that replaces a post's body while it is edited. It starts from the saved body with the caret at
- * its end; Save, Cancel and Escape close it through `onClose`. Each opening mounts it afresh, so a cancelled
- * draft or a failed save never shows up again. Checked like the composer: in the browser with the API's rules,
- * a ValidationError next to the field, any other failure under the form.
- */
-function EditPostForm(props: { post: Post; onClose: () => void; onUpdated: (() => void) | undefined }) {
-  const { post } = props
-  const textarea = useRef<HTMLTextAreaElement>(null)
+interface EditPostProps {
+  readonly post: Post
+  readonly onClose: () => void
+  readonly onUpdated: (() => void) | undefined
+}
+
+/** The update mutation and the form it submits: a save closes the form, then tells the list. */
+function useEditPost(props: EditPostProps) {
   const update = useUpdatePost({
     mutationConfig: {
       onSuccess: () => {
@@ -106,11 +105,41 @@ function EditPostForm(props: { post: Post; onClose: () => void; onUpdated: (() =
     },
   })
   const form = useAppForm({
-    defaultValues: { body: post.body },
+    defaultValues: { body: props.post.body },
     validationLogic: revalidateLogic(),
     validators: { onDynamic: postDraftSchema.validator },
-    onSubmit: ({ value }) => update.mutate({ path: { id: post.id }, body: postDraftSchema.decode(value) }),
+    onSubmit: ({ value }) => update.mutate({ path: { id: props.post.id }, body: postDraftSchema.decode(value) }),
   })
+  return { form, update }
+}
+
+/** The editor's row under the textarea: the character count, Cancel and Save. */
+function EditPostActions(props: { countId: string; draft: string; saving: boolean; onCancel: () => void }) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <CharacterCount id={props.countId} value={props.draft} />
+      <div className="flex gap-2">
+        <Button type="button" variant="outline" onClick={props.onCancel}>
+          Cancel
+        </Button>
+        <Button type="submit" disabled={props.draft.trim().length === 0} aria-disabled={props.saving || undefined}>
+          Save
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * The form that replaces a post's body while it is edited. It starts from the saved body with the caret at
+ * its end; Save, Cancel and Escape close it through `onClose`. Each opening mounts it afresh, so a cancelled
+ * draft or a failed save never shows up again. Checked like the composer: in the browser with the API's rules,
+ * a ValidationError next to the field, any other failure under the form.
+ */
+function EditPostForm(props: EditPostProps) {
+  const { post } = props
+  const textarea = useRef<HTMLTextAreaElement>(null)
+  const { form, update } = useEditPost(props)
 
   useEffect(() => {
     const field = textarea.current
@@ -163,21 +192,12 @@ function EditPostForm(props: { post: Post; onClose: () => void; onUpdated: (() =
                   aria-invalid={isTooLong(draft) || Boolean(error) || undefined}
                   required
                 />
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <CharacterCount id={`${fieldId}-count`} value={draft} />
-                  <div className="flex gap-2">
-                    <Button type="button" variant="outline" onClick={props.onClose}>
-                      Cancel
-                    </Button>
-                    <Button
-                      type="submit"
-                      disabled={draft.trim().length === 0}
-                      aria-disabled={update.isPending || undefined}
-                    >
-                      Save
-                    </Button>
-                  </div>
-                </div>
+                <EditPostActions
+                  countId={`${fieldId}-count`}
+                  draft={draft}
+                  saving={update.isPending}
+                  onCancel={props.onClose}
+                />
                 <FieldError id={`${fieldId}-error`} message={error} />
               </>
             )

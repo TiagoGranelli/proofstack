@@ -10,29 +10,26 @@ import { DatabaseHealth } from '../db/health.ts'
 import { isDraining } from '../lifecycle.ts'
 import { PostsRepo, type PageRequest } from '../posts/repo.ts'
 
+// A draining process is not ready, whatever the database says: the load balancer stops routing to it while it
+// finishes what it has (../lifecycle.ts).
+const readiness = (database: DatabaseHealth['Service']) =>
+  Effect.suspend(() => {
+    if (isDraining()) return Effect.fail(new ServiceUnavailable({ message: 'Shutting down' }))
+    return database.ping.pipe(
+      Effect.as({ status: 'ok' as const }),
+      Effect.catchTag('DbError', () => Effect.fail(new ServiceUnavailable({ message: 'Database unavailable' }))),
+    )
+  })
+
+/** GET /api/health (the process answers) and GET /api/ready (it can serve: not draining, database up). */
 export const SystemHandlers = HttpApiBuilder.group(
   Api,
   'system',
   Effect.fn(function* (handlers) {
     const database = yield* DatabaseHealth
-    return (
-      handlers
-        .handle('health', () => Effect.succeed({ status: 'ok' as const }))
-        // A draining process is not ready, whatever the database says: the load balancer stops routing to it
-        // while it finishes what it has (../lifecycle.ts).
-        .handle('ready', () =>
-          Effect.suspend(() =>
-            isDraining()
-              ? Effect.fail(new ServiceUnavailable({ message: 'Shutting down' }))
-              : database.ping.pipe(
-                  Effect.as({ status: 'ok' as const }),
-                  Effect.catchTag('DbError', () =>
-                    Effect.fail(new ServiceUnavailable({ message: 'Database unavailable' })),
-                  ),
-                ),
-          ),
-        )
-    )
+    return handlers
+      .handle('health', () => Effect.succeed({ status: 'ok' as const }))
+      .handle('ready', () => readiness(database))
   }),
 )
 
@@ -46,6 +43,7 @@ const pageRequest = (query: { readonly cursor?: PageRequest['cursor']; readonly 
   limit: query.limit ?? POSTS_PAGE_DEFAULT,
 })
 
+/** The public feed, newest first, a page at a time. Needs no session. */
 export const PublicPostsHandlers = HttpApiBuilder.group(
   Api,
   'publicPosts',
@@ -55,6 +53,26 @@ export const PublicPostsHandlers = HttpApiBuilder.group(
   }),
 )
 
+type Repo = PostsRepo['Service']
+
+/** Edits one of the signed-in author's posts; another author's post is as missing as a deleted one (404). */
+const updateOwnPost = (repo: Repo, id: string, body: string) =>
+  Effect.gen(function* () {
+    const author = yield* CurrentUser
+    const updated = yield* repo.update(author, id, body).pipe(Effect.orDie)
+    if (!updated) return yield* new PostNotFound({ id })
+    return updated
+  })
+
+/** Deletes one of the signed-in author's posts, with the same 404 as `updateOwnPost`. */
+const removeOwnPost = (repo: Repo, id: string) =>
+  Effect.gen(function* () {
+    const author = yield* CurrentUser
+    const removed = yield* repo.remove(author, id).pipe(Effect.orDie)
+    if (!removed) return yield* new PostNotFound({ id })
+  })
+
+/** The signed-in author's own posts: list, create, update and remove, behind the Authentication middleware. */
 export const MyPostsHandlers = HttpApiBuilder.group(
   Api,
   'myPosts',
@@ -67,20 +85,7 @@ export const MyPostsHandlers = HttpApiBuilder.group(
       .handle('create', ({ payload }) =>
         CurrentUser.use((author) => repo.create(author, payload.body)).pipe(Effect.orDie),
       )
-      .handle('update', ({ params, payload }) =>
-        Effect.gen(function* () {
-          const author = yield* CurrentUser
-          const updated = yield* repo.update(author, params.id, payload.body).pipe(Effect.orDie)
-          if (!updated) return yield* new PostNotFound({ id: params.id })
-          return updated
-        }),
-      )
-      .handle('remove', ({ params }) =>
-        Effect.gen(function* () {
-          const author = yield* CurrentUser
-          const removed = yield* repo.remove(author, params.id).pipe(Effect.orDie)
-          if (!removed) return yield* new PostNotFound({ id: params.id })
-        }),
-      )
+      .handle('update', ({ params, payload }) => updateOwnPost(repo, params.id, payload.body))
+      .handle('remove', ({ params }) => removeOwnPost(repo, params.id))
   }),
 )

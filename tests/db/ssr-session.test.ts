@@ -32,15 +32,22 @@ const signIn = async (label: string) => {
 
 /** Runs `work` as Start runs a request for `/dashboard` with `cookie`, and returns what `work` returned. */
 const serve = async <T>(cookie: string, work: () => Promise<T>): Promise<T> => {
-  const results: T[] = []
+  const returned: T[] = []
   await requestHandler(async () => {
-    results.push(await work())
+    returned.push(await work())
     return new Response(null, { status: 204 })
   })(new Request(`${env.appUrl}/dashboard`, { headers: { cookie } }), {})
-  return results[0]!
+  return returned[0]!
 }
 
 const touchesSession = (sql: string) => sql.includes('"session"')
+
+/** Sends a write (any: the client refuses it before routing) and returns why it failed, or `sent`. */
+const sendWrite = async () => {
+  // The SDK hands a thrown fetch back as `error`.
+  const { error } = await createInProcessApiClient().post({ url: '/api/me' })
+  return error instanceof Error ? error.message : 'sent'
+}
 
 let cookie: string
 let otherCookie: string
@@ -55,14 +62,14 @@ beforeAll(async () => {
 
 describe('an authed SSR page', () => {
   it('looks the session up once for the guard and the API calls of its loaders together', async () => {
-    const { result, statements } = await statementsOf(() =>
+    const { returned: page, statements } = await statementsOf(() =>
       serve(cookie, async () => {
         const guard = await requestSession(getRequestHeaders())
         const me = await meGet({ client: createInProcessApiClient() })
         return { signedIn: guard !== null, status: me.response?.status }
       }),
     )
-    expect(result).toEqual({ signedIn: true, status: 200 })
+    expect(page).toEqual({ signedIn: true, status: 200 })
     // GET /api/me answers from the session the middleware already has: nothing more than the one lookup.
     expectBudget('an authed SSR page', statements, lookup)
   })
@@ -74,7 +81,7 @@ describe('an authed SSR page', () => {
     })
     expectBudget('two requests', twice.statements, 2 * lookup)
 
-    const { result, statements } = await statementsOf(() =>
+    const { returned: emails, statements } = await statementsOf(() =>
       serve(cookie, async () => {
         const [mine, theirs] = await Promise.all([
           requestSession(new Headers({ cookie })),
@@ -83,20 +90,13 @@ describe('an authed SSR page', () => {
         return [mine?.user.email, theirs?.user.email]
       }),
     )
-    expect(new Set(result).size).toBe(2)
+    expect(new Set(emails).size).toBe(2)
     expectBudget('two cookies in one request', statements, 2 * lookup)
   })
 
   it('refuses a write through the in-process client before it reaches the API', async () => {
-    const { result, statements } = await statementsOf(() =>
-      serve(cookie, () =>
-        // Any write: the client refuses it before routing. The SDK hands a thrown fetch back as `error`.
-        createInProcessApiClient()
-          .post({ url: '/api/me' })
-          .then(({ error }) => (error instanceof Error ? error.message : 'sent')),
-      ),
-    )
-    expect(result).toMatch(/^The in-process API client only sends GET \(got POST \/api\/me\)/)
+    const { returned: refusal, statements } = await statementsOf(() => serve(cookie, sendWrite))
+    expect(refusal).toMatch(/^The in-process API client only sends GET \(got POST \/api\/me\)/)
     expectBudget('a refused write', statements, 0)
   })
 })

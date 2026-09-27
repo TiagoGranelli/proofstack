@@ -1,10 +1,10 @@
-// In-memory harness for the Effect handlers: the real contract, handlers, RequestValidation and WriteRateLimit
-// middleware, with the repositories and the rate-limit counters kept in memory and Authentication faked by session
-// token. No database, no Better Auth call, no HTTP server: the typed client's requests go through the same
+// In-memory harness for the Effect handlers: the real contract, handlers and middleware (Authentication,
+// RequestValidation, WriteRateLimit), with the repositories, the rate-limit counters and the session store kept in
+// memory. No database, no Better Auth call, no HTTP server: the typed client's requests go through the same
 // encoding, routing, middleware and decoding as the running API.
 import { appendFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { Effect, Layer, Redacted } from 'effect'
+import { Effect, Layer } from 'effect'
 import {
   HttpClient,
   HttpClientRequest,
@@ -15,11 +15,11 @@ import {
 } from 'effect/unstable/http'
 import { HttpApiBuilder, HttpApiClient, HttpApiMiddleware } from 'effect/unstable/httpapi'
 import { Api } from '#/contract/api.ts'
-import { Unauthorized } from '#/contract/errors.ts'
-import { Authentication, CurrentUser } from '#/contract/middleware.ts'
+import { Authentication } from '#/contract/middleware.ts'
 import { MeHandlers, MyPostsHandlers, PublicPostsHandlers, SystemHandlers } from '#/server/api/handlers.ts'
-import { RequestValidationLive } from '#/server/api/middleware.ts'
+import { AuthenticationLive, RequestValidationLive } from '#/server/api/middleware.ts'
 import { RateLimitStore, WriteRateLimitLive } from '#/server/api/rate-limit.ts'
+import { SessionLookup } from '#/server/api/session-lookup.ts'
 import { DatabaseHealth } from '#/server/db/health.ts'
 import { memoryQuery, type RepoOptions } from './memory-db.ts'
 import { memoryPostsRepo } from './posts-repo.ts'
@@ -34,16 +34,23 @@ type AuthorName = keyof typeof authors
 const memoryDatabaseHealth = (options: RepoOptions) =>
   Layer.succeed(DatabaseHealth, { ping: memoryQuery(options)(() => undefined) })
 
-/** Server side: the session token is the author's key in `authors`; anything else is a 401. */
-const authenticate: Authentication['Service']['sessionCookie'] = (httpEffect, { credential }) => {
-  const token = Redacted.value(credential)
-  if (!Object.hasOwn(authors, token)) return Effect.fail(new Unauthorized({ message: 'Authentication required' }))
-  return Effect.provideService(httpEffect, CurrentUser, authors[token as AuthorName])
-}
-export const FakeAuthentication = Layer.succeed(Authentication, {
-  sessionCookie: authenticate,
-  secureSessionCookie: authenticate,
+/** The token of a request's Better Auth session cookie (under either of its names), if it sends one. */
+const sessionToken = (headers: Headers) =>
+  /(?:^|;\s*)(?:__Secure-)?better-auth\.session_token=([^;]*)/.exec(headers.get('cookie') ?? '')?.[1]
+
+/** The session store in place of Better Auth: a session token that is an author's key in `authors` is theirs. */
+export const FakeSessionLookup = Layer.succeed(SessionLookup, {
+  userOf: (headers) =>
+    Effect.sync(() => {
+      const token = sessionToken(headers)
+      return token !== undefined && Object.hasOwn(authors, token) ? authors[token as AuthorName] : null
+    }),
 })
+
+/** The real Authentication middleware over the fake session store: an unknown or missing session is a 401. */
+export const AuthenticationOverFakeSessions: Layer.Layer<Authentication> = AuthenticationLive.pipe(
+  Layer.provide(FakeSessionLookup),
+)
 
 /**
  * RateLimitStore in memory, per layer, with the rule of the Postgres store (src/server/auth-rate-limit.ts) on a
@@ -82,7 +89,7 @@ export const apiLayer = (options: RepoOptions = {}) =>
     Layer.provide(memoryPostsRepo(options)),
     Layer.provideMerge(
       Layer.mergeAll(
-        FakeAuthentication,
+        AuthenticationOverFakeSessions,
         RequestValidationLive,
         WriteRateLimitLive.pipe(Layer.provide(memoryRateLimitStore)),
       ),

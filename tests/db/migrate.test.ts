@@ -70,9 +70,13 @@ describe('scripts/migrate.ts', () => {
   it('applies every migration exactly once when three runs start together', async () => {
     const runs = await Promise.all([1, 2, 3].map(() => migrate({ DATABASE_URL: url })))
     expect(runs.map((run) => run.code)).toEqual([0, 0, 0])
-    const results = runs.map((run) => run.lines.find((line) => line.msg === 'migrations applied'))
-    expect(results.map((result) => result?.applied).toSorted((a, b) => (a ?? 0) - (b ?? 0))).toEqual([0, 0, MIGRATIONS])
-    expect(results.every((result) => result?.total === MIGRATIONS)).toBe(true)
+    const summaries = runs.map((run) => run.lines.find((line) => line.msg === 'migrations applied'))
+    expect(summaries.map((summary) => summary?.applied).toSorted((a, b) => (a ?? 0) - (b ?? 0))).toEqual([
+      0,
+      0,
+      MIGRATIONS,
+    ])
+    expect(summaries.every((summary) => summary?.total === MIGRATIONS)).toBe(true)
     // A later run finds nothing to do.
     const again = await migrate({ DATABASE_URL: url })
     expect(again.lines.at(-1)).toMatchObject({ msg: 'migrations applied', applied: 0, total: MIGRATIONS })

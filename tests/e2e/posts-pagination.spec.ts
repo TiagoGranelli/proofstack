@@ -11,6 +11,13 @@ const publicListRequest = (url: URL) => url.pathname === '/api/posts'
 
 const items = (page: Page, testId: string) => page.getByTestId(testId).locator(':scope > li')
 
+/** From now on, the URL of every request the page makes to `pathname`, in order. */
+const recordRequests = (page: Page, pathname: string) => {
+  const urls: string[] = []
+  page.on('request', (r) => new URL(r.url()).pathname === pathname && urls.push(r.url()))
+  return urls
+}
+
 /** Activates Load more from the keyboard and checks where focus lands and that nothing repeats. */
 const loadMoreWithKeyboard = async (page: Page, testId: string, key: 'Enter' | ' ') => {
   const before = await items(page, testId).count()
@@ -33,8 +40,7 @@ test.describe('as the seeded author', () => {
   })
 
   test('the dashboard renders the first page on the server and loads the rest with Load more', async ({ page }) => {
-    const listRequests: string[] = []
-    page.on('request', (r) => new URL(r.url()).pathname === '/api/me/posts' && listRequests.push(r.url()))
+    const listRequests = recordRequests(page, '/api/me/posts')
     await visit(page, '/dashboard')
     await expect(items(page, 'my-posts')).toHaveCount(PAGE_SIZE)
     // The first page came with the HTML: nothing is fetched until the author asks for more.
@@ -55,8 +61,9 @@ test.describe('as the seeded author', () => {
     await expect(page.getByRole('button', { name: 'Load more posts' })).toHaveCount(0)
     await expect(page.locator(':focus')).toHaveCount(1)
     // Every post exactly once, newest first.
-    const bodies = await page.getByTestId('my-posts').locator('p').allTextContents()
-    expect(bodies).toEqual(PAGINATED_AUTHOR.bodies.toReversed())
+    expect(await page.getByTestId('my-posts').locator('p').allTextContents()).toEqual(
+      PAGINATED_AUTHOR.bodies.toReversed(),
+    )
   })
 })
 

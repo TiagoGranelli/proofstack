@@ -58,7 +58,8 @@ export const isExposedEndpoint = (request: Request): boolean => has(EXPOSED, end
 export const isHttpEndpoint = (request: Request): boolean => has(HTTP_ENDPOINTS, endpointOf(request))
 
 /** The answer for every endpoint the app does not expose. */
-export const notFound = () => new Response('Not Found', { status: 404, headers: { 'cache-control': 'no-store' } })
+export const notFound = (): Response =>
+  new Response('Not Found', { status: 404, headers: { 'cache-control': 'no-store' } })
 
 /**
  * Keeps Better Auth's surface to the exposed endpoints (404 for the rest) and marks every auth response

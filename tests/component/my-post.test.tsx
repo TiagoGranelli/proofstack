@@ -28,6 +28,12 @@ const startEditing = async () => {
   await expect.element(field()).toHaveFocus()
 }
 
+const saveEdit = async (draft: string) => {
+  await startEditing()
+  await field().fill(draft)
+  await save().click()
+}
+
 describe('MyPost', () => {
   it('shows the post with Edit and Delete buttons named after it', async () => {
     await renderInApp(<MyPost post={original} />)
@@ -99,9 +105,7 @@ describe('MyPost', () => {
     const onUpdated = vi.fn<() => void>()
     const { queryClient } = await renderInApp(<MyPost post={original} onUpdated={onUpdated} />)
     queryClient.setQueryData(getMyPostsQueryOptions().queryKey, postPages(postPage([original])))
-    await startEditing()
-    await field().fill('  The new body \n')
-    await save().click()
+    await saveEdit('  The new body \n')
     await expect.element(save()).toBeDisabled()
     await expect.poll(() => sent).toEqual([{ id: original.id, body: 'The new body' }])
 
@@ -151,9 +155,7 @@ describe('MyPost', () => {
       worker.use(handler())
       const onUpdated = vi.fn<() => void>()
       await renderInApp(<MyPost post={original} onUpdated={onUpdated} />)
-      await startEditing()
-      await field().fill('my draft')
-      await save().click()
+      await saveEdit('my draft')
 
       await expect.element(page.getByRole('alert')).toHaveTextContent(message)
       await expect.element(field()).toHaveValue('my draft')
@@ -176,9 +178,7 @@ describe('MyPost', () => {
   it('clears a failed save’s error when the next attempt starts, and shows it only if that one fails too', async () => {
     worker.use(apiFailure('myPostsUpdate', { network: true }))
     await renderInApp(<MyPost post={original} />)
-    await startEditing()
-    await field().fill('my draft')
-    await save().click()
+    await saveEdit('my draft')
     await expect
       .element(page.getByRole('alert'))
       .toHaveTextContent('Could not save the post. Check your connection and try again.')

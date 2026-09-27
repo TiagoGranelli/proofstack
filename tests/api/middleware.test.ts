@@ -17,7 +17,7 @@ import { WRITE_WINDOW_SECONDS, WRITES_PER_WINDOW } from '#/contract/limits.ts'
 import { Authentication, RequestValidation, WriteRateLimit } from '#/contract/middleware.ts'
 import { RequestValidationLive } from '#/server/api/middleware.ts'
 import { WriteRateLimitLive } from '#/server/api/rate-limit.ts'
-import { FakeAuthentication, memoryRateLimitStore } from './harness.ts'
+import { AuthenticationOverFakeSessions, memoryRateLimitStore } from './harness.ts'
 
 /** A write endpoint that exists only here, wired like a feature's: session, then write limit, then validation. */
 class Probe extends HttpApiGroup.make('probe')
@@ -39,7 +39,7 @@ const probe = () => {
   const handlers = ProbeHandlers.pipe(
     Layer.provideMerge(
       Layer.mergeAll(
-        FakeAuthentication,
+        AuthenticationOverFakeSessions,
         RequestValidationLive,
         WriteRateLimitLive.pipe(Layer.provide(memoryRateLimitStore)),
       ),

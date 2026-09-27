@@ -1,11 +1,32 @@
+import { fileURLToPath } from 'node:url'
 import babel from '@rolldown/plugin-babel'
 import tailwindcss from '@tailwindcss/vite'
 import { tanstackStart } from '@tanstack/react-start/plugin/vite'
 import react, { reactCompilerPreset } from '@vitejs/plugin-react'
 import { nitro } from 'nitro/vite'
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 import { documentHeaders } from './src/lib/content-security-policy.ts'
 import { inlineSourceHashes } from './src/server/nitro/prerender-csp.ts'
+
+/**
+ * TanStack Form's devtools event client, replaced by a silent one in production builds, browser and server alike:
+ * form-core imports it with no production guard, and on the server its connect loop delayed shutdown by about 5 s
+ * (TanStack/form#2132; src/lib/no-devtools-event-client.ts). `pnpm dev` keeps the real one.
+ */
+const noDevtoolsInProduction: Plugin = {
+  name: 'no-devtools-in-production',
+  apply: 'build',
+  config: () => ({
+    resolve: {
+      alias: [
+        {
+          find: /^@tanstack\/devtools-event-client$/,
+          replacement: fileURLToPath(new URL('src/lib/no-devtools-event-client.ts', import.meta.url)),
+        },
+      ],
+    },
+  }),
+}
 
 export default defineConfig({
   server: {
@@ -65,5 +86,6 @@ export default defineConfig({
     }),
     react(),
     babel({ presets: [reactCompilerPreset()] }),
+    noDevtoolsInProduction,
   ],
 })

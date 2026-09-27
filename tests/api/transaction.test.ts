@@ -14,9 +14,9 @@ const fakeDriver = () => {
     transaction: async (body: (client: Db) => Promise<unknown>) => {
       log.push('begin')
       try {
-        const result = await body(tx)
+        const returned = await body(tx)
         log.push('commit')
-        return result
+        return returned
       } catch (error) {
         log.push('rollback')
         throw error

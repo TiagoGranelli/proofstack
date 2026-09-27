@@ -126,17 +126,23 @@ export const authCalls = (name: AuthFunctionName) => {
   return { handler, data }
 }
 
+/** A held answer, or `'network'`: what `auth.signIn` and `auth.signOut` pass through to `authFunction` as it is. */
+type PassedThrough = 'network' | { wait: () => Promise<void> }
+
+const signInAnswer = (outcome: 'ok' | 'invalid' | PassedThrough): AuthAnswer<null> => {
+  if (outcome === 'ok') return { ok: true, value: null }
+  if (outcome === 'invalid') return { ok: false, failure: { code: 'INVALID_EMAIL_OR_PASSWORD' } }
+  return outcome
+}
+
+const signOutAnswer = (outcome: 'ok' | 'failed' | PassedThrough): AuthAnswer<null> => {
+  if (outcome === 'ok') return { ok: true, value: null }
+  if (outcome === 'failed') return 'thrown'
+  return outcome
+}
+
 /** The sign-in and sign-out server functions, with the answers the tests use most. */
 export const auth = {
-  signIn: (outcome: 'ok' | 'invalid' | 'network' | { wait: () => Promise<void> }) =>
-    authFunction(
-      'signIn',
-      outcome === 'ok'
-        ? { ok: true, value: null }
-        : outcome === 'invalid'
-          ? { ok: false, failure: { code: 'INVALID_EMAIL_OR_PASSWORD' } }
-          : outcome,
-    ),
-  signOut: (outcome: 'ok' | 'failed' | 'network' | { wait: () => Promise<void> }) =>
-    authFunction('signOut', outcome === 'ok' ? { ok: true, value: null } : outcome === 'failed' ? 'thrown' : outcome),
+  signIn: (outcome: Parameters<typeof signInAnswer>[0]) => authFunction('signIn', signInAnswer(outcome)),
+  signOut: (outcome: Parameters<typeof signOutAnswer>[0]) => authFunction('signOut', signOutAnswer(outcome)),
 }

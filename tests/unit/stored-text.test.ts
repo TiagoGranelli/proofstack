@@ -11,9 +11,9 @@ const NUL_MESSAGE = 'Remove the invisible NUL character (U+0000) from the text.'
 
 /** The issues a server function's validator or a form (both Standard Schema) reports for `input`. */
 const issuesOf = (schema: Parameters<typeof Schema.toStandardSchemaV1>[0], input: unknown) => {
-  const result = Schema.toStandardSchemaV1(schema)['~standard'].validate(input)
-  if (result instanceof Promise) throw new Error('the account and post inputs validate synchronously')
-  return (result.issues ?? []).map(({ path, message }) => ({ path: path?.map(String), message }))
+  const validation = Schema.toStandardSchemaV1(schema)['~standard'].validate(input)
+  if (validation instanceof Promise) throw new Error('the account and post inputs validate synchronously')
+  return (validation.issues ?? []).map(({ path, message }) => ({ path: path?.map(String), message }))
 }
 
 const Text = Schema.String.check(isFreeOfNul)
