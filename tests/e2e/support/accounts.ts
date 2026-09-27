@@ -55,7 +55,7 @@ export const mailLink = async (to: string, subject: string, path: '/verify-email
 export const createAccount = (): Promise<Author> => createAuthor('E2E Account')
 
 export const signInWithForm = async (page: Page, account: Pick<Author, 'email' | 'password'>) => {
-  await page.getByLabel('Email').fill(account.email)
+  await page.getByRole('textbox', { name: 'Email', exact: true }).fill(account.email)
   await page.getByLabel('Password', { exact: true }).fill(account.password)
   await page.getByRole('button', { name: 'Sign in' }).click()
 }

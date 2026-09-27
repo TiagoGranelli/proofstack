@@ -10,7 +10,7 @@ import { LoginForm } from '#/features/auth/components/login-form.tsx'
 import { SignOutAlert, SignOutButton } from '#/features/auth/components/sign-out-button.tsx'
 import type { AuthFailure } from '#/lib/auth.functions.ts'
 import { auth, authCalls, authFunction, held, worker } from './api-mocks.ts'
-import { renderInApp } from './test-utils.tsx'
+import { pressAndKeepFocus, renderInApp } from './test-utils.tsx'
 
 const email = () => page.getByLabelText('Email')
 const password = () => page.getByLabelText('Password')
@@ -62,9 +62,13 @@ describe('LoginForm', () => {
     expect(router.state.location.pathname).toBe('/login')
 
     // The failure is cleared as soon as the next attempt starts.
-    worker.use(auth.signIn(held()))
+    const retry = authCalls('signIn')
+    worker.use(retry.handler, auth.signIn(held()))
     await signInButton().click()
     await expect.element(page.getByRole('alert')).not.toBeInTheDocument()
+    // The retry's request must reach its handler before the test ends and the handlers are reset (setup.ts
+    // would count it as unhandled otherwise).
+    await expect.poll(() => retry.data.length).toBe(1)
   })
 
   it('sends the typed credentials once, however often it is submitted while pending', async () => {
@@ -199,4 +203,20 @@ describe('sign-out', () => {
       await expect.poll(() => router.state.location.href).toBe('/')
     },
   )
+
+  it('keeps focus on the button while signing out and after a failure, and ignores a second press', async () => {
+    const response = held()
+    const calls = authCalls('signOut')
+    worker.use(calls.handler, authFunction('signOut', { ...response, answer: 'network' }))
+    await renderInApp(<SignOut />, { url: '/dashboard' })
+    await pressAndKeepFocus(signOutButton())
+    await userEvent.keyboard('{Enter}')
+    response.release()
+    await expect
+      .element(page.getByRole('alert'))
+      .toHaveTextContent('Could not sign out. Check your connection and try again.')
+    await expect.element(signOutButton()).toHaveFocus()
+    await expect.element(signOutButton()).not.toHaveAttribute('aria-disabled')
+    expect(calls.data).toHaveLength(1)
+  })
 })

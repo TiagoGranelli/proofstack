@@ -126,7 +126,7 @@ describe('myPosts', () => {
       // A write that finds nothing still counts.
       yield* alice.myPosts.remove({ params: { id: MISSING_ID } }).pipe(Effect.flip)
 
-      for (const response of [
+      for (const [index, response] of [
         yield* alice.myPosts.create({ payload: { body: 'one too many' }, responseMode: 'response-only' }),
         yield* alice.myPosts.update({
           params: { id: post.id },
@@ -136,12 +136,13 @@ describe('myPosts', () => {
         yield* alice.myPosts.remove({ params: { id: post.id }, responseMode: 'response-only' }),
         // Counted before the body is read, so an invalid one is refused the same way.
         yield* alice.myPosts.update({ params: { id: post.id }, payload: { body: 'x' }, responseMode: 'response-only' }),
-      ]) {
+      ].entries()) {
         assert.strictEqual(response.status, 429)
+        // The wait the store computed (see the harness's clock), not a fixed stand-in such as the whole window.
         assert.deepStrictEqual(yield* response.json, {
           _tag: 'RateLimited',
           message: 'Too many changes to your posts',
-          retryAfter: POST_WRITE_WINDOW_SECONDS,
+          retryAfter: POST_WRITE_WINDOW_SECONDS - 1 - index,
         })
       }
 

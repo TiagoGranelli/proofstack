@@ -41,7 +41,7 @@ const STATES: Record<string, (fixtures: Fixtures) => Promise<unknown>> = {
   login: ({ page }) => visit(page, '/login'),
   'login, failed sign-in': async ({ page }) => {
     await visit(page, '/login')
-    await page.getByLabel('Email').fill('nobody@example.test')
+    await page.getByRole('textbox', { name: 'Email', exact: true }).fill('nobody@example.test')
     await page.getByLabel('Password').fill('not the password at all')
     await page.getByRole('button', { name: 'Sign in' }).click()
     await expect(page.getByRole('alert')).toBeVisible()
@@ -90,7 +90,7 @@ const STATES: Record<string, (fixtures: Fixtures) => Promise<unknown>> = {
   'sign-up, sent': async ({ page }) => {
     await visit(page, '/sign-up')
     await page.getByLabel('Name').fill('A11y Account')
-    await page.getByLabel('Email').fill(`a11y-${crypto.randomUUID()}@example.test`)
+    await page.getByRole('textbox', { name: 'Email', exact: true }).fill(`a11y-${crypto.randomUUID()}@example.test`)
     await page.getByLabel('Password').fill(`pw-${crypto.randomUUID()}`)
     await page.getByRole('button', { name: 'Create account' }).click()
     await expect(page.getByRole('status')).toContainText('Check your inbox')
@@ -189,6 +189,24 @@ test.describe('landmarks', () => {
   - heading "Forgot your password?" [level=1]
   - textbox "Email"
   - button "Send reset link"`)
+  })
+
+  test('reset password', async ({ page }) => {
+    await visit(page, '/reset-password?token=not-a-token')
+    await expect(page.locator('body')).toMatchAriaSnapshot(`${SITE_HEADER}
+- main:
+  - heading "Choose a new password" [level=1]
+  - textbox "New password"
+  - button "Set new password"`)
+  })
+
+  test('reset password, no link', async ({ page }) => {
+    await visit(page, '/reset-password')
+    await expect(page.locator('body')).toMatchAriaSnapshot(`${SITE_HEADER}
+- main:
+  - heading "Choose a new password" [level=1]
+  - paragraph:
+    - link "Ask for a new one"`)
   })
 
   test('verify email', async ({ page }) => {

@@ -42,7 +42,10 @@ export default defineConfig({
   outputDir: 'test-results/playwright',
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
+  // A retry keeps one bad run from hiding the report of the others, but a test that only passes on retry is a
+  // failure in CI: flakiness is fixed, not absorbed (the report names the flaky test).
   retries: process.env.CI ? 1 : 0,
+  failOnFlakyTests: !!process.env.CI,
   timeout: 30_000,
   reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
   use: {

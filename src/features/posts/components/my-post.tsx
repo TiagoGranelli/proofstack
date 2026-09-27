@@ -52,8 +52,10 @@ export function MyPost(props: { post: Post; onUpdated?: () => void; onDeleted?: 
             type="button"
             variant="ghost"
             size="sm"
-            disabled={remove.isPending}
-            onClick={() => setEditing(true)}
+            aria-disabled={remove.isPending || undefined}
+            onClick={() => {
+              if (!remove.isPending) setEditing(true)
+            }}
           >
             Edit{label}
           </Button>
@@ -61,8 +63,10 @@ export function MyPost(props: { post: Post; onUpdated?: () => void; onDeleted?: 
             type="button"
             variant="ghost"
             size="sm"
-            disabled={remove.isPending}
-            onClick={() => remove.mutate({ path: { id: post.id } })}
+            aria-disabled={remove.isPending || undefined}
+            onClick={() => {
+              if (!remove.isPending) remove.mutate({ path: { id: post.id } })
+            }}
           >
             Delete{label}
           </Button>
@@ -109,7 +113,7 @@ function EditPostForm(props: { post: Post; onClose: () => void; onUpdated: (() =
         aria-busy={update.isPending}
         onSubmit={(event) => {
           event.preventDefault()
-          update.mutate({ path: { id: post.id }, body: { body: draft.trim() } })
+          if (!update.isPending) update.mutate({ path: { id: post.id }, body: { body: draft.trim() } })
         }}
       >
         <Label htmlFor={fieldId}>Edit post</Label>
@@ -134,7 +138,7 @@ function EditPostForm(props: { post: Post; onClose: () => void; onUpdated: (() =
             <Button type="button" variant="outline" onClick={props.onClose}>
               Cancel
             </Button>
-            <Button type="submit" disabled={update.isPending || draft.trim().length === 0}>
+            <Button type="submit" disabled={draft.trim().length === 0} aria-disabled={update.isPending || undefined}>
               Save
             </Button>
           </div>

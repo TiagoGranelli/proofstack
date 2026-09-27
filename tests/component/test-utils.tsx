@@ -14,7 +14,7 @@ import {
 import type { ReactNode } from 'react'
 import { expect } from 'vitest'
 import { render } from 'vitest-browser-react'
-import { page } from 'vitest/browser'
+import { page, userEvent } from 'vitest/browser'
 
 /** The app's page paths, so that links and redirects under test land on a route. */
 const PATHS = [
@@ -84,4 +84,24 @@ export async function expectFocusedStatus(title: string) {
   const status = page.getByRole('status', { name: title })
   await expect.element(status).toHaveFocus()
   expect(document.activeElement).toBe(status.element())
+}
+
+/**
+ * Resolves after the browser has rendered two frames. Chromium moves focus away from a focused control that
+ * became disabled while it updates the rendering, so a focus assertion made only after this can see that loss.
+ */
+export const afterRendering = () =>
+  new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
+
+/**
+ * Presses a pending action's button with the keyboard (focus it, then Enter), waits until it is pending and
+ * rendered, and checks that focus stayed on it: a button that is `disabled` while pending would drop a keyboard
+ * user to <body>. Returns once the check passed; the caller releases the held answer.
+ */
+export async function pressAndKeepFocus(button: ReturnType<typeof page.getByRole>) {
+  ;(button.element() as HTMLElement).focus()
+  await userEvent.keyboard('{Enter}')
+  await expect.element(button).toHaveAttribute('aria-disabled', 'true')
+  await afterRendering()
+  await expect.element(button).toHaveFocus()
 }

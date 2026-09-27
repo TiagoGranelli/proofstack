@@ -56,6 +56,12 @@ test.describe('tab order', () => {
       (page) => visit(page, '/forgot-password'),
       [...NAV, 'textbox "Email"', 'button "Send reset link"', 'link "Back to sign in"'],
     ],
+    [
+      'reset password',
+      (page) => visit(page, '/reset-password?token=not-a-token'),
+      [...NAV, 'textbox "New password"', 'button "Set new password"'],
+    ],
+    ['reset password, no link', (page) => visit(page, '/reset-password'), [...NAV, 'link "Ask for a new one"']],
     ['verify email', (page) => visit(page, '/verify-email?token=not-a-token'), [...NAV, 'button "Confirm email"']],
     [
       'account',
@@ -204,7 +210,7 @@ test.describe('announcements', () => {
 
   test('a failed sign-in is an alert that describes the form, and focus stays in the form', async ({ page }) => {
     await visit(page, '/login')
-    await page.getByLabel('Email').fill('nobody@example.test')
+    await page.getByRole('textbox', { name: 'Email', exact: true }).fill('nobody@example.test')
     await page.getByLabel('Password').fill('not the password at all')
     await page.keyboard.press('Enter')
     const alert = page.getByRole('alert')

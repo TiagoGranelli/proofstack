@@ -12,13 +12,16 @@ import { defineConfig } from 'vitest/config'
 // - `unit`: pure functions, no app.
 // - `api`: Effect handlers through HttpApiTest with an in-memory repository and a fake session store.
 // - `component`: React components in Chromium (Vitest browser mode), network mocked by MSW.
+// - `db`: server modules against a real, freshly migrated Postgres (no build, no app): the rate-limit storage and
+//   query budgets. `pnpm test:db`; also run by `pnpm verify:app`.
 // - `integration`: the running app that `pnpm verify:app` starts.
-// `pnpm check` runs unit, api and component (see scripts/check.ts); `pnpm verify:app` runs integration.
+// `pnpm check` runs unit, api and component (see scripts/check.ts); `pnpm verify:app` runs db and integration.
 
 /**
- * Security-critical pure modules: `vitest run --coverage` (`pnpm test:fast`, part of `pnpm check`) fails
- * unless the tests cover every line and branch of each. Coverage elsewhere is reported
- * (coverage/index.html), not gated. Add a module here together with the unit tests that cover it.
+ * Security-critical and fully tested modules: `vitest run --coverage` (`pnpm test:fast`, part of
+ * `pnpm check`) fails unless the unit, api and component tests together cover every line and branch of each.
+ * Add a module here together with the tests that cover it; everything else only has to stay above the
+ * global floor (COVERAGE_FLOOR).
  */
 const COVERAGE_GATE = [
   // Where `?redirect=` may send a user after sign-in (open-redirect defense).
@@ -29,7 +32,27 @@ const COVERAGE_GATE = [
   'src/features/auth/utils/describe-auth-failure.ts',
   // The X-Forwarded-For value Better Auth resolves the client IP from (rate limits, sessions).
   'src/server/http/forwarded-for.ts',
+  // The client address a session shows (IPv6 as the network Better Auth kept).
+  'src/server/http/client-address.ts',
+  // How the account page names a session's device, address and times.
+  'src/features/auth/utils/describe-session.ts',
+  // Every handler branch of the business API (tests/api).
+  'src/server/api/handlers.ts',
+  // Shutdown order: the pool must outlive every task that still queries it.
+  'src/server/lifecycle.ts',
+  // The text of every account email (links, expiry).
+  'src/server/mail/auth-messages.ts',
+  // Startup validation of every setting: TRUSTED_PROXIES, AUTH_SIGN_UP, APP_URL, SMTP and the rest.
+  'src/server/env.ts',
+  // The Content-Security-Policy of every HTML document.
+  'src/lib/content-security-policy.ts',
 ]
+/**
+ * Whole-project floor, a little under the measured coverage of `pnpm test:fast` (lines 70.4%, branches 68.5%,
+ * functions 60.3%, statements 70.3% when set): it only stops a regression, such as a module added without
+ * tests. Raise it when coverage grows.
+ */
+const COVERAGE_FLOOR = { lines: 69, branches: 67, functions: 59, statements: 69 }
 for (const file of COVERAGE_GATE) {
   // A renamed file would otherwise drop out of the gate silently: a threshold glob that matches nothing passes.
   readFileSync(file)
@@ -58,7 +81,10 @@ export default defineConfig({
       // Generated code and vendored shadcn primitives.
       exclude: ['src/sdk/**', 'src/routeTree.gen.ts', 'src/components/ui/**', 'src/server/db/schema/auth.ts'],
       reporter: ['text-summary', 'html'],
-      thresholds: Object.fromEntries(COVERAGE_GATE.map((file) => [file, { lines: 100, branches: 100 }])),
+      thresholds: {
+        ...COVERAGE_FLOOR,
+        ...Object.fromEntries(COVERAGE_GATE.map((file) => [file, { lines: 100, branches: 100 }])),
+      },
     },
     projects: [
       {
@@ -134,6 +160,28 @@ export default defineConfig({
             screenshotFailures: false,
           },
           testTimeout: 10_000,
+        },
+      },
+      {
+        test: {
+          name: 'db',
+          include: ['tests/db/**/*.test.ts'],
+          // Creates a fresh, migrated proofstack_db_<pid>_test next to DATABASE_URL (or .env's) and hands its URL
+          // to the workers as DATABASE_URL; dropped afterwards. Needs Postgres, no build, no running app.
+          globalSetup: ['tests/db/global-setup.ts'],
+          // Everything src/server/env.ts requires except DATABASE_URL (see the global setup). Outgoing mail
+          // stays off whatever .env says: nothing here sends any.
+          env: {
+            APP_URL: 'http://localhost:3000',
+            BETTER_AUTH_SECRET: 'db-tests-only-not-a-secret-0000000000',
+            TRUSTED_PROXIES: '',
+            AUTH_SIGN_UP: 'closed',
+            SMTP_URL: '',
+            MAIL_FROM: '',
+            NODE_ENV: 'test',
+          },
+          testTimeout: 15_000,
+          hookTimeout: 30_000,
         },
       },
       {

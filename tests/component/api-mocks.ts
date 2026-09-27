@@ -88,23 +88,28 @@ export const postPages = (...pages: PostPage[]): InfiniteData<PostPage> => ({
   pageParams: pages.map((_, index) => (index === 0 ? {} : pages[index - 1]!.nextCursor)),
 })
 
+type ImmediateAuthAnswer<T> = AuthOutcome<T> | 'network' | 'thrown'
 /**
  * How a mocked account server function answers: its outcome (`{ ok: true, value }` or a Better Auth failure
  * code), `'network'` (the request fails), `'thrown'` (the handler threw: Start answers 500), or `held()` to
- * answer `{ ok: true, value: null }` only once released.
+ * answer only once released: `{ ok: true, value: null }`, or `{ ...held(), answer }` for another answer.
  */
-type AuthAnswer<T> = AuthOutcome<T> | 'network' | 'thrown' | { wait: () => Promise<void> }
+type AuthAnswer<T> = ImmediateAuthAnswer<T> | { wait: () => Promise<void>; answer?: ImmediateAuthAnswer<T> }
+
+const respond = (answer: ImmediateAuthAnswer<unknown>) => {
+  if (answer === 'network') return HttpResponse.error()
+  if (answer === 'thrown') return HttpResponse.json({ message: 'Internal Server Error' }, { status: 500 })
+  return HttpResponse.json(answer as JsonBodyType)
+}
 
 /** A server function of src/lib/auth.functions.ts, answered with `answer`. */
 export const authFunction = <T = null>(name: AuthFunctionName, answer: AuthAnswer<T>): HttpHandler =>
   http.post(`*${authFunctionPath(name)}`, async () => {
-    if (answer === 'network') return HttpResponse.error()
-    if (answer === 'thrown') return HttpResponse.json({ message: 'Internal Server Error' }, { status: 500 })
-    if ('wait' in answer) {
+    if (typeof answer === 'object' && 'wait' in answer) {
       await answer.wait()
-      return HttpResponse.json({ ok: true, value: null } satisfies AuthOutcome)
+      return respond(answer.answer ?? ({ ok: true, value: null } satisfies AuthOutcome))
     }
-    return HttpResponse.json(answer as JsonBodyType)
+    return respond(answer)
   })
 
 /**

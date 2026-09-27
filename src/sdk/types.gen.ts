@@ -219,10 +219,6 @@ export type MyPostsRemoveData = {
 
 export type MyPostsRemoveErrors = {
   /**
-   * ValidationError
-   */
-  400: ValidationErrorEncoded;
-  /**
    * Unauthorized
    */
   401: UnauthorizedEncoded;

@@ -23,7 +23,14 @@ function SignInAgain() {
     <div className="grid gap-2">
       <p>{describeAuthFailure(new AuthActionError({ code: 'SESSION_NOT_FRESH' }))}</p>
       <div>
-        <Button type="button" variant="outline" disabled={signOut.isPending} onClick={() => signOut.mutate()}>
+        <Button
+          type="button"
+          variant="outline"
+          aria-disabled={signOut.isPending || undefined}
+          onClick={() => {
+            if (!signOut.isPending) signOut.mutate()
+          }}
+        >
           Sign in again
         </Button>
       </div>
@@ -62,10 +69,12 @@ function SessionItem(props: { session: SessionView }) {
           type="button"
           size="sm"
           variant="outline"
-          disabled={revoke.isPending}
+          aria-disabled={revoke.isPending || undefined}
           aria-busy={revoke.isPending}
           aria-label={`Sign out ${device}, signed in ${formatTimestamp(session.createdAt)}`}
-          onClick={() => revoke.mutate({ id: session.id })}
+          onClick={() => {
+            if (!revoke.isPending) revoke.mutate({ id: session.id })
+          }}
         >
           Sign out
         </Button>
@@ -74,7 +83,11 @@ function SessionItem(props: { session: SessionView }) {
   )
 }
 
-/** The account's sessions, each one revocable, plus "sign out other sessions" and "sign out everywhere". */
+/**
+ * The account's sessions, each one revocable, plus "sign out other sessions" and "sign out everywhere". Every
+ * button here is only `aria-disabled` while its action is pending and ignores presses meanwhile: a disabled
+ * button loses focus, and a keyboard user would be left on <body> when the action fails.
+ */
 export function SessionList() {
   const navigate = useNavigate()
   const { data: sessions } = useSuspenseQuery(getSessionsQueryOptions())
@@ -102,18 +115,23 @@ export function SessionList() {
         <Button
           type="button"
           variant="outline"
-          disabled={!hasOthers || others.isPending}
+          disabled={!hasOthers}
+          aria-disabled={others.isPending || undefined}
           aria-busy={others.isPending}
-          onClick={() => others.mutate()}
+          onClick={() => {
+            if (!others.isPending) others.mutate()
+          }}
         >
           Sign out other sessions
         </Button>
         <Button
           type="button"
           variant="outline"
-          disabled={everywhere.isPending}
+          aria-disabled={everywhere.isPending || undefined}
           aria-busy={everywhere.isPending}
-          onClick={() => everywhere.mutate()}
+          onClick={() => {
+            if (!everywhere.isPending) everywhere.mutate()
+          }}
         >
           Sign out everywhere
         </Button>

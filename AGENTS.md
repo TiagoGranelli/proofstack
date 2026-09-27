@@ -119,11 +119,12 @@ Postgres and Mailpit (`pnpm mail:up`, the local inbox for account emails), and a
 
 | Command | Covers |
 | --- | --- |
-| `pnpm check` | `format:check`, `lint` (type-aware Oxlint with the `pedantic` category and TanStack Query/Router rules; zero warnings: `--deny-warnings`, every rule is error or off), `typecheck`, `effect` (Effect language-service diagnostics, `effect-tsgo`), `deadcode` (Fallow with `--fail-on-issues`: unused files, exports, types and dependencies, zones), `complexity` (Fallow: cognitive 15, cyclomatic 20 per function), `dupes` (any clone group outside generated code and tests), `security` (new security-sink candidates in `src/` since `HEAD`), `tests` (`pnpm test:fast`: Vitest projects `unit`, `api` and `component` with the coverage gate, see [Tests](#tests)), the database-free drift checks (contract, migrations, auth), `migration-lint` (`pnpm check:migrations`: squawk over the migrations after 0004), `licenses` (`pnpm licenses:check`: every production dependency under an allowed license) and `guards` (see [Gates](#gates-and-escape-hatches)). No database, no build, about 12 s. Needs Playwright's Chromium, and the network once to download the pinned squawk binary into `~/.cache/proofstack`. Run it before every hand-off; the pre-commit hook runs it on what you commit. |
+| `pnpm check` | `format:check`, `lint` (type-aware Oxlint with the `pedantic` category and TanStack Query/Router rules; zero warnings: `--deny-warnings`, every rule is error or off), `typecheck`, `effect` (Effect language-service diagnostics, `effect-tsgo`), `deadcode` (Fallow with `--fail-on-issues`: unused files, exports, types and dependencies, zones), `complexity` (Fallow: cognitive 15, cyclomatic 20 per function), `dupes` (any clone group outside generated code and tests), `security` (new security-sink candidates in `src/` since `HEAD`), `tests` (`pnpm test:fast`: Vitest projects `unit`, `api` and `component` with the coverage gate, see [Tests](#tests)), the database-free drift checks (contract, migrations, auth), `migration-lint` (`pnpm check:migrations`: squawk over the migrations after 0004), `licenses` (`pnpm licenses:check`: every production dependency under an allowed license), `routes` (every page route has an axe state, a landmark snapshot and a tab-order row: `scripts/route-coverage.ts`) and `guards` (see [Gates](#gates-and-escape-hatches)). No database, no build, about 12 s. Needs Playwright's Chromium, and the network once to download the pinned squawk binary into `~/.cache/proofstack`. Run it before every hand-off; the pre-commit hook runs it on what you commit. |
 | `pnpm test:unit\|test:api\|test:component [filter ...]` | One fast layer (see [Tests](#tests)); `pnpm test:fast` runs all three with coverage |
+| `pnpm test:db [filter ...]` | The `db` layer against a fresh `proofstack_db_<pid>_test` database next to `DATABASE_URL` (dropped afterwards; `KEEP_TEST_DB=1` keeps it). Needs Postgres, no build |
 | `pnpm format`, `pnpm lint:fix` | Autofixes |
 | `pnpm check:drift [contract\|migrations\|auth\|database]` | Checks that generated files match their sources and that the auth schema holds what Better Auth writes; `database` needs Postgres |
-| `pnpm build && pnpm verify:app [--no-e2e] [--no-integration] [--edge] [filter ...]` | Starts two built servers (open and closed sign-up) against a fresh per-run `proofstack_<purpose>_<pid>_test` database (dropped afterwards) and runs Vitest (`tests/integration`) and Playwright (`tests/e2e`, projects from `PW_PROJECTS`); app logs go to `test-results/app-server*.log`. A filter that matches no test is an error; a runner that no filter matches is skipped. Needs Mailpit (`pnpm mail:up`). `--edge` puts the Caddy edge in front of the open one. Refuses a stale `.output` |
+| `pnpm build && pnpm verify:app [--no-db] [--no-e2e] [--no-integration] [--edge] [filter ...]` | Runs the `db` layer, then starts two built servers (open and closed sign-up) against a fresh per-run `proofstack_<purpose>_<pid>_test` database (dropped afterwards) and runs Vitest (`tests/integration`) and Playwright (`tests/e2e`, projects from `PW_PROJECTS`); app logs go to `test-results/app-server*.log`. After a full run (every runner, no filter) it runs the api layer again with its recorder and the contract-coverage check (see [Tests](#tests)). A filter that matches no test is an error; a runner that no filter matches is skipped. Needs Mailpit (`pnpm mail:up`). `--edge` puts the Caddy edge in front of the open one. Refuses a stale `.output` |
 | `pnpm build && pnpm lighthouse [--runs=3] [--page=<name>] [--form-factor=mobile\|desktop] [--direct] [--edge-protocol=h2\|h1\|http]` | Lighthouse gate on the built app behind the Caddy edge over HTTPS and HTTP/2, as in production (needs Docker); see the policy below and [ADR 0011](docs/decisions/0011-lighthouse-over-https-http2.md) |
 | `pnpm deps:check` | Report only, always exit 0: `pnpm outdated` (the release quarantine applies) and, for packages pinned from another dist-tag (`effect` and `@effect/vitest` on `rc`, `@hey-api/openapi-ts` on `next`), the pinned version against that tag. Needs the npm registry |
 | `pnpm audit:check` | Vulnerability gate over production and development packages (`pnpm audit`): fails on a high or critical advisory unless `security/audit-allowlist.json` accepts it (reason, expiry), and on an expired or stale entry. Needs the npm registry; CI job `supply-chain` |
@@ -178,9 +179,10 @@ Test each behavior in the cheapest layer that can observe it:
 
 | Layer | Where | Run by | For |
 | --- | --- | --- | --- |
-| unit | `tests/unit` | `check` | Pure functions. Modules in `COVERAGE_GATE` (`vitest.config.ts`) need 100% lines and branches |
-| api | `tests/api` | `check` | Effect handler branching through `HttpApiTest`: in-memory `PostsRepo`, fake session store, no database |
+| unit | `tests/unit` | `check` | Pure functions, examples plus fast-check properties. Modules in `COVERAGE_GATE` (`vitest.config.ts`) need 100% lines and branches |
+| api | `tests/api` | `check` | Effect handler branching through the typed client: in-memory `PostsRepo`, fake session store, no database |
 | component | `tests/component` | `check` | React components in Chromium (Vitest browser mode), network mocked by MSW: pending and disabled states, every error branch, limits, focus |
+| db | `tests/db` | `verify:app`, `test:db` | Server modules on a real Postgres without a build: the rate-limit storage, and the query budget of every repository method |
 | integration | `tests/integration` | `verify:app` | The built app over HTTP: SQL, Better Auth, CSRF, headers, rate limits |
 | e2e | `tests/e2e` | `verify:app` | Browser flows, axe on every page state, keyboard and focus, ARIA landmark snapshots |
 
@@ -189,14 +191,34 @@ Test each behavior in the cheapest layer that can observe it:
   E2E runs every flow on the Playwright projects `chromium`, `firefox`, `webkit`, `Pixel 7` and `iPhone 15`;
   outside CI the default is `chromium,firefox`, because WebKit needs Ubuntu's libraries. `PW_PROJECTS=all`
   (or a list) chooses; `pnpm ci:local verify` runs all five.
-- **Coverage.** `pnpm test:fast` writes `coverage/index.html` for all of `src` (report only) and fails unless
-  every module in `COVERAGE_GATE` is fully covered. Add security-critical pure modules there with their tests.
+- **Coverage.** `pnpm test:fast` writes `coverage/index.html` for all of `src` and fails unless every module in
+  `COVERAGE_GATE` is fully covered (lines and branches) and the whole of `src` stays above `COVERAGE_FLOOR`, set
+  a little under the measured totals. Add security-critical and fully tested modules to the gate with their
+  tests; raise the floor when coverage grows.
+- **Properties.** Parsers, validators and anything security-relevant get fast-check properties next to their
+  examples (`import * as fc from 'fast-check'`): round trips, arbitrary input never throws, invariants such as
+  "the TCP peer is the last hop" or "a returned redirect is accepted as it is". When a property finds a case,
+  add it to the examples too, so the failure stays named.
 - **api.** `tests/api/harness.ts`: `apiLayer({ databaseDown?, clockStepMicros? })` provides the real handlers,
-  `RequestValidation` and `WriteRateLimit` over a fresh in-memory repository and rate-limit store; `clientAs('alice' | 'bob' | 'forged' | 'none')`
-  is a typed client with that session (one client per identity: the client captures its middleware).
-  The typed client refuses to encode invalid payloads, so send those through `webHandler()` as raw
-  `Request`s. The project sets dummy env values (`vitest.config.ts`) because `src/server/env.ts` validates
-  at import; nothing connects to them.
+  `RequestValidation` and `WriteRateLimit` over a fresh in-memory repository and rate-limit store (the Postgres
+  store's rule on a virtual clock, one second per request, so `retryAfter` is computed, not a constant);
+  `clientAs('alice' | 'bob' | 'forged' | 'none')` is a typed client with that session (one client per identity:
+  the client captures its middleware). The typed client refuses to encode invalid payloads, so send those
+  through `webHandler(options?)` as raw `Request`s. `database-down.test.ts` sends every contract operation with
+  the database down and expects its documented failure, so a new endpoint is checked there without edits.
+  The project sets dummy env values (`vitest.config.ts`) because `src/server/env.ts` validates at import;
+  nothing connects to them.
+- **db.** `tests/db` runs against a real, migrated database of its own (`tests/db/global-setup.ts`). A new
+  repository method gets a query budget in `tests/db/query-budget.test.ts`: `withBudget(name, n, call)`
+  counts the statements it sends through a Drizzle logger injected as `Database`, and a list method must send
+  as many for 1 row as for 50 (N+1 fails with the statements listed). A server path that reads rows through
+  Better Auth is counted at pg's `Client` with `statementsOf` (tests/db/helpers.ts).
+- **Contract coverage.** After a full `verify:app`, `scripts/contract-coverage.ts` checks that every
+  operation × status in `openapi.json` was answered by some test (the app servers' request logs, plus the
+  api layer through the harness's recorder, `CONTRACT_OBSERVATIONS`) and that no operation answered a status it
+  does not declare. A new declared status needs a test that provokes it; a gap that cannot be tested goes in
+  `tests/contract-coverage-allowlist.json` with its reason (today: the CSRF 403 and the empty 500 of a defect,
+  which the API description documents once). Stale entries fail.
 - **component.** Render with `renderInApp(ui, { url })` from `tests/component/test-utils.tsx` (memory
   router with the app's paths, fresh `QueryClient`; returns `router` and `queryClient`); `route: { path,
   route }` mounts a real `src/routes` file route there (search validation, loader, component). Mock the
@@ -206,19 +228,29 @@ Test each behavior in the cheapest layer that can observe it:
   (network error or non-JSON body), `held()` (a response that waits, for pending states), and
   `authFunction(name, answer)` with the shortcuts `auth.signIn`/`auth.signOut` for the account server
   functions (outside the contract; `answer` is their typed `AuthOutcome`, `'network'`, `'thrown'` or
-  `held()`); `authCalls(name)` records the `data` each call sends. A request to `/api` or `/_serverFn`
+  `held()`, or `{ ...held(), answer }` to fail after release); `authCalls(name)` records the `data` each call
+  sends. A button whose action is pending is `aria-disabled` and ignores presses, never `disabled` (a disabled
+  button loses focus when the browser renders); `pressAndKeepFocus(button)` (test-utils.tsx) presses it with
+  the keyboard and checks focus stays after two rendered frames. A test that starts a request must wait for its
+  handler (for example `authCalls`) before it ends. A request to `/api` or `/_serverFn`
   without a handler fails the test. `#/lib/api-client.ts` is aliased to its browser branch
   (`tests/component/stubs/api-client.ts`), and `#/lib/auth.functions.ts` to a stub that posts each call to
   `/_serverFn/auth/<name>` (`tests/component/stubs/auth-functions.ts`).
 - **Accessibility.** `expectAccessible(page, '<state>')` (`tests/e2e/support/a11y.ts`) fails on any axe
   violation of WCAG 2.0/2.1/2.2 A and AA or best practices. A new page or UI state is one entry in `STATES`
   in `tests/e2e/a11y.spec.ts`, a landmark snapshot in its `landmarks` block, and, if it has controls, a row
-  in the tab-order table of `tests/e2e/keyboard.spec.ts` (`tabOrder` records every Tab stop, its accessible
+  in the tab-order table of `tests/e2e/keyboard.spec.ts` (the `routes` gate of `pnpm check` fails for a page
+  route without all three; it recognizes `visit(page, '/path')` and the helpers listed in
+  `scripts/route-coverage.ts`) (`tabOrder` records every Tab stop, its accessible
   name and visible focus, and fails on a focus trap: `tabThrough` walks until a temporary sentinel after the
   last control, because what a browser does past the last control differs by engine).
   `navigateWithApiResponse(page, '/api/posts' | '/api/me/posts', response)` (`tests/e2e/support/app.ts`)
   reaches empty and failure states by answering the browser's API call on a client-side navigation; build
   list bodies with `lastPage(...)` so they match the contract's `PostPage`.
+- **Flakiness.** CI retries a failed Playwright test once but fails the run if it then passes
+  (`failOnFlakyTests`): fix the cause. Locate fields by role and exact name (`getByRole('textbox', { name:
+  'Email', exact: true })`); a bare `getByLabel('Email')` also matches "Email confirmed". Mutation testing is
+  not a gate yet: StrykerJS's Vitest runner skips nested tests on Vitest 5 (docs/plan.md, "Mutation testing").
 - **E2E isolation.** Specs run in parallel on one database and never depend on each other's data. Import
   `test` from `tests/e2e/support/app.ts`: every worker gets its own `author` (created verified through
   `scripts/create-user.ts`) and every browser and API context its own client IP (sign-in rate limit).

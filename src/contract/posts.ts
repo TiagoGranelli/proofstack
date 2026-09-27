@@ -52,7 +52,7 @@ const isCalendarDate = Schema.makeFilter<string>(
  * while a client pages through never shift the pages it has not fetched yet. On the wire it is an opaque
  * base64url string; anything that does not decode to a valid key is a 400.
  */
-const PageCursor = Schema.String.annotate({
+export const PageCursor = Schema.String.annotate({
   identifier: 'PageCursor',
   description: 'Opaque cursor from `nextCursor` of the previous page. Omit it for the first page.',
 }).pipe(
@@ -117,13 +117,13 @@ export class MyPosts extends HttpApiGroup.make('myPosts')
     })
       .middleware(RequestValidation)
       .middleware(WriteRateLimit),
+    // No RequestValidation: the only input is the path id, a plain string that cannot fail to decode. A
+    // malformed id is a 404 like a missing one (as on update), so a 400 is never answered and not declared.
     HttpApiEndpoint.delete('remove', '/me/posts/:id', {
       params: PostPath,
       success: HttpApiSchema.NoContent,
       error: PostNotFound,
-    })
-      .middleware(RequestValidation)
-      .middleware(WriteRateLimit),
+    }).middleware(WriteRateLimit),
   )
   // Added last, so it runs first: WriteRateLimit counts by the CurrentUser it provides.
   .middleware(Authentication)

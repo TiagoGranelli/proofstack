@@ -38,7 +38,8 @@ const readCidrList = (name: string): string[] => {
     .map((entry) => entry.trim())
     .filter(Boolean)
   for (const entry of entries) {
-    const [address = '', prefix, ...rest] = entry.split('/')
+    // `split` always returns at least one element.
+    const [address, prefix, ...rest] = entry.split('/') as [string, ...string[]]
     const family = isIP(address)
     const bits = family === 4 ? 32 : 128
     const validPrefix = prefix === undefined || (/^\d+$/.test(prefix) && Number(prefix) <= bits)

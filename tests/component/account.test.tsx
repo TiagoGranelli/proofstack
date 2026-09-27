@@ -1,13 +1,13 @@
 // The account page's parts: change password, the session list with its sign-out actions, and delete account.
 import { describe, expect, it } from 'vitest'
-import { page } from 'vitest/browser'
+import { page, userEvent } from 'vitest/browser'
 import { sessionsQueryKey } from '#/features/auth/api/get-sessions.ts'
 import { ChangePasswordForm } from '#/features/auth/components/change-password-form.tsx'
 import { DeleteAccountForm } from '#/features/auth/components/delete-account-form.tsx'
 import { SessionList } from '#/features/auth/components/session-list.tsx'
 import type { AuthOutcome, SessionView } from '#/lib/auth.functions.ts'
 import { authCalls, authFunction, held, worker } from './api-mocks.ts'
-import { expectFocusedStatus, renderInApp, statusText, testQueryClient } from './test-utils.tsx'
+import { expectFocusedStatus, pressAndKeepFocus, renderInApp, statusText, testQueryClient } from './test-utils.tsx'
 
 const FIREFOX_LINUX = 'Mozilla/5.0 (X11; Linux x86_64; rv:130.0) Gecko/20100101 Firefox/130.0'
 const CHROME_WINDOWS =
@@ -251,6 +251,40 @@ describe('SessionList', () => {
     await page.getByRole('button', { name: 'Sign in again' }).click()
     await expect.element(page.getByRole('alert')).toHaveTextContent(unreachable)
     expect(router.state.location.pathname).toBe('/account')
+  })
+
+  // A disabled button loses focus while the browser renders, so these stay focusable (aria-disabled) and
+  // ignore presses while their action is pending: a keyboard user who pressed one is still on it when it fails.
+  it.each([
+    ['one session’s Sign out', 'revokeSession', () => page.getByRole('button', { name: otherName })],
+    ['Sign out other sessions', 'revokeOtherSessions', othersButton],
+    ['Sign out everywhere', 'signOutEverywhere', everywhereButton],
+  ] as const)('keeps focus on %s while pending and after a failure', async (_, name, button) => {
+    const response = held()
+    const calls = authCalls(name)
+    worker.use(calls.handler, authFunction(name, { ...response, answer: 'network' }))
+    await renderWithSessions(<SessionList />, listed(thisBrowser, phone))
+    await pressAndKeepFocus(button())
+    await userEvent.keyboard('{Enter}')
+    response.release()
+    await expect.element(page.getByRole('alert')).toHaveTextContent(unreachable)
+    await expect.element(button()).toHaveFocus()
+    await expect.element(button()).not.toHaveAttribute('aria-disabled')
+    expect(calls.data).toHaveLength(1)
+  })
+
+  it('keeps focus on Sign in again while pending and after a failure', async () => {
+    const response = held()
+    const calls = authCalls('signOut')
+    worker.use(calls.handler, authFunction('signOut', { ...response, answer: 'network' }))
+    await renderWithSessions(<SessionList />, { ok: false, failure: { code: 'SESSION_NOT_FRESH' } })
+    const again = page.getByRole('button', { name: 'Sign in again' })
+    await pressAndKeepFocus(again)
+    await userEvent.keyboard('{Enter}')
+    response.release()
+    await expect.element(page.getByRole('alert')).toHaveTextContent(unreachable)
+    await expect.element(again).toHaveFocus()
+    expect(calls.data).toHaveLength(1)
   })
 
   it('shows any other refusal to list the sessions as an alert, without its code', async () => {

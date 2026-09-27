@@ -2,6 +2,7 @@
 // Run through `pnpm verify:app`, which starts the server and provides APP_URL and two test authors.
 import { readFileSync } from 'node:fs'
 import { beforeAll, describe, expect, it } from 'vitest'
+import { createClient } from '#/sdk/client/index.ts'
 import {
   myPostsCreate,
   myPostsList,
@@ -37,7 +38,7 @@ describe('contract', () => {
     expect(served).toEqual(JSON.parse(readFileSync('openapi.json', 'utf8')))
   })
 
-  it('documents cookie auth on private operations and 400 only where there is input', () => {
+  it('documents cookie auth on private operations and 400 only where there is a body or a query', () => {
     type Operation = {
       security?: Array<Record<string, string[]>>
       responses: Record<string, unknown>
@@ -66,7 +67,9 @@ describe('contract', () => {
     for (const { id, path, op } of operations) {
       const alternatives = (op.security ?? []).flatMap((requirement) => Object.keys(requirement)).toSorted()
       expect(alternatives, id).toEqual(path.startsWith('/api/me/') ? Object.keys(schemes).toSorted() : [])
-      const hasInput = op.requestBody !== undefined || (op.parameters ?? []).length > 0
+      // A path id is any string (a malformed one is a 404, like a missing post), so it never makes a 400.
+      const query = (op.parameters ?? []).filter((parameter) => (parameter as { in: string }).in === 'query')
+      const hasInput = op.requestBody !== undefined || query.length > 0
       expect('400' in op.responses, id).toBe(hasInput)
     }
   })
@@ -90,11 +93,38 @@ describe('posts', () => {
     expect(error).toMatchObject({ _tag: 'Unauthorized' })
   })
 
+  // With our Origin, so the CSRF check passes and authentication is what refuses them (not a 403).
+  it('rejects every write without a session, or with a forged one, as Unauthorized', async () => {
+    const post = await create(author, `401 target ${crypto.randomUUID()}`)
+    for (const cookie of [undefined, 'better-auth.session_token=forged.token']) {
+      const client = createClient({ baseUrl: appUrl, headers: { origin: appUrl, ...(cookie ? { cookie } : {}) } })
+      for (const [name, call] of [
+        ['create', () => myPostsCreate({ client, body: { body: 'no session' } })],
+        ['update', () => myPostsUpdate({ client, path: { id: post.id }, body: { body: 'no session' } })],
+        ['remove', () => myPostsRemove({ client, path: { id: post.id } })],
+      ] as const) {
+        const { error, response } = await call()
+        expect(response?.status, `${name} with ${cookie ?? 'no cookie'}`).toBe(401)
+        expect(error).toEqual({ _tag: 'Unauthorized', message: 'Authentication required' })
+      }
+    }
+    const own = (await myPostsList({ client: author })).data!.items
+    expect(own.find((p) => p.id === post.id)).toEqual(post)
+    await myPostsRemove({ client: author, path: { id: post.id } })
+  })
+
   it('performs authenticated CRUD and exposes it publicly', async () => {
-    const { id } = await create(author, 'sdk integration post')
+    const created = await create(author, 'sdk integration post')
+    const { id } = created
+    expect(created.updatedAt).toBe(created.createdAt)
 
     const updated = await myPostsUpdate({ client: author, path: { id }, body: { body: 'edited' } })
     expect(updated.data).toMatchObject({ id, body: 'edited', authorName: users.author.name })
+    // An edit moves updatedAt (the column the UI marks "edited" from) and leaves createdAt, the sort key, alone.
+    expect(updated.data!.createdAt).toBe(created.createdAt)
+    expect(Date.parse(updated.data!.updatedAt)).toBeGreaterThan(Date.parse(created.updatedAt))
+    const listed = (await myPostsList({ client: author })).data!.items.find((p) => p.id === id)
+    expect(listed).toEqual(updated.data)
 
     const pub = await publicPostsList({ client: anonymous })
     expect(pub.data?.items.some((p) => p.id === id && p.body === 'edited')).toBe(true)
@@ -113,9 +143,15 @@ describe('posts', () => {
     }
   })
 
-  it('treats malformed ids as not found', async () => {
-    const res = await myPostsUpdate({ client: author, path: { id: 'not-a-uuid' }, body: { body: 'x' } })
-    expect(res.response?.status).toBe(404)
+  it('treats malformed ids as not found, on edit and delete alike', async () => {
+    for (const id of ['not-a-uuid', '00000000-0000-4000-8000-00000000000', "1' or '1'='1", '%00']) {
+      const update = await myPostsUpdate({ client: author, path: { id }, body: { body: 'x' } })
+      expect(update.response?.status, `PATCH ${id}`).toBe(404)
+      expect(update.error).toEqual({ _tag: 'PostNotFound', id })
+      const remove = await myPostsRemove({ client: author, path: { id } })
+      expect(remove.response?.status, `DELETE ${id}`).toBe(404)
+      expect(remove.error).toEqual({ _tag: 'PostNotFound', id })
+    }
   })
 })
 

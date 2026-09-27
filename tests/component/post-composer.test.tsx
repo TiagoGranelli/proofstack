@@ -1,12 +1,12 @@
 // PostComposer: states the E2E suite cannot reach cheaply (pending, every error branch, the exact limit).
 import { HttpResponse } from 'msw'
 import { describe, expect, it, vi } from 'vitest'
-import { page } from 'vitest/browser'
+import { page, userEvent } from 'vitest/browser'
 import { POST_MAX_LENGTH } from '#/contract/limits.ts'
 import { getPublicPostsQueryOptions } from '#/features/posts/api/get-public-posts.ts'
 import { PostComposer } from '#/features/posts/components/post-composer.tsx'
 import { api, apiError, apiFailure, held, post, postPage, postPages, worker } from './api-mocks.ts'
-import { renderInApp } from './test-utils.tsx'
+import { pressAndKeepFocus, renderInApp } from './test-utils.tsx'
 
 const field = () => page.getByLabelText('New post')
 const publish = () => page.getByRole('button', { name: 'Publish' })
@@ -114,5 +114,28 @@ describe('PostComposer', () => {
     await expect.element(field()).toHaveAttribute('aria-describedby', 'post-body-count post-body-error')
     await expect.element(publish()).toBeEnabled()
     expect(onPublished).not.toHaveBeenCalled()
+  })
+
+  it('keeps focus on Publish while publishing and after a failure, and ignores a second press', async () => {
+    const response = held()
+    let requests = 0
+    worker.use(
+      api.myPostsCreate(async () => {
+        requests++
+        await response.wait()
+        return HttpResponse.error()
+      }),
+    )
+    await renderInApp(<PostComposer />)
+    await field().fill('keep my focus')
+    await pressAndKeepFocus(publish())
+    await userEvent.keyboard('{Enter}')
+    response.release()
+    await expect
+      .element(page.getByRole('alert'))
+      .toHaveTextContent('Could not publish the post. Check your connection and try again.')
+    await expect.element(publish()).toHaveFocus()
+    await expect.element(publish()).not.toHaveAttribute('aria-disabled')
+    expect(requests).toBe(1)
   })
 })

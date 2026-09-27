@@ -90,3 +90,22 @@ the same scripts in the Playwright Ubuntu image next to Postgres [f1b26a9]. `act
 | TanStack/router#7473 | Revisit ADR 0004 |
 | TanStack/router#8520 (ours, fixes #8511) | Upgrade; `/` and `/dashboard` then preload `useBaseQuery-*.js`; re-run `pnpm lighthouse` (ADR 0011) |
 | GoogleChrome/lighthouse#16539 | Lantern stops simulating preloaded scripts as blocking the first paint; mobile FCP should drop well below 1.5 s (ADR 0011) |
+| A StrykerJS vitest-runner release that filters by Vitest 5's full test names (stryker-js#6210; fixes in #6214, #6220, #6217; see [Mutation testing](#mutation-testing)) | Add mutation testing as a gate with the thresholds below |
+| A Better Auth release whose `/revoke-other-sessions` deletes in one statement (better-auth#11433) | Lower its budget in `tests/db/query-budget.test.ts` to a constant |
+
+### Mutation testing
+
+StrykerJS 10.0.0's Vitest runner builds its per-mutant `testNamePattern` from test names joined with spaces,
+while Vitest 5 matches `" > "`-joined full names: every test inside a `describe` is skipped, and a mutant that
+makes a test file fail to import is also reported as Survived, so scores mean nothing today. Nothing is
+patched here. Once a release fixes it, a `pnpm mutate` script runs Stryker on the files changed by a PR (CI, next to
+`verify`) and on all of `src/` nightly, and fails below these mutation scores:
+
+| Files | Threshold |
+| --- | --- |
+| Every module in `COVERAGE_GATE` (`vitest.config.ts`; it includes `forwarded-for.ts`, `client-address.ts` and the API `handlers.ts`) except the two below | 100 |
+| `src/features/auth/utils/describe-session.ts`, `src/features/auth/utils/safe-redirect.ts` | 90 |
+| `src/features/*/components/**`, `src/components/errors/**` | 80 |
+
+Until then, mutants are checked by hand when a test is written for one: the property tests (fast-check) of
+the cursor, `safeRedirect` and `forwardedFor` came from such a pass.

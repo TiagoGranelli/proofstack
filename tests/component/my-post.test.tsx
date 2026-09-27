@@ -7,7 +7,7 @@ import { getMyPostsQueryOptions } from '#/features/posts/api/get-my-posts.ts'
 import { getPublicPostsQueryOptions } from '#/features/posts/api/get-public-posts.ts'
 import { MyPost } from '#/features/posts/components/my-post.tsx'
 import { api, apiError, apiFailure, held, post, postPage, postPages, worker } from './api-mocks.ts'
-import { renderInApp } from './test-utils.tsx'
+import { afterRendering, pressAndKeepFocus, renderInApp } from './test-utils.tsx'
 
 const original = post({ body: 'The original body' })
 const editButton = () => page.getByRole('button', { name: /^Edit/ })
@@ -51,13 +51,22 @@ describe('MyPost', () => {
     await expect.element(field()).toHaveAccessibleDescription(`17/${POST_MAX_LENGTH} characters.`)
   })
 
+  it('leaves focus where it is when it mounts', async () => {
+    await renderInApp(<MyPost post={original} />)
+    await expect.element(editButton()).toBeVisible()
+    await afterRendering()
+    expect(document.activeElement).toBe(document.body)
+  })
+
   it.each([
     ['the Cancel button', () => cancel().click()],
     ['Escape', () => userEvent.keyboard('{Escape}')],
   ])('%s discards the draft and returns focus to Edit', async (_, dismiss) => {
     await renderInApp(<MyPost post={original} />)
     await startEditing()
-    await field().fill('a discarded draft')
+    // Typed key by key, so only Escape, not any other key, may close the editor.
+    await userEvent.keyboard(' and a discarded draft')
+    await expect.element(field()).toHaveValue('The original body and a discarded draft')
     await dismiss()
     await expect.element(field()).not.toBeInTheDocument()
     await expect.element(editButton()).toHaveFocus()
@@ -152,6 +161,77 @@ describe('MyPost', () => {
     await startEditing()
     await expect.element(page.getByRole('alert')).not.toBeInTheDocument()
     await expect.element(field()).not.toHaveAttribute('aria-invalid')
+  })
+
+  it('clears a failed save’s error when the next attempt starts, and shows it only if that one fails too', async () => {
+    worker.use(apiFailure('myPostsUpdate', { network: true }))
+    await renderInApp(<MyPost post={original} />)
+    await startEditing()
+    await field().fill('my draft')
+    await save().click()
+    await expect
+      .element(page.getByRole('alert'))
+      .toHaveTextContent('Could not save the post. Check your connection and try again.')
+
+    const response = held()
+    worker.use(
+      api.myPostsUpdate(async () => {
+        await response.wait()
+        return HttpResponse.json({ ...original, body: 'my draft', updatedAt: '2026-01-03T00:00:00.000Z' })
+      }),
+    )
+    await save().click()
+    await expect.element(page.getByRole('alert')).not.toBeInTheDocument()
+    await expect.element(field()).not.toHaveAttribute('aria-invalid')
+    response.release()
+    await expect.element(field()).not.toBeInTheDocument()
+  })
+
+  it('keeps focus on Save while saving and after a failure, and ignores a second press', async () => {
+    const response = held()
+    let requests = 0
+    worker.use(
+      api.myPostsUpdate(async () => {
+        requests++
+        await response.wait()
+        return HttpResponse.error()
+      }),
+    )
+    await renderInApp(<MyPost post={original} />)
+    await startEditing()
+    await pressAndKeepFocus(save())
+    await userEvent.keyboard('{Enter}')
+    response.release()
+    await expect
+      .element(page.getByRole('alert'))
+      .toHaveTextContent('Could not save the post. Check your connection and try again.')
+    await expect.element(save()).toHaveFocus()
+    expect(requests).toBe(1)
+  })
+
+  it('keeps focus on Delete while deleting and after a failure, and ignores Edit and Delete meanwhile', async () => {
+    const response = held()
+    let requests = 0
+    worker.use(
+      api.myPostsRemove(async () => {
+        requests++
+        await response.wait()
+        return HttpResponse.error()
+      }),
+    )
+    await renderInApp(<MyPost post={original} />)
+    await pressAndKeepFocus(deleteButton())
+    await expect.element(editButton()).toHaveAttribute('aria-disabled', 'true')
+    await userEvent.keyboard('{Enter}')
+    ;(editButton().element() as HTMLElement).click()
+    await afterRendering()
+    await expect.element(field()).not.toBeInTheDocument()
+    response.release()
+    await expect
+      .element(page.getByRole('alert'))
+      .toHaveTextContent('Could not delete the post. Check your connection and try again.')
+    await expect.element(deleteButton()).toHaveFocus()
+    expect(requests).toBe(1)
   })
 
   it('is busy while deleting, then reports it and drops the post from the cached list', async () => {

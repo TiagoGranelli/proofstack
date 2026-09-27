@@ -10,6 +10,7 @@
 import { spawnSync } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { routeCoverage } from './route-coverage.ts'
 
 type Gate = { name: string; run: () => boolean; fix: string }
 
@@ -44,16 +45,48 @@ const effect = () => {
   return clean
 }
 
+/**
+ * Generated code (Hey API's src/sdk, TanStack Router's route tree), which .fallowrc.json keeps out of the
+ * `complexity` and `dupes` gates (`health.ignore`, `duplicates.ignore`). `fallow security` has no path setting, so
+ * the `security` gate leaves these files out of the diff it compares: a codegen run is not a change we review.
+ */
+const GENERATED = ['src/sdk/', 'src/routeTree.gen.ts']
+const isGenerated = (path: string) => GENERATED.some((prefix) => path.startsWith(prefix))
+
+/** The sections of a unified diff for hand-written files in src/; the hook's staged diff also holds tests and docs. */
+const handWrittenSrc = (diff: string) =>
+  diff
+    .split(/^(?=diff --git )/m)
+    .filter((section) => {
+      const path = /^diff --git a\/\S+ b\/(\S+)/.exec(section)?.[1]
+      return path === undefined || (path.startsWith('src/') && !isGenerated(path))
+    })
+    .join('')
+
+/** Tracked changes since BASE_REF plus untracked files, like `fallow --changed-since` sees them. */
+const changesSinceBase = () => {
+  const options = { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 } as const
+  const tracked = spawnSync('git', ['diff', '--no-color', '--no-ext-diff', BASE_REF, '--', 'src'], options).stdout
+  const untracked = git(['ls-files', '--others', '--exclude-standard', '-z', '--', 'src'])
+    .stdout.split('\0')
+    .filter(Boolean)
+    .map((file) => spawnSync('git', ['diff', '--no-color', '--no-index', '--', '/dev/null', file], options).stdout)
+  return [tracked, ...untracked].join('')
+}
+
 /** New security-sink candidates (fallow's catalogue: XSS, injection, SSRF, open redirect, …) in src/ lines changed since the baseline. */
 const security = () => {
   const diffFile = process.env.PROOFSTACK_DIFF_FILE
-  const since = hasBaseRef() ? ['--changed-since', BASE_REF] : undefined
-  const source = diffFile ? ['--diff-file', diffFile] : since
-  if (!source) {
+  const diff = diffFile ? readFileSync(diffFile, 'utf8') : hasBaseRef() ? changesSinceBase() : undefined
+  if (diff === undefined) {
     console.log(NO_BASE ?? 'security: skipped, no git history to compare with')
     return NO_BASE === undefined
   }
-  return tool('fallow', ['security', '--gate', 'new', ...source, 'src'])()
+  const result = spawnSync(bin('fallow'), ['security', '--gate', 'new', '--diff-stdin', 'src'], {
+    input: handWrittenSrc(diff),
+    stdio: ['pipe', 'inherit', 'inherit'],
+  })
+  return result.status === 0
 }
 
 /**
@@ -450,6 +483,14 @@ const GATES: Gate[] = [
     fix:
       'replace the dependency, or, if its license is acceptable, allow it in scripts/licenses.ts (ALLOWED for a ' +
       'license, EXCEPTIONS for one exact version) with the reason',
+  },
+  {
+    // Every page route has an axe state, a landmark snapshot and a tab-order row (scripts/route-coverage.ts).
+    name: 'routes',
+    run: routeCoverage,
+    fix:
+      'add what is listed above for each page: an entry in STATES and a landmark snapshot in ' +
+      'tests/e2e/a11y.spec.ts, and a row in the tab-order table of tests/e2e/keyboard.spec.ts (AGENTS.md, "Tests")',
   },
   {
     name: 'guards',

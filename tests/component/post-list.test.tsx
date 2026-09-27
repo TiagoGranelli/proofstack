@@ -7,7 +7,7 @@ import { getPublicPostsQueryOptions } from '#/features/posts/api/get-public-post
 import { PostList } from '#/features/posts/components/post-list.tsx'
 import type { PostPage } from '#/sdk/types.gen.ts'
 import { api, apiError, held, post, postPage, postPages, worker } from './api-mocks.ts'
-import { renderInApp, testQueryClient } from './test-utils.tsx'
+import { afterRendering, renderInApp, testQueryClient } from './test-utils.tsx'
 
 /** The public list as src/routes/index.tsx renders it. */
 function PublicPosts() {
@@ -69,7 +69,8 @@ describe('PostList', () => {
 
     await expect.element(loadMore()).toHaveTextContent('Loading more posts…')
     await expect.element(loadMore()).toHaveAttribute('aria-disabled', 'true')
-    // aria-disabled, not disabled: the button keeps keyboard focus while the page loads.
+    // aria-disabled, not disabled: the button keeps keyboard focus while the page loads, also once rendered.
+    await afterRendering()
     await expect.element(loadMore()).toHaveFocus()
     // Pressing it again while busy sends no second request.
     await userEvent.keyboard('{Enter}')

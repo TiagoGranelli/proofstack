@@ -22,6 +22,8 @@ export function PostComposer(props: { onPublished?: () => void }) {
       aria-busy={create.isPending}
       onSubmit={(event) => {
         event.preventDefault()
+        // Publish stays focusable while pending (aria-disabled, see below), so a second press lands here.
+        if (create.isPending) return
         // The API rejects bodies over the limit; its ValidationError is shown below rather than
         // truncating input the author may still want to trim.
         create.mutate({ body: { body: body.trim() } })
@@ -38,7 +40,9 @@ export function PostComposer(props: { onPublished?: () => void }) {
       />
       <div className="flex items-center justify-between gap-2">
         <CharacterCount id="post-body-count" value={body} />
-        <Button type="submit" disabled={create.isPending || body.trim().length === 0}>
+        {/* Only aria-disabled while pending: a disabled button loses focus, and a keyboard user would be left
+            on <body> when publishing fails. */}
+        <Button type="submit" disabled={body.trim().length === 0} aria-disabled={create.isPending || undefined}>
           Publish
         </Button>
       </div>

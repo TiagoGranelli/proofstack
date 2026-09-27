@@ -143,6 +143,9 @@ describe('cursor', () => {
     ['an impossible date', encode({ createdAt: '2026-02-30T00:00:00.000000Z', id: validId })],
     ['year 0, which Postgres rejects', encode({ createdAt: '0000-01-01T00:00:00.000000Z', id: validId })],
     ['SQL in the timestamp', encode({ createdAt: "now()'); drop table post; --", id: validId })],
+    // Postgres's ::timestamptz would read past the Z and fail the query if the pattern let this through.
+    ['text after the Z', encode({ createdAt: '2026-01-01T00:00:00.000000Zjunk', id: validId })],
+    ['month 13', encode({ createdAt: '2026-13-01T00:00:00.000000Z', id: validId })],
   ])('rejects a cursor with %s as a 400, never a 500', async (_, cursor) => {
     for (const res of [
       await publicPostsList({ client: anonymous, query: { cursor } }),
@@ -153,6 +156,24 @@ describe('cursor', () => {
       const issues = (res.error as { issues: Array<{ path: string[] }> }).issues
       expect(issues.length).toBeGreaterThan(0)
       for (const issue of issues) expect(issue.path[0]).toBe('cursor')
+    }
+  })
+
+  // Every key the schema admits must also be one Postgres accepts (::timestamptz, ::uuid): a 200, never a 500.
+  it.each([
+    '0001-01-01T00:00:00.000000Z',
+    '2026-10-31T23:59:59.999999Z',
+    '2026-11-30T00:00:00.000001Z',
+    '2026-12-31T12:00:00.500000Z',
+    '2028-02-29T00:00:00.000000Z',
+    '9999-12-31T23:59:59.999999Z',
+  ])('answers a page for the valid key %s', async (createdAt) => {
+    for (const id of [validId, 'FFFFFFFF-FFFF-8FFF-BFFF-FFFFFFFFFFFF']) {
+      for (const res of [
+        await publicPostsList({ client: anonymous, query: { cursor: encode({ createdAt, id }) } }),
+        await myPostsList({ client: author, query: { cursor: encode({ createdAt, id }) } }),
+      ])
+        expect(res.response?.status, `${createdAt} ${id}: ${JSON.stringify(res.error)}`).toBe(200)
     }
   })
 

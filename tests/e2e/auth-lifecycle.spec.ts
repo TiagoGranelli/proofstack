@@ -12,7 +12,7 @@ test('signs up, confirms the address from the mail, then signs in', async ({ pag
   await expect(page).toHaveURL(/\/sign-up$/)
   await expect(page.locator('body[data-hydrated="true"]')).toBeAttached()
   await page.getByLabel('Name').fill(account.name)
-  await page.getByLabel('Email').fill(account.email)
+  await page.getByRole('textbox', { name: 'Email', exact: true }).fill(account.email)
   await page.getByLabel('Password').fill(account.password)
   await page.getByRole('button', { name: 'Create account' }).click()
   await expect(page.getByRole('status')).toContainText(`Check your inbox at ${account.email}`)
@@ -53,7 +53,7 @@ test('resets a forgotten password from the mailed link, which ends every session
   await visit(page, '/login')
   await page.getByRole('link', { name: 'Forgot your password?' }).click()
   await expect(page.locator('body[data-hydrated="true"]')).toBeAttached()
-  await page.getByLabel('Email').fill(account.email)
+  await page.getByRole('textbox', { name: 'Email', exact: true }).fill(account.email)
   await page.getByRole('button', { name: 'Send reset link' }).click()
   await expect(page.getByRole('status')).toContainText(account.email)
 

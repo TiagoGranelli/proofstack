@@ -6,6 +6,7 @@
 import { assert, describe, expect, it, onTestFinished } from '@effect/vitest'
 import { Effect, Schema } from 'effect'
 import { HttpApiError } from 'effect/unstable/httpapi'
+import * as fc from 'fast-check'
 import { ValidationError } from '#/contract/errors.ts'
 import { POST_MAX_LENGTH, POSTS_PAGE_MAX } from '#/contract/limits.ts'
 import { RequestValidation } from '#/contract/middleware.ts'
@@ -78,6 +79,8 @@ describe('list query validation', () => {
     ['a cursor with a non-UUID id', `cursor=${cursor({ ...valid, id: 'post-1' })}`],
     ['a cursor at millisecond precision', `cursor=${cursor({ ...valid, createdAt: '2026-01-01T00:00:01.000Z' })}`],
     ['a cursor on February 30', `cursor=${cursor({ ...valid, createdAt: '2026-02-30T00:00:00.000000Z' })}`],
+    // Postgres would read past the Z (`::timestamptz`) and fail the query: a 500 instead of a 400.
+    ['a cursor with text after its Z', `cursor=${cursor({ ...valid, createdAt: `${valid.createdAt}junk` })}`],
     ['a limit of 0', 'limit=0'],
     ['a limit over the maximum', `limit=${POSTS_PAGE_MAX + 1}`],
     ['a limit in exponent notation', 'limit=1e1'],
@@ -94,6 +97,32 @@ describe('list query validation', () => {
       const { issues } = response.json as { issues: Array<{ path: unknown[] }> }
       expect(issues.map((issue) => issue.path[0])).toEqual([query.slice(0, query.indexOf('='))])
     }
+  })
+
+  it('answers any cursor with a page or a 400, never anything else', async () => {
+    const { handler, dispose } = webHandler()
+    onTestFinished(dispose)
+    const cursors = fc.oneof(
+      fc.string(),
+      fc.jsonValue().map((value) => cursor(value)),
+      fc.record({ createdAt: fc.string(), id: fc.oneof(fc.string(), fc.uuid()) }).map((value) => cursor(value)),
+      fc.tuple(fc.string(), fc.uuid()).map(([suffix, id]) => cursor({ createdAt: `${valid.createdAt}${suffix}`, id })),
+    )
+    await fc.assert(
+      fc.asyncProperty(cursors, async (value) => {
+        for (const path of ['/api/posts', '/api/me/posts']) {
+          const response = await handler(
+            new Request(`${APP}${path}?cursor=${encodeURIComponent(value)}`, {
+              headers: { cookie: 'better-auth.session_token=alice' },
+            }),
+          )
+          const body = (await response.json()) as { _tag?: string }
+          const outcome = response.status === 400 ? `400 ${body._tag}` : String(response.status)
+          expect(['200', '400 ValidationError'], `${path} ${JSON.stringify(value)}`).toContain(outcome)
+        }
+      }),
+      { numRuns: 300 },
+    )
   })
 
   it('accepts a well-formed cursor that matches no post, and the largest limit', async () => {

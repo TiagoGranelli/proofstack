@@ -21,7 +21,27 @@ describe('describeDevice', () => {
       'Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36',
       'Chrome on Android',
     ],
+    [
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 OPR/115.0.0.0',
+      'Opera on Windows',
+    ],
+    [
+      'Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+      'Chrome on ChromeOS',
+    ],
+    [
+      'Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) FxiOS/131.0 Mobile/15E148 Safari/605.1.15',
+      'Firefox on iOS',
+    ],
+    [
+      'Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36 EdgA/130.0.0.0',
+      'Edge on Android',
+    ],
+    // Only one of the two is known: that one alone, never "undefined".
+    ['Firefox/131.0', 'Firefox'],
+    ['Dalvik/2.1.0 (Linux; U; Android 14; Pixel 7 Build/AP2A.240905.003)', 'Android'],
     ['curl/8.10.1', 'Unknown device'],
+    ['', 'Unknown device'],
     [null, 'Unknown device'],
   ])('%s', (userAgent, expected) => {
     expect(describeDevice(userAgent)).toBe(expected)

@@ -30,12 +30,37 @@ describe('write rate limit', () => {
       ...Array.from({ length: 10 }, () => 429),
     ])
 
+    // The wait is what the store computed from the window's last admitted write, not a stand-in for the whole
+    // window: move that write 30 s into the past, and a refused write must be told about the 30 s left.
+    const key = `api-write|${userId}`
+    await pool.query('update rate_limit set last_request = last_request - 30000 where key = $1', [key])
+    const {
+      rows: [{ last_request: lastRequest } = { last_request: '0' }],
+    } = await pool.query<{ last_request: string }>('select last_request from rate_limit where key = $1', [key])
+    const before = Date.now()
     const refused = await deleteMissing()
+    const after = Date.now()
     expect(refused.status).toBe(429)
     const body = (await refused.json()) as { _tag: string; retryAfter: number }
     expect(body).toMatchObject({ _tag: 'RateLimited', message: 'Too many changes to your posts' })
-    expect(body.retryAfter).toBeGreaterThan(0)
-    expect(body.retryAfter).toBeLessThanOrEqual(POST_WRITE_WINDOW_SECONDS)
+    const windowEnd = Number(lastRequest) + POST_WRITE_WINDOW_SECONDS * 1000
+    expect(body.retryAfter).toBeGreaterThanOrEqual(Math.ceil((windowEnd - after) / 1000))
+    expect(body.retryAfter).toBeLessThanOrEqual(Math.ceil((windowEnd - before) / 1000))
+    expect(body.retryAfter).toBeLessThan(POST_WRITE_WINDOW_SECONDS - 20)
+
+    // Creating and editing share the bucket: refused the same way, before the body is read, and counted.
+    for (const [method, path] of [
+      ['POST', '/api/me/posts'],
+      ['PATCH', `/api/me/posts/${crypto.randomUUID()}`],
+    ] as const) {
+      const res = await fetch(`${appUrl}${path}`, {
+        method,
+        headers: { cookie, origin: appUrl, 'content-type': 'application/json' },
+        body: JSON.stringify({ body: 'over the limit' }),
+      })
+      expect(res.status, method).toBe(429)
+      expect(await res.json()).toMatchObject({ _tag: 'RateLimited', message: 'Too many changes to your posts' })
+    }
 
     // One row per user, next to Better Auth's `<ip>|<path>` rows; reads are not counted.
     expect((await fetch(`${appUrl}/api/me/posts`, { headers: { cookie } })).status).toBe(200)
@@ -43,6 +68,6 @@ describe('write rate limit', () => {
       'select key, count from rate_limit where key like $1',
       [`api-write|${userId}`],
     )
-    expect(rows).toEqual([{ key: `api-write|${userId}`, count: POST_WRITES_PER_WINDOW + 11 }])
+    expect(rows).toEqual([{ key, count: POST_WRITES_PER_WINDOW + 13 }])
   })
 })

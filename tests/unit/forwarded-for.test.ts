@@ -1,4 +1,5 @@
 // forwardedFor builds the only X-Forwarded-For value Better Auth reads the client IP from. Pure function: no app.
+import * as fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
 import { forwardedFor } from '#/server/http/forwarded-for.ts'
 
@@ -26,5 +27,31 @@ describe('forwardedFor', () => {
   it('drops the header when there is no peer to vouch for it', () => {
     expect(forwardedFor('203.0.113.9', undefined, true)).toBeUndefined()
     expect(forwardedFor(null, '', false)).toBeUndefined()
+  })
+
+  // Whatever a client writes into the header, the address that connected is the last entry, so Better Auth,
+  // walking from the right, meets it before anything the client made up.
+  it('always ends with the TCP peer, and is only the peer without trusted proxies', () => {
+    const peers = fc.oneof(
+      fc.ipV4(),
+      fc.ipV6(),
+      fc.ipV4().map((ip) => `::ffff:${ip}`),
+    )
+    const received = fc.option(
+      fc.oneof(
+        fc.string(),
+        fc.array(fc.oneof(fc.ipV4(), fc.ipV6(), fc.string()), { maxLength: 5 }).map((hops) => hops.join(', ')),
+      ),
+    )
+    fc.assert(
+      fc.property(received, peers, fc.boolean(), (header, peer, trustsProxies) => {
+        const value = forwardedFor(header, peer, trustsProxies)!
+        expect(value.split(',').at(-1)!.trim()).toBe(peer)
+        expect(value.endsWith(peer)).toBe(true)
+        const trustedHops = trustsProxies ? header?.trim() : undefined
+        expect(value).toBe(trustedHops ? `${trustedHops}, ${peer}` : peer)
+      }),
+      { numRuns: 1000 },
+    )
   })
 })
