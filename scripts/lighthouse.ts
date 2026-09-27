@@ -1,14 +1,20 @@
 // Lighthouse gate. Boots the built app against a fresh database with seeded posts and a signed-in author,
-// runs Lighthouse several times per page and form factor with Playwright's Chromium, and applies POLICY
-// to the medians. Writes lighthouse-report/summary.{json,md} plus every raw report.
-// Usage: pnpm build && pnpm lighthouse [--runs=3] [--page=home] [--form-factor=mobile]
+// puts the reference edge in front of it (deploy/Caddyfile: compression, as in production), runs Lighthouse
+// several times per page and form factor with Playwright's Chromium, and applies POLICY. Writes
+// lighthouse-report/summary.{json,md} plus every raw report.
+// Usage: pnpm build && pnpm lighthouse [--runs=3] [--page=home] [--form-factor=mobile] [--direct]
+//   --direct: measure the Node server without the edge (to tell app regressions from edge ones).
+// Exit codes: 0 pass, 1 fail, 2 inconclusive (the machine measured as too slow for the performance score).
+// Lighthouse runs one at a time; run nothing else heavy meanwhile, it shifts the simulated timings.
 // Env: LIGHTHOUSE_DATABASE_URL overrides the database (default: proofstack_lighthouse_<pid>_test next to
-//      DATABASE_URL, dropped afterwards). The server log is lighthouse-report/app-server.log.
+//      DATABASE_URL, dropped afterwards). Logs: lighthouse-report/{app-server,edge}.log. EDGE_RUNTIME: see
+//      scripts/edge.ts.
 import { spawnSync } from 'node:child_process'
-import { appendFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { appendFileSync, copyFileSync, mkdirSync, readFileSync, rmSync, statfsSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { eq } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/node-postgres'
+import { computeMedianRun } from 'lighthouse/core/lib/median-run.js'
 import { Pool } from 'pg'
 import { post, user } from '#/server/db/schema/index.ts'
 import { assertChromium, startApp } from './app-server.ts'
@@ -32,21 +38,34 @@ const PAGES: { name: string; path: string; auth?: boolean; gated: Category[] }[]
 ]
 
 const POLICY = {
-  /** Every gated category median must reach this score. */
-  minMedianScore: 99,
-  /** A median of 99 is tolerated as measurement noise in at most this many categories per page and form factor. */
-  maxCategoriesAt99: 1,
-  /** A single run below this score fails even if the median passes: the result is too unstable to trust. */
-  minRunScore: 95,
   /**
-   * Hard budgets on the medians (ms, unitless CLS, bytes): a backstop ~30-50% above the measured values
-   * (simulated mobile FCP/LCP move in ~150 ms steps). The score gate above is the tighter check.
+   * Categories whose audits are deterministic (DOM, headers, console): every run must score exactly this.
+   * A single lower run is a real defect, not noise.
+   */
+  deterministic: { categories: ['accessibility', 'best-practices', 'seo'] as Category[], everyRun: 100 },
+  /**
+   * The performance score comes from simulated throttling over a real trace, and simulated mobile FCP/LCP
+   * move in ~150 ms steps, so single runs vary by a point or two. Judged by the median, with at most
+   * `maxRunsBelow100` imperfect runs and none below `minRun`.
+   */
+  performance: { minMedian: 99, maxRunsBelow100: 1, minRun: 95 },
+  /**
+   * Hard budgets on the medians (ms, unitless CLS, bytes): a backstop ~30-50% above the measured values.
+   * The score gate above is the tighter check.
    */
   budgets: {
     mobile: { fcp: 2000, lcp: 2100, tbt: 150, cls: 0.02, si: 2000, bytes: 300_000 },
     desktop: { fcp: 600, lcp: 700, tbt: 50, cls: 0.02, si: 800, bytes: 300_000 },
   } satisfies Record<FormFactor, Record<Metric, number>>,
+  /**
+   * Below this `environment.benchmarkIndex` (Lighthouse's own slow-CPU threshold, which also triggers its
+   * "slower CPU" run warning) the simulated timings are not comparable: the run is inconclusive (exit 2),
+   * neither pass nor fail. Seen here: about 4400-4800 on the maintainer's laptop.
+   */
+  minBenchmarkIndex: 1000,
 }
+
+const SLOW_CPU_WARNING = /slower CPU than/
 
 const METRIC_AUDITS: Record<Metric, string> = {
   fcp: 'first-contentful-paint',
@@ -61,6 +80,7 @@ const option = (name: string) => process.argv.find((a) => a.startsWith(`--${name
 const runs = Number(option('runs') ?? 3)
 const formFactors = (option('form-factor') ? [option('form-factor')] : ['mobile', 'desktop']) as FormFactor[]
 const pages = PAGES.filter((p) => !option('page') || p.name === option('page'))
+const direct = process.argv.includes('--direct')
 const OUT = 'lighthouse-report'
 
 const median = (values: number[]) => {
@@ -73,6 +93,7 @@ type Lhr = {
   finalDisplayedUrl: string
   runtimeError?: { message: string }
   runWarnings: string[]
+  environment: { benchmarkIndex: number }
   categories: Record<string, { score: number | null; auditRefs: { id: string; weight: number }[] }>
   audits: Record<string, { score: number | null; numericValue?: number; scoreDisplayMode: string; title: string }>
 }
@@ -112,6 +133,19 @@ const signIn = async (appUrl: string, credentials: { email: string; password: st
     .join('; ')
 }
 
+// Chrome keeps shared memory in /dev/shm, which is 64 MB in a default Docker container: renderers crash or
+// stall there and the timings suffer. Below 1 GiB Chrome is told to use /tmp instead (slower, but stable).
+const shmBytes = (() => {
+  try {
+    const stats = statfsSync('/dev/shm')
+    return stats.blocks * stats.bsize
+  } catch {
+    return 0
+  }
+})()
+const smallShm = shmBytes < 1024 ** 3
+const chromeFlags = ['--headless=new', '--no-sandbox', ...(smallShm ? ['--disable-dev-shm-usage'] : [])]
+
 const lighthouse = (url: string, formFactor: FormFactor, outputBase: string, cookie?: string): Lhr => {
   const args = [
     'exec',
@@ -121,7 +155,7 @@ const lighthouse = (url: string, formFactor: FormFactor, outputBase: string, coo
     '--output=html',
     `--output-path=${outputBase}`,
     `--only-categories=${REPORTED.join(',')}`,
-    '--chrome-flags=--headless=new --no-sandbox',
+    `--chrome-flags=${chromeFlags.join(' ')}`,
     '--quiet',
     ...(formFactor === 'desktop' ? ['--preset=desktop'] : []),
     ...(cookie ? [`--extra-headers=${JSON.stringify({ cookie })}`] : []),
@@ -159,11 +193,23 @@ const failingAudits = (lhr: Lhr, categories: Category[]) => [
   ),
 ]
 
+type Verdict = 'pass' | 'fail' | 'inconclusive'
+
 const chromePath = await assertChromium()
+if (smallShm)
+  console.warn(
+    `/dev/shm has ${Math.round(shmBytes / 1024 ** 2)} MiB (< 1 GiB): Chrome runs with --disable-dev-shm-usage. ` +
+      'In Docker, pass --shm-size=2g.',
+  )
 rmSync(OUT, { recursive: true, force: true })
 mkdirSync(OUT, { recursive: true })
 const databaseUrl = testDatabaseUrl('lighthouse', process.env.LIGHTHOUSE_DATABASE_URL)
-const app = await startApp({ databaseUrl, logFile: join(OUT, 'app-server.log') })
+const app = await startApp({
+  databaseUrl,
+  logFile: join(OUT, 'app-server.log'),
+  ...(direct ? {} : { edge: { logFile: join(OUT, 'edge.log') } }),
+})
+console.log(`measuring ${app.url}${direct ? ' (Node server, no edge)' : ` (edge in front of ${app.directUrl})`}`)
 const results = []
 try {
   await seedPosts(databaseUrl, app.user.email)
@@ -203,39 +249,87 @@ try {
           median(lhrs.map((l) => l.audits[audit]?.numericValue ?? Number.NaN)),
         ]),
       ) as Record<Metric, number>
+      const perRun = lhrs.map((lhr, i) => ({
+        run: i + 1,
+        benchmarkIndex: Math.round(lhr.environment.benchmarkIndex),
+        runWarnings: lhr.runWarnings,
+        scores: Object.fromEntries(REPORTED.map((c) => [c, score(lhr, c)])),
+      }))
 
-      const problems: string[] = []
-      const at99 = page.gated.filter((c) => scores[c]?.median === 99)
-      for (const c of page.gated) {
-        const s = scores[c]
-        if (!s) problems.push(`${c}: no score`)
-        else if (s.median < POLICY.minMedianScore) problems.push(`${c}: median ${s.median} < ${POLICY.minMedianScore}`)
-        else if (s.min < POLICY.minRunScore)
-          problems.push(`${c}: unstable, one run scored ${s.min} < ${POLICY.minRunScore}`)
+      // Deterministic categories and measurement problems fail outright; the performance score and the
+      // metric budgets are only judged on a machine fast enough for the simulation to mean something.
+      const defects: string[] = []
+      for (const c of page.gated.filter((gated) => POLICY.deterministic.categories.includes(gated))) {
+        const low = perRun.filter((r) => r.scores[c] !== POLICY.deterministic.everyRun)
+        if (low.length)
+          defects.push(
+            `${c}: ${low.map((r) => `run ${r.run} scored ${r.scores[c] ?? 'nothing'}`).join(', ')} (every run must be ${POLICY.deterministic.everyRun})`,
+          )
       }
-      if (at99.length > POLICY.maxCategoriesAt99)
-        problems.push(`${at99.join(', ')} at 99: only ${POLICY.maxCategoriesAt99} tolerated`)
+      const performance: string[] = []
+      const perf = lhrs.map((l) => score(l, 'performance'))
+      if (page.gated.includes('performance')) {
+        const values = perf.filter((v): v is number => v !== null)
+        const below100 = values.filter((v) => v < 100).length
+        if (values.length !== perf.length) defects.push('performance: a run has no score')
+        else if (median(values) < POLICY.performance.minMedian)
+          performance.push(`performance: median ${median(values)} < ${POLICY.performance.minMedian}`)
+        if (Math.min(...values) < POLICY.performance.minRun)
+          performance.push(
+            `performance: unstable, one run scored ${Math.min(...values)} < ${POLICY.performance.minRun}`,
+          )
+        if (below100 > POLICY.performance.maxRunsBelow100)
+          performance.push(
+            `performance: ${below100} runs below 100 (${values.join(', ')}); at most ${POLICY.performance.maxRunsBelow100} tolerated`,
+          )
+      }
       for (const [metric, budget] of Object.entries(POLICY.budgets[formFactor]) as [Metric, number][]) {
         if (!(metrics[metric] <= budget))
-          problems.push(`${metric} ${Number(metrics[metric].toFixed(3))} > budget ${budget}`)
+          performance.push(`${metric} ${Number(metrics[metric].toFixed(3))} > budget ${budget}`)
       }
-      // The run closest to the median performance score, for diagnosis.
-      const medianRun = lhrs.toSorted((a, b) => (score(a, 'performance') ?? 0) - (score(b, 'performance') ?? 0))[
-        Math.floor(lhrs.length / 2)
-      ]!
+      const slow = perRun.filter(
+        (r) => r.benchmarkIndex < POLICY.minBenchmarkIndex || r.runWarnings.some((w) => SLOW_CPU_WARNING.test(w)),
+      )
+      const verdict: Verdict = defects.length
+        ? 'fail'
+        : slow.length
+          ? 'inconclusive'
+          : performance.length
+            ? 'fail'
+            : 'pass'
+      const problems = [
+        ...defects,
+        ...(slow.length
+          ? [
+              `inconclusive: slow machine (benchmarkIndex ${slow.map((r) => r.benchmarkIndex).join(', ')} in runs ${slow.map((r) => r.run).join(', ')}; minimum ${POLICY.minBenchmarkIndex})`,
+            ]
+          : []),
+        ...performance,
+      ]
+
+      // Lighthouse's own median-run selection (closest to the median FCP and TTI) picks the report to read.
+      const medianLhr = computeMedianRun(lhrs as never) as unknown as Lhr
+      const medianRun = lhrs.indexOf(medianLhr) + 1
+      copyFileSync(
+        join(OUT, `${page.name}-${formFactor}-${medianRun}.report.html`),
+        join(OUT, `${page.name}-${formFactor}-median.report.html`),
+      )
       const result = {
         page: page.name,
         path: page.path,
         formFactor,
         runs,
+        verdict,
         scores,
         metrics,
         problems,
-        failingAudits: failingAudits(medianRun, page.gated),
+        medianRun,
+        perRun,
+        failingAudits: failingAudits(medianLhr, page.gated),
       }
       results.push(result)
       console.log(
-        `${problems.length ? 'FAIL' : 'ok  '} ${page.name} ${formFactor} ${REPORTED.map((c) => `${c}=${scores[c]?.median ?? '-'}`).join(' ')}`,
+        `${verdict.toUpperCase().padEnd(12)} ${page.name} ${formFactor} ${REPORTED.map((c) => `${c}=${scores[c]?.median ?? '-'}`).join(' ')} perf runs ${perf.join(',')} benchmarkIndex ${perRun.map((r) => r.benchmarkIndex).join(',')}`,
       )
     }
   }
@@ -246,8 +340,11 @@ try {
 
 const fmtScore = (s: { median: number; min: number; max: number } | null, gated: boolean) =>
   !s ? '–' : `${s.median}${s.min !== s.max ? ` (${s.min}–${s.max})` : ''}${gated ? '' : '*'}`
+const indexes = results.flatMap((r) => r.perRun.map((p) => p.benchmarkIndex))
 const table = [
-  `Lighthouse ${JSON.parse(readFileSync('node_modules/lighthouse/package.json', 'utf8')).version}, median of ${runs} runs. * = reported, not gated.`,
+  `Lighthouse ${JSON.parse(readFileSync('node_modules/lighthouse/package.json', 'utf8')).version}, median of ${runs} runs, ` +
+    `${direct ? 'Node server without the edge' : 'through the Caddy edge'}. benchmarkIndex ${Math.min(...indexes)}–${Math.max(...indexes)}. ` +
+    '* = reported, not gated. Diagnose with `<page>-<form factor>-median.report.html` (Lighthouse median run).',
   '',
   '| Page | Form factor | Perf | A11y | Best pr. | SEO | Agentic | FCP | LCP | TBT | CLS | Bytes | Result |',
   '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
@@ -255,15 +352,25 @@ const table = [
     const gated = PAGES.find((p) => p.name === r.page)!.gated
     const cells = REPORTED.map((c) => fmtScore(r.scores[c], gated.includes(c)))
     const m = r.metrics
-    return `| ${r.path} | ${r.formFactor} | ${cells.join(' | ')} | ${Math.round(m.fcp)} ms | ${Math.round(m.lcp)} ms | ${Math.round(m.tbt)} ms | ${m.cls.toFixed(3)} | ${Math.round(m.bytes / 1024)} KiB | ${r.problems.length ? `FAIL: ${r.problems.join('; ')}` : 'pass'} |`
+    return `| ${r.path} | ${r.formFactor} | ${cells.join(' | ')} | ${Math.round(m.fcp)} ms | ${Math.round(m.lcp)} ms | ${Math.round(m.tbt)} ms | ${m.cls.toFixed(3)} | ${Math.round(m.bytes / 1024)} KiB | ${r.verdict}${r.problems.length ? `: ${r.problems.join('; ')}` : ''} |`
   }),
 ].join('\n')
 
-writeFileSync(join(OUT, 'summary.json'), `${JSON.stringify({ policy: POLICY, results }, null, 2)}\n`)
+writeFileSync(
+  join(OUT, 'summary.json'),
+  `${JSON.stringify({ policy: POLICY, edge: !direct, shmBytes, results }, null, 2)}\n`,
+)
 writeFileSync(join(OUT, 'summary.md'), `${table}\n`)
 if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `## Lighthouse\n\n${table}\n`)
 console.log(`\n${table}\n`)
 for (const r of results)
   if (r.failingAudits.length)
-    console.log(`${r.page} ${r.formFactor} audits below 1:\n  ${r.failingAudits.join('\n  ')}`)
-process.exitCode = results.some((r) => r.problems.length) ? 1 : 0
+    console.log(
+      `${r.page} ${r.formFactor} audits below 1 (median run ${r.medianRun}):\n  ${r.failingAudits.join('\n  ')}`,
+    )
+const verdicts = new Set(results.map((r) => r.verdict))
+if (verdicts.has('fail')) process.exitCode = 1
+else if (verdicts.has('inconclusive')) {
+  console.error('\nInconclusive: this machine measured too slow for the performance score to mean anything (exit 2).')
+  process.exitCode = 2
+} else process.exitCode = 0
