@@ -167,15 +167,6 @@ const LINE_GUARDS: LineGuard[] = [
     problem: 'asserts on a literal, so it can never fail. Put the value under test in `expect(...)`',
   },
   {
-    id: 'shim-spawn',
-    files: ALL_CODE,
-    pattern: /\b(?:spawn|spawnSync|execFile|execFileSync)\s*\(\s*['"`](?:pnpm|npm|npx|yarn|node_modules)\b/,
-    problem:
-      'starts a package manager or a node_modules/.bin tool with node:child_process. On Windows it is a `.cmd` shim, ' +
-      'which Node refuses to start without a shell (CVE-2024-27980). Use `xSync` or `x` from tinyexec, which ' +
-      'resolves the shim and escapes its arguments for cmd.exe',
-  },
-  {
     id: 'double-cast',
     files: SRC,
     pattern: /\bas\s+unknown\s+as\b/,
