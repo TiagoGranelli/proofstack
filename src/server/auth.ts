@@ -42,10 +42,10 @@ export const auth = betterAuth({
   },
   // Deletion needs the password (the UI always sends it); posts go with the user (foreign key cascade).
   user: { deleteUser: { enabled: true } },
-  // Public sign-up is closed over HTTP. Accounts are created with `pnpm user:create`,
-  // which calls the server API directly (disabledPaths only affects the HTTP router).
-  // The HTTP router is further restricted to the endpoint allowlist in ./http/auth-endpoints.ts.
-  disabledPaths: ['/sign-up/email'],
+  // AUTH_SIGN_UP=closed (the default) keeps public sign-up off: accounts come from `pnpm user:create`, which
+  // writes through Better Auth's internal adapter. disabledPaths answers 404 before anything else runs, on top of
+  // the endpoint allowlist (./http/auth-endpoints.ts). See docs/decisions/0003-sign-up-policy.md.
+  disabledPaths: env.authSignUp === 'open' ? [] : ['/sign-up/email'],
   // Built-in rules still apply on top of this default: /sign-in/* allows 3 requests per 10 s per IP.
   // Counters live in the rate_limit table, so every instance shares them. `storage: 'database'` declares that
   // table; the counting itself is ./auth-rate-limit.ts, one atomic upsert per request, because Better Auth's own

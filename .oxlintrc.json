@@ -119,7 +119,7 @@
               },
               {
                 "name": "better-auth",
-                "message": "Server entry of Better Auth. UI code uses #/lib/auth-client.ts (better-auth/react)."
+                "message": "Better Auth runs on the server only. UI code calls the account server functions in #/lib/auth.functions.ts."
               },
               {
                 "name": "@tanstack/react-start/server",
@@ -140,8 +140,12 @@
                 "message": "UI code must not touch the database."
               },
               {
+                "regex": "^better-auth/",
+                "message": "Better Auth runs on the server only, its client included. UI code calls the account server functions in #/lib/auth.functions.ts."
+              },
+              {
                 "regex": "^@better-auth/",
-                "message": "Server-side Better Auth package. UI code uses #/lib/auth-client.ts."
+                "message": "Better Auth runs on the server only. UI code calls the account server functions in #/lib/auth.functions.ts."
               }
             ]
           }

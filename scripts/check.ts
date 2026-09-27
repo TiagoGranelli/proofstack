@@ -43,9 +43,9 @@ const GUARDS: Array<{ file: string; pattern: RegExp; problem: string }> = [
   },
   {
     file: 'src/server/auth.ts',
-    pattern: /disabledPaths:\s*\[[^\]]*['"]\/sign-up\/email['"]/,
+    pattern: /disabledPaths: env\.authSignUp === 'open' \? \[\] : \['\/sign-up\/email'\]/,
     problem:
-      "must keep `disabledPaths: ['/sign-up/email']`: public sign-up stays closed even if the HTTP allowlist changes (ADR 0003)",
+      "must keep `disabledPaths: env.authSignUp === 'open' ? [] : ['/sign-up/email']`: sign-up stays closed unless AUTH_SIGN_UP=open, even if the endpoint allowlist changes (ADR 0003)",
   },
 ]
 

@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Page, type Route } from '@playwright/test'
 
 // verify:app trusts X-Forwarded-For from loopback, so every test (and every retry, which runs in a new
 // worker) signs in from its own client IP and never waits for another test's sign-in rate limit.
@@ -237,11 +237,13 @@ test('client-side navigation shows a post published or edited moments ago, never
 test('a failed sign-out says so and can be retried', async ({ page, baseURL }) => {
   await signInWithApi(page, baseURL!)
   await visit(page, '/dashboard')
-  await page.route('**/api/auth/sign-out', (route) => route.abort())
+  // Sign-out is a server function (POST /_serverFn/...); the page's other server function calls are GETs.
+  const abortPost = (route: Route) => (route.request().method() === 'POST' ? route.abort() : route.fallback())
+  await page.route('**/_serverFn/**', abortPost)
   await page.getByRole('button', { name: 'Sign out' }).click()
   await expect(page.getByRole('alert')).toContainText('Could not sign out')
   await expect(page.getByRole('button', { name: 'Sign out' })).toBeEnabled()
-  await page.unroute('**/api/auth/sign-out')
+  await page.unroute('**/_serverFn/**', abortPost)
   await page.getByRole('button', { name: 'Sign out' }).click()
   await expect(page).toHaveURL(/\/$/)
 })

@@ -76,29 +76,27 @@ describe('csrf', () => {
 })
 
 describe('auth surface', () => {
+  // Better Auth endpoints the app does not use (the allowlist in src/server/http/auth-endpoints.ts), and
+  // method or path variants of ones it does. Sign-up's absence with AUTH_SIGN_UP=closed: auth-sign-up.test.ts.
   const unused = [
-    ['POST', '/sign-up/email'],
     ['POST', '/sign-in/social'],
     ['POST', '/update-user'],
     ['POST', '/change-email'],
-    ['POST', '/change-password'],
-    ['POST', '/delete-user'],
     ['POST', '/verify-password'],
-    ['POST', '/request-password-reset'],
-    ['POST', '/reset-password'],
+    ['POST', '/set-password'],
     ['GET', '/reset-password/some-token'],
-    ['GET', '/verify-email?token=x'],
+    ['GET', '/delete-user/callback?token=x'],
     ['GET', '/callback/github'],
-    ['GET', '/list-sessions'],
-    ['POST', '/revoke-session'],
-    ['POST', '/revoke-sessions'],
-    ['POST', '/revoke-other-sessions'],
+    ['GET', '/list-accounts'],
+    ['POST', '/update-session'],
     ['GET', '/sign-out'],
     ['POST', '/get-session'],
     ['POST', '/sign-in/email/'],
+    ['POST', '/list-sessions'],
+    ['GET', '/revoke-sessions'],
   ] as const
   // Sent without a session: an exposed endpoint then answers 400/401 instead of 404, and a regression that
-  // re-exposes e.g. /revoke-other-sessions cannot end the sessions other tests are using.
+  // re-exposes e.g. /update-user cannot change the users other tests are using.
   it.each(unused)('%s %s is not exposed', async (method, path) => {
     const res = await fetch(`${appUrl}/api/auth${path}`, {
       method,
