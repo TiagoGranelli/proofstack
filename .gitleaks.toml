@@ -30,8 +30,9 @@ description = "Values that are safe to commit by convention (see the top of this
 targetRules = ["better-auth-secret", "url-credentials"]
 regexTarget = "secret"
 regexes = [
-  # Fixed passwords of the throwaway local (compose.yaml), CI and smoke-test databases.
-  '''^app-(local|ci|smoke)$''',
+  # Fixed passwords of the throwaway local (compose.yaml), CI and smoke-test databases: <name>-local, -ci, -smoke.
+  # Any name, because older commits in the history the CI job scans used the app's name before `app`.
+  '''^[a-z]+-(local|ci|smoke)$''',
   # Build-time and test placeholders that nothing connects with.
   '''placeholder''',
   '''not-a-secret''',
