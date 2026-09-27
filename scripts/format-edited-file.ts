@@ -18,7 +18,7 @@ const run = (tool: string, args: string[]) =>
 if (file !== '' && !file.startsWith('..')) {
   const format = run('oxfmt', [])
   // A file oxfmt cannot parse gets the same parse error from oxlint: report it once.
-  const check = format.status === 0 ? run('oxlint', ['--deny-warnings', '--format=unix']) : format
+  const check = format.status === 0 ? run('oxlint', ['--deny-warnings', '--format=agent']) : format
   if (check.status !== 0) {
     const reason = `${check.stdout}${check.stderr}`.trim()
     console.log(JSON.stringify({ decision: 'block', reason: `${reason}\n\nFix this in ${file}.` }))
