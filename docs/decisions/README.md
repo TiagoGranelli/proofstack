@@ -7,7 +7,7 @@ later decision supersedes it.
 | ADR | Decision | Status |
 | --- | --- | --- |
 | [0001](0001-effect-httpapi-business-api.md) | The Effect HttpApi is the only business API, and SSR dispatches to it in-process | Accepted |
-| [0002](0002-typescript-7-with-typescript-6-alias.md) | TypeScript 7 for `tsc`, with `typescript` aliased to TS 6 for Hey API | Accepted |
+| [0002](0002-typescript-7.md) | TypeScript 7 only; Hey API from its TypeScript-free `next` snapshot | Accepted |
 | [0003](0003-sign-up-policy.md) | Sign-up is configurable (`AUTH_SIGN_UP`), closed by default; the account lifecycle works in both modes | Accepted |
 | [0004](0004-prerender-via-nitro.md) | Static pages are prerendered by Nitro, the deployment layer | Accepted |
 | [0005](0005-drizzle-0-45-stable.md) | Drizzle ORM 0.45 stable, not 1.0 RC | Accepted |
