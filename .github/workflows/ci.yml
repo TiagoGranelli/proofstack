@@ -30,6 +30,9 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup
+        with:
+          # The component tests run in Chromium (Vitest browser mode).
+          playwright: 'true'
       # The same gates as `pnpm check`, as separate steps so every failure is reported. Its drift gate runs
       # in the drift job below.
       - run: pnpm format:check
@@ -40,7 +43,7 @@ jobs:
       - if: ${{ !cancelled() }}
         run: pnpm deadcode
       - if: ${{ !cancelled() }}
-        run: pnpm test:unit
+        run: pnpm test:fast
       - if: ${{ !cancelled() }}
         run: node scripts/check.ts --only=guards
 

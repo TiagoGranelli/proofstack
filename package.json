@@ -40,6 +40,7 @@
     "test:unit": "vitest run --project unit",
     "test:api": "vitest run --project api",
     "test:component": "vitest run --project component",
+    "test:fast": "vitest run --project unit --project api --project component --coverage",
     "test:e2e": "playwright test",
     "verify:app": "node scripts/verify-app.ts",
     "check:drift": "node scripts/check-drift.ts",

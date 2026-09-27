@@ -93,9 +93,14 @@ const GATES: Gate[] = [
       'maps files to zones (a new top-level src/ directory needs a zone there)',
   },
   {
-    name: 'unit',
-    run: () => spawnSync('pnpm', ['exec', 'vitest', 'run', '--project', 'unit'], { stdio: 'inherit' }).status === 0,
-    fix: 'fix the failing unit test or the code it covers (tests/unit; run one file: `pnpm test:unit redirect`)',
+    // unit, api and component tests in one Vitest run (one Chromium start), with the coverage gate on the
+    // security-critical modules listed in vitest.config.ts. About 4 s; needs `pnpm exec playwright install chromium`.
+    name: 'tests',
+    run: script('test:fast'),
+    fix:
+      'fix the failing test or the code it covers. Run one layer: `pnpm test:unit|test:api|test:component ' +
+      '[filter]`. A coverage failure names a module in COVERAGE_GATE (vitest.config.ts): cover every line and ' +
+      'branch it reports; coverage/index.html shows which',
   },
   {
     name: 'drift',

@@ -9,15 +9,16 @@ import { defineConfig } from 'vitest/config'
 
 // Separate from vite.config.ts so tests do not load the Start/Nitro plugins.
 // Projects (select with `vitest run --project <name>`):
-// - `unit`: pure functions, no app (run by `pnpm check`).
+// - `unit`: pure functions, no app.
 // - `api`: Effect handlers through HttpApiTest with an in-memory repository and a fake session store.
 // - `component`: React components in Chromium (Vitest browser mode), network mocked by MSW.
 // - `integration`: the running app that `pnpm verify:app` starts.
+// `pnpm check` runs unit, api and component (see scripts/check.ts); `pnpm verify:app` runs integration.
 
 /**
- * Security-critical pure modules: `vitest run --coverage` fails unless the tests cover every line and branch
- * of each. Coverage elsewhere is reported (coverage/index.html), not gated. Add a module here together with
- * the unit tests that cover it.
+ * Security-critical pure modules: `vitest run --coverage` (`pnpm test:fast`, part of `pnpm check`) fails
+ * unless the tests cover every line and branch of each. Coverage elsewhere is reported
+ * (coverage/index.html), not gated. Add a module here together with the unit tests that cover it.
  */
 const COVERAGE_GATE = [
   // Where `?redirect=` may send a user after sign-in (open-redirect defense).
