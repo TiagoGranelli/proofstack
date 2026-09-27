@@ -97,9 +97,12 @@ describe.runIf(production)('database failure', () => {
     expectNoLeak(await signIn.text(), 'POST /api/auth/sign-in/email')
   })
 
-  it('renders the error page without details', async () => {
+  it('renders the error page with the nonce policy and without details', async () => {
     const res = await fetch(`${app.url}/dashboard`, { headers: { cookie } })
     expect(res.status).toBe(500)
+    const csp = res.headers.get('content-security-policy') ?? ''
+    expect(csp).toContain("'nonce-")
+    expect(csp).not.toContain('unsafe-inline')
     const html = await res.text()
     expect(html).toContain('This page could not be loaded')
     expectNoLeak(html, 'GET /dashboard')

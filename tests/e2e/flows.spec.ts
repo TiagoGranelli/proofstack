@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test'
+import type { Page } from '@playwright/test'
+import { expect, test } from './fixtures.ts'
 
 // verify:app trusts X-Forwarded-For from loopback, so every test (and every retry, which runs in a new
 // worker) signs in from its own client IP and never waits for another test's sign-in rate limit.

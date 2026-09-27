@@ -9,9 +9,14 @@ import {
   useTags,
 } from '@tanstack/react-router'
 import { SiteHeader } from '#/components/layouts/site-header.tsx'
+import { documentHeaders, nonceSources } from '#/lib/content-security-policy.ts'
 import '#/styles/app.css'
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
+  // Every server-rendered document (pages, not-found and error states) carries the per-request nonce
+  // created in src/router.tsx. Prerendered pages get a hash-based policy instead (vite.config.ts).
+  // Production only: in dev, Vite injects CSS as <style> tags without the nonce.
+  headers: ({ ssr }) => (import.meta.env.PROD && ssr?.nonce ? documentHeaders(nonceSources(ssr.nonce)) : undefined),
   head: () => ({
     meta: [
       { charSet: 'utf-8' },
