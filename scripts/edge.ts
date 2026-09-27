@@ -132,7 +132,9 @@ export const startEdge = async (options: {
         certificateSpki = await servedCertificateSpki(options.port)
       }
       if ((await fetch(`${url}/api/ready`)).ok) return { url, certificateSpki, stop }
-    } catch {}
+    } catch {
+      // Not listening yet: try again below.
+    }
     await new Promise((r) => setTimeout(r, 250))
   }
   await stop()
@@ -163,7 +165,10 @@ const servedCertificateSpki = (port: string) =>
     const socket = connect({ host: '127.0.0.1', port: Number(port), servername: 'localhost' }, () => {
       const certificate = socket.getPeerX509Certificate()
       socket.end()
-      if (!certificate) return reject(new Error('the edge sent no certificate'))
+      if (!certificate) {
+        reject(new Error('the edge sent no certificate'))
+        return
+      }
       resolveSpki(
         createHash('sha256')
           .update(certificate.publicKey.export({ type: 'spki', format: 'der' }))

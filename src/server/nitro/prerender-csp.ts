@@ -1,7 +1,7 @@
 // Build time only: vite.config.ts calls this from Nitro's `prerender:generate` hook for every prerendered
 // HTML page. It never runs in the server bundle.
 import { createHash } from 'node:crypto'
-import { type DefaultTreeAdapterTypes, parse } from 'parse5'
+import { type DefaultTreeAdapterTypes, defaultTreeAdapter, parse } from 'parse5'
 
 type ParentNode = DefaultTreeAdapterTypes.ParentNode
 type Element = DefaultTreeAdapterTypes.Element
@@ -11,7 +11,7 @@ const sha256 = (text: string) => `'sha256-${createHash('sha256').update(text, 'u
 const isElement = (node: DefaultTreeAdapterTypes.Node): node is Element => 'tagName' in node
 
 const textOf = (element: Element) =>
-  element.childNodes.map((child) => ('value' in child && child.nodeName === '#text' ? child.value : '')).join('')
+  element.childNodes.map((child) => (defaultTreeAdapter.isTextNode(child) ? child.value : '')).join('')
 
 /**
  * CSP hash sources for the inline scripts and styles of a static HTML page. parse5 is a WHATWG-conformant

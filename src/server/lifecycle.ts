@@ -15,7 +15,10 @@ export type ShutdownStep = (typeof STEPS)[number]
 // registers them, so this module can exist twice in .output/server. The registry lives on globalThis, where
 // both copies find the same one.
 const REGISTRY = Symbol.for('proofstack.shutdown')
-const registry = ((globalThis as { [REGISTRY]?: Map<ShutdownStep, Cleanup> })[REGISTRY] ??= new Map())
+const registry = ((globalThis as { [REGISTRY]?: Map<ShutdownStep, Cleanup> })[REGISTRY] ??= new Map<
+  ShutdownStep,
+  Cleanup
+>())
 
 /**
  * Registers the cleanup of one shutdown step; a second registration of the same step replaces the first.

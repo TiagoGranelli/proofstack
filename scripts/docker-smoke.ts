@@ -23,11 +23,12 @@ const docker = (args: string[], options: { quiet?: boolean; allowFailure?: boole
     stdio: options.quiet ? ['ignore', 'pipe', 'pipe'] : ['ignore', 'pipe', 'inherit'],
     maxBuffer: 64 * 1024 * 1024,
   })
+  // Node types these as strings, but a stream that is not piped, or a command that did not start, gives null.
   if (result.status !== 0 && !options.allowFailure)
     throw new Error(
-      `docker ${args.slice(0, 2).join(' ')} failed (${result.status ?? result.signal})\n${result.stderr ?? ''}`,
+      `docker ${args.slice(0, 2).join(' ')} failed (${result.status ?? result.signal})\n${(result.stderr as string | null) ?? ''}`,
     )
-  return (result.stdout ?? '').trim()
+  return ((result.stdout as string | null) ?? '').trim()
 }
 
 const step = async <T>(name: string, run: () => T | Promise<T>): Promise<T> => {

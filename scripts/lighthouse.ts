@@ -67,7 +67,7 @@ const POLICY = {
   minBenchmarkIndex: 1000,
 }
 
-const SLOW_CPU_WARNING = /slower CPU than/
+const SLOW_CPU_WARNING = 'slower CPU than'
 
 const METRIC_AUDITS: Record<Metric, string> = {
   fcp: 'first-contentful-paint',
@@ -97,7 +97,8 @@ const OUT = 'lighthouse-report'
 const median = (values: number[]) => {
   const sorted = values.toSorted((a, b) => a - b)
   const mid = Math.floor(sorted.length / 2)
-  return sorted.length % 2 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2
+  const at = (index: number) => sorted[index] ?? Number.NaN
+  return sorted.length % 2 ? at(mid) : (at(mid - 1) + at(mid)) / 2
 }
 
 type Lhr = {
@@ -191,7 +192,7 @@ const failingAudits = (lhr: Lhr, categories: Category[]) => [
     categories.flatMap((category) =>
       (lhr.categories[category]?.auditRefs ?? [])
         .filter((ref) => ref.weight > 0)
-        .map((ref) => lhr.audits[ref.id]!)
+        .flatMap((ref) => lhr.audits[ref.id] ?? [])
         .filter(
           (audit) =>
             audit.scoreDisplayMode !== 'notApplicable' &&
@@ -305,7 +306,7 @@ try {
           performance.push(`${metric} ${Number(metrics[metric].toFixed(3))} > budget ${budget}`)
       }
       const slow = perRun.filter(
-        (r) => r.benchmarkIndex < POLICY.minBenchmarkIndex || r.runWarnings.some((w) => SLOW_CPU_WARNING.test(w)),
+        (r) => r.benchmarkIndex < POLICY.minBenchmarkIndex || r.runWarnings.some((w) => w.includes(SLOW_CPU_WARNING)),
       )
       const verdict: Verdict = defects.length
         ? 'fail'
@@ -359,14 +360,14 @@ const fmtScore = (s: { median: number; min: number; max: number } | null, gated:
   !s ? '–' : `${s.median}${s.min !== s.max ? ` (${s.min}–${s.max})` : ''}${gated ? '' : '*'}`
 const indexes = results.flatMap((r) => r.perRun.map((p) => p.benchmarkIndex))
 const table = [
-  `Lighthouse ${JSON.parse(readFileSync('node_modules/lighthouse/package.json', 'utf8')).version}, median of ${runs} runs, ` +
+  `Lighthouse ${(JSON.parse(readFileSync('node_modules/lighthouse/package.json', 'utf8')) as { version: string }).version}, median of ${runs} runs, ` +
     `${direct ? 'Node server without the edge' : `through the Caddy edge (${protocol})`}. benchmarkIndex ${Math.min(...indexes)}–${Math.max(...indexes)}. ` +
     '* = reported, not gated. Diagnose with `<page>-<form factor>-median.report.html` (Lighthouse median run).',
   '',
   '| Page | Form factor | Perf | A11y | Best pr. | SEO | Agentic | FCP | LCP | TBT | CLS | Bytes | Result |',
   '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
   ...results.map((r) => {
-    const gated = PAGES.find((p) => p.name === r.page)!.gated
+    const gated = PAGES.find((p) => p.name === r.page)?.gated ?? []
     const cells = REPORTED.map((c) => fmtScore(r.scores[c], gated.includes(c)))
     const m = r.metrics
     return `| ${r.path} | ${r.formFactor} | ${cells.join(' | ')} | ${Math.round(m.fcp)} ms | ${Math.round(m.lcp)} ms | ${Math.round(m.tbt)} ms | ${m.cls.toFixed(3)} | ${Math.round(m.bytes / 1024)} KiB | ${r.verdict}${r.problems.length ? `: ${r.problems.join('; ')}` : ''} |`

@@ -16,7 +16,7 @@ const DDL_LOCK_WAIT = process.env.MIGRATE_DDL_LOCK_TIMEOUT ?? '5s'
 const DDL_ATTEMPTS = 5
 const LOCK_NOT_AVAILABLE = '55P03'
 
-const setting = (value: string) => `'${value.replace(/'/g, '')}'`
+const setting = (value: string) => `'${value.replaceAll("'", '')}'`
 const codeOf = (error: unknown): unknown => {
   const { code, cause } = (error ?? {}) as { code?: unknown; cause?: unknown }
   return code ?? (cause === undefined ? undefined : codeOf(cause))
@@ -56,8 +56,10 @@ try {
     const { rows } = await client.query<{ n: number }>(
       `select count(*)::int as n from information_schema.tables where table_schema = 'drizzle' and table_name = '__drizzle_migrations'`,
     )
-    if (!rows[0]?.n) return 0
-    return (await client.query<{ n: number }>('select count(*)::int as n from drizzle.__drizzle_migrations')).rows[0]!.n
+    if ((rows[0]?.n ?? 0) === 0) return 0
+    return (
+      (await client.query<{ n: number }>('select count(*)::int as n from drizzle.__drizzle_migrations')).rows[0]?.n ?? 0
+    )
   }
   const before = await count()
   // Drizzle applies all pending migrations in one transaction, so a lock timeout rolls back everything

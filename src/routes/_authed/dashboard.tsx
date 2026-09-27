@@ -10,7 +10,7 @@ import { PostComposer } from '#/features/posts/components/post-composer.tsx'
 
 export const Route = createFileRoute('/_authed/dashboard')({
   head: () => ({ meta: [{ title: 'Dashboard · ProofStack' }, { name: 'robots', content: 'noindex' }] }),
-  loader: ({ context }) => context.queryClient.ensureInfiniteQueryData(getMyPostsQueryOptions()),
+  loader: ({ context }) => context.queryClient.infiniteQuery({ ...getMyPostsQueryOptions(), staleTime: 'static' }),
   // The loader's failures. Once the page is up, the composer and the list fail on their own (SectionErrorBoundary).
   errorComponent: (props) => <RouteError {...props} title="Your posts could not be loaded" action="load your posts" />,
   component: Dashboard,

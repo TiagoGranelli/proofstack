@@ -22,8 +22,11 @@ import { authMail } from './mail/auth-mail.ts'
  */
 const requirePasswordToDelete = createAuthMiddleware(async (ctx) => {
   if (ctx.path !== '/delete-user') return
-  const body: { password?: unknown; token?: unknown } = ctx.body ?? {}
-  if (typeof body.password !== 'string' || body.password === '' || body.token !== undefined)
+  // Better Auth types the body as `any`: read it as unknown and check each field.
+  const body: unknown = ctx.body
+  const { password, token }: { password?: unknown; token?: unknown } =
+    typeof body === 'object' && body !== null ? body : {}
+  if (typeof password !== 'string' || password === '' || token !== undefined)
     throw APIError.from('BAD_REQUEST', { code: 'INVALID_PASSWORD', message: 'Deleting the account needs its password' })
 })
 

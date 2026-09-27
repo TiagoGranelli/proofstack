@@ -7,11 +7,11 @@ import { RouteNotFound } from '#/components/errors/route-not-found.tsx'
 import { RoutePending } from '#/components/layouts/route-pending.tsx'
 import { renderInApp } from './test-utils.tsx'
 
-const props = (error: unknown, reset = vi.fn()): ErrorComponentProps => ({ error, reset })
+const props = (error: unknown, reset = vi.fn<() => void>()): ErrorComponentProps => ({ error, reset })
 
 describe('RouteError', () => {
   it('explains the failure, retries the route, and links home', async () => {
-    const reset = vi.fn()
+    const reset = vi.fn<() => void>()
     const { router } = await renderInApp(<RouteError {...props(new TypeError('Failed to fetch'), reset)} />, {
       url: '/dashboard',
     })

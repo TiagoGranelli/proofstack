@@ -74,7 +74,8 @@ const docker = (args: string[], options: { input?: string; quiet?: boolean; allo
   })
   if (result.status !== 0 && !options.allowFailure)
     throw new Error(`docker ${args.slice(0, 3).join(' ')} failed (${result.status ?? result.signal})\n${result.stderr}`)
-  return (result.stdout ?? '').trim()
+  // Node types these as strings, but a stream that is not piped, or a command that did not start, gives null.
+  return ((result.stdout as string | null) ?? '').trim()
 }
 
 /** Runs a command, sampling the runner container's cgroup memory while it runs. */
@@ -88,7 +89,9 @@ const measured = async (command: string, args: string[], cgroup: string | undefi
       peak = Math.max(peak, Number(readFileSync(`${cgroup}/memory.current`, 'utf8')))
       const anon = /^anon (\d+)$/m.exec(readFileSync(`${cgroup}/memory.stat`, 'utf8'))?.[1]
       peakAnon = Math.max(peakAnon, Number(anon ?? 0))
-    } catch {}
+    } catch {
+      // The cgroup is gone once the command exits; the last sample stands.
+    }
   }
   const timer = setInterval(sample, 250)
   const status = await new Promise<number>((done) => {
@@ -193,7 +196,7 @@ try {
 
     // The checkout: tracked and untracked-but-not-ignored files, minus deleted ones, as they are on disk.
     const deleted = new Set(gitFiles(['--deleted']))
-    const files = gitFiles(['--cached', '--others', '--exclude-standard']).filter((f) => f && !deleted.has(f))
+    const files = gitFiles(['--cached', '--others', '--exclude-standard']).filter((f) => f !== '' && !deleted.has(f))
     docker(['exec', '-i', RUNNER, 'sh', '-c', 'tar -C /repo --null -T - -cf - | tar -C /work -xf -'], {
       input: `${files.join('\0')}\0`,
       quiet: true,
@@ -260,7 +263,7 @@ console.log('job                            result        time   peak memory: to
 for (const row of rows) {
   const result = row.status === 0 ? 'ok' : row.status === 2 ? 'INCONCLUSIVE' : `FAIL (${row.status})`
   console.log(
-    `${row.job.padEnd(30)} ${result.padEnd(12)} ${row.seconds ? `${row.seconds.toFixed(0).padStart(5)}s` : '      '}   ${gib(row.peakBytes)}${row.peakAnonBytes ? ` / ${gib(row.peakAnonBytes)}` : ''}`,
+    `${row.job.padEnd(30)} ${result.padEnd(12)} ${row.seconds ? `${row.seconds.toFixed(0).padStart(5)}s` : '      '}   ${gib(row.peakBytes)}${row.peakAnonBytes === undefined ? '' : ` / ${gib(row.peakAnonBytes)}`}`,
   )
 }
 const statuses = rows.map((r) => r.status)

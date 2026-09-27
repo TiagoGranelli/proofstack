@@ -57,7 +57,7 @@ describe('PostComposer', () => {
         return HttpResponse.json(post({ body: 'hello' }), { status: 201 })
       }),
     )
-    const onPublished = vi.fn()
+    const onPublished = vi.fn<() => void>()
     const { queryClient } = await renderInApp(<PostComposer onPublished={onPublished} />)
     queryClient.setQueryData(getPublicPostsQueryOptions().queryKey, postPages(postPage([])))
 
@@ -103,7 +103,7 @@ describe('PostComposer', () => {
   ]
   it.each(failures)('keeps the draft and describes $name', async ({ handler, message }) => {
     worker.use(handler())
-    const onPublished = vi.fn()
+    const onPublished = vi.fn<() => void>()
     await renderInApp(<PostComposer onPublished={onPublished} />)
     await field().fill('keep me')
     await publish().click()

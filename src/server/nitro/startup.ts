@@ -25,7 +25,10 @@ export default definePlugin((nitroApp) => {
       log('error', 'uncaught exception, exiting', { error })
       process.exit(1)
     }
-    if (tags.includes('unhandledRejection')) return log('error', 'unhandled rejection', { error })
+    if (tags.includes('unhandledRejection')) {
+      log('error', 'unhandled rejection', { error })
+      return
+    }
     log('error', 'request error', {
       tags,
       ...(event ? { method: event.req.method, path: new URL(event.req.url).pathname } : {}),

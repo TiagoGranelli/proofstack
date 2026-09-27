@@ -11,15 +11,17 @@ export type AuthFunctionName = keyof typeof AuthFunctions
 /** The URL the stub of server function `name` posts to. */
 export const authFunctionPath = (name: AuthFunctionName) => `/_serverFn/auth/${name}`
 
-const serverFunction = (name: AuthFunctionName) => async (options?: { data?: unknown }) => {
-  const res = await fetch(authFunctionPath(name), {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(options?.data ?? null),
-  })
-  if (!res.ok) throw new Error(`server function ${name} failed with ${res.status}`)
-  return res.json()
-}
+const serverFunction =
+  (name: AuthFunctionName) =>
+  async (options?: { data?: unknown }): Promise<unknown> => {
+    const res = await fetch(authFunctionPath(name), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(options?.data ?? null),
+    })
+    if (!res.ok) throw new Error(`server function ${name} failed with ${res.status}`)
+    return res.json()
+  }
 
 export const getSignUpPolicy = serverFunction('getSignUpPolicy')
 export const signIn = serverFunction('signIn')

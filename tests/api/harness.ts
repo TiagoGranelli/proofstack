@@ -48,7 +48,7 @@ const toPage = (list: ReadonlyArray<StoredPost>, { cursor, limit }: PageRequest)
     .toSorted((a, b) => compareKeys(keyOf(b), keyOf(a)))
   const items = after.slice(0, limit)
   const last = items.at(-1)
-  return { items: items.map(view), nextCursor: after.length > limit && last ? keyOf(last) : null }
+  return { items: items.map((item) => view(item)), nextCursor: after.length > limit && last ? keyOf(last) : null }
 }
 
 export interface RepoOptions {

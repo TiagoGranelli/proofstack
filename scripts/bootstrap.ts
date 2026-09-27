@@ -10,7 +10,7 @@ const step = (label: string, command: string, args: string[], hint: string) => {
   const { status, error } = spawnSync(command, args, { stdio: 'inherit' })
   if (status !== 0) {
     console.error(`\n${label} failed (${error?.message ?? `exit ${status}`}). ${hint}`)
-    process.exit(status || 1)
+    process.exit(status ?? 1)
   }
 }
 

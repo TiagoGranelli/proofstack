@@ -95,7 +95,7 @@ if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) fail(`invalid repo "${repo}"`)
 const ref =
   values.ref ?? (preset ? preset.tag(installedVersion(preset.pkg)) : fail('--ref is required without a preset'))
 const paths = (values.path ?? preset?.paths ?? fail('--path is required without a preset')).map((p) =>
-  posix.normalize(p).replace(/^\/+|\/+$/g, ''),
+  posix.normalize(p).replaceAll(/^\/+|\/+$/g, ''),
 )
 if (paths.length === 0 || paths.some((p) => p === '.' || p.startsWith('..'))) fail('paths must be repository subpaths')
 const maxDownload = Number(values['max-download-mb']) * 1024 * 1024
@@ -135,7 +135,8 @@ class ByteReader {
 
   async read(n: number) {
     if (!(await this.fill(n))) return undefined
-    const all = this.chunks.length === 1 ? this.chunks[0]! : Buffer.concat(this.chunks)
+    const [first] = this.chunks
+    const all = first && this.chunks.length === 1 ? first : Buffer.concat(this.chunks)
     const rest = all.subarray(n)
     this.chunks = rest.length > 0 ? [rest] : []
     this.length = rest.length
@@ -146,13 +147,13 @@ class ByteReader {
     let remaining = n
     while (remaining > 0) {
       if (this.length === 0 && !(await this.fill(1))) return
-      const head = this.chunks[0]!
+      const head = this.chunks.shift()
+      if (!head) return
       if (head.length <= remaining) {
         remaining -= head.length
         this.length -= head.length
-        this.chunks.shift()
       } else {
-        this.chunks[0] = head.subarray(remaining)
+        this.chunks.unshift(head.subarray(remaining))
         this.length -= remaining
         remaining = 0
       }
@@ -216,7 +217,7 @@ const extract = async (source: AsyncIterable<Buffer>) => {
     const header = await reader.read(512)
     if (!header || header.every((b) => b === 0)) break
     const size = Number.parseInt(field(header, 124, 12).trim() || '0', 8)
-    const type = String.fromCharCode(header[156] ?? 0x30)
+    const type = String.fromCodePoint(header[156] ?? 0x30)
     const padded = Math.ceil(size / 512) * 512
     if (type === 'x' || type === 'g') {
       const records = parsePax((await reader.read(padded))?.subarray(0, size) ?? abort('truncated archive'))

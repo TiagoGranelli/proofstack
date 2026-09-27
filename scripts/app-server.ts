@@ -50,8 +50,8 @@ const runQuiet = (command: string, args: string[], env: NodeJS.ProcessEnv) =>
   new Promise<void>((resolve, reject) => {
     const child = spawn(command, args, { env, stdio: ['ignore', 'pipe', 'pipe'] })
     let output = ''
-    child.stdout.on('data', (chunk: Buffer) => (output += chunk))
-    child.stderr.on('data', (chunk: Buffer) => (output += chunk))
+    child.stdout.on('data', (chunk: Buffer) => (output += chunk.toString()))
+    child.stderr.on('data', (chunk: Buffer) => (output += chunk.toString()))
     child.once('error', reject)
     child.once('exit', (code) =>
       code === 0 ? resolve() : reject(new Error(`${command} ${args.join(' ')} failed (${code})\n${output.trim()}`)),
@@ -185,7 +185,9 @@ export const startApp = async (options: {
         throw new Error(`server exited with ${server.exitCode}. Log (${options.logFile}):\n${tail(options.logFile)}`)
       try {
         if ((await fetch(`${directUrl}/api/ready`)).ok) return
-      } catch {}
+      } catch {
+        // Not listening yet: try again below.
+      }
       await new Promise((r) => setTimeout(r, 250))
     }
     throw new Error(`server did not become ready in 30 s. Log (${options.logFile}):\n${tail(options.logFile)}`)
