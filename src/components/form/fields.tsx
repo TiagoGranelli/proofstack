@@ -1,19 +1,10 @@
 import { type ComponentProps, type ReactNode, use } from 'react'
 import { Input } from '#/components/ui/input.tsx'
 import { Label } from '#/components/ui/label.tsx'
+import { FieldError } from './field-error.tsx'
 import { describedBy, fieldErrorMessage } from './field-messages.ts'
 import { useFieldContext } from './form-context.ts'
 import { ServerIssues } from './server-issues.ts'
-
-/** A field's error, announced when it appears (after a submit, or while fixing a field that failed one). */
-export function FieldError(props: { id: string; message: string | undefined }) {
-  if (!props.message) return null
-  return (
-    <p id={props.id} role="alert" className="text-sm text-destructive">
-      {props.message}
-    </p>
-  )
-}
 
 type InputProps = Omit<ComponentProps<'input'>, 'name' | 'value' | 'checked' | 'onChange' | 'onBlur'>
 

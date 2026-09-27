@@ -1,7 +1,7 @@
 import { useHydrated } from '@tanstack/react-router'
 import { type ReactNode, useEffect, useRef } from 'react'
+import { FieldError } from '#/components/form/field-error.tsx'
 import { describedBy, focusFirstInvalid } from '#/components/form/field-messages.ts'
-import { FieldError } from '#/components/form/fields.tsx'
 import { loadOnInteraction, useSchemaSubmit } from '#/components/form/lazy-schema.ts'
 import { ServerIssues } from '#/components/form/server-issues.ts'
 import { Button } from '#/components/ui/button.tsx'

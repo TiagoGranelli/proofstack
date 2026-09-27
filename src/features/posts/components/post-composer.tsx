@@ -1,9 +1,8 @@
-import { revalidateLogic } from '@tanstack/react-form'
+import { revalidateLogic, useForm } from '@tanstack/react-form'
 import { useRef } from 'react'
 import { ApiErrorAlert } from '#/components/errors/api-error-alert.tsx'
-import { useAppForm } from '#/components/form/app-form.ts'
+import { FieldError } from '#/components/form/field-error.tsx'
 import { describedBy, fieldErrorMessage } from '#/components/form/field-messages.ts'
-import { FieldError } from '#/components/form/fields.tsx'
 import { loadOnInteraction, useSchemaSubmit } from '#/components/form/lazy-schema.ts'
 import { Button } from '#/components/ui/button.tsx'
 import { Label } from '#/components/ui/label.tsx'
@@ -31,7 +30,7 @@ export function PostComposer(props: { onPublished?: () => void }) {
       },
     },
   })
-  const form = useAppForm({
+  const form = useForm({
     defaultValues: { body: '' },
     validationLogic: revalidateLogic(),
     validators: { onDynamic: postDraftSchema.validator },
@@ -53,7 +52,7 @@ export function PostComposer(props: { onPublished?: () => void }) {
       }}
       {...loadOnInteraction(postDraftSchema)}
     >
-      <form.AppField name="body">
+      <form.Field name="body">
         {(field) => {
           const body = field.state.value
           const error = fieldErrorMessage(field.state.meta.errors) ?? serverIssue
@@ -88,7 +87,7 @@ export function PostComposer(props: { onPublished?: () => void }) {
             </>
           )
         }}
-      </form.AppField>
+      </form.Field>
       {formError ? <ApiErrorAlert id="post-error" error={formError} action="publish the post" /> : null}
       <FieldError id="post-schema-error" message={schemaError} />
     </form>

@@ -11,51 +11,25 @@ const STORAGE_KEY = 'theme'
  */
 export const THEME_SCRIPT = `try{var t=localStorage.getItem('${STORAGE_KEY}');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch(e){}`
 
-const isStoredChoice = (value: string | null): value is 'light' | 'dark' => value === 'light' || value === 'dark'
-
 /** The stored choice, or `system`. Storage can be unavailable (private modes, blocked cookies): then `system`. */
 export function readThemeChoice(): ThemeChoice {
   try {
     const stored = localStorage.getItem(STORAGE_KEY)
-    return isStoredChoice(stored) ? stored : 'system'
+    return stored === 'light' || stored === 'dark' ? stored : 'system'
   } catch {
     return 'system'
   }
 }
 
-const listeners = new Set<() => void>()
-
-const applyThemeChoice = (choice: ThemeChoice) => {
-  if (choice === 'system') delete document.documentElement.dataset.theme
-  else document.documentElement.dataset.theme = choice
-}
-
 /** Stores `choice` and applies it at once, as THEME_SCRIPT does on the next load. */
 export function saveThemeChoice(choice: ThemeChoice): void {
+  const root = document.documentElement
   try {
     if (choice === 'system') localStorage.removeItem(STORAGE_KEY)
     else localStorage.setItem(STORAGE_KEY, choice)
   } catch {
     // Not persisted; the choice still applies to this page.
   }
-  applyThemeChoice(choice)
-  for (const listener of listeners) listener()
-}
-
-/**
- * For `useSyncExternalStore`: calls `listener` when the choice changes here or in another tab (the `storage`
- * event), whose change it applies to this page too.
- */
-export function subscribeToThemeChoice(listener: () => void): () => void {
-  const fromOtherTab = (event: StorageEvent) => {
-    if (event.key !== STORAGE_KEY) return
-    applyThemeChoice(readThemeChoice())
-    listener()
-  }
-  listeners.add(listener)
-  addEventListener('storage', fromOtherTab)
-  return () => {
-    listeners.delete(listener)
-    removeEventListener('storage', fromOtherTab)
-  }
+  if (choice === 'system') delete root.dataset.theme
+  else root.dataset.theme = choice
 }
