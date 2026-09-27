@@ -30,7 +30,7 @@ const STEPS: Step[] = [
 ]
 
 /** Runs one step with the terminal attached; tinyexec puts node_modules/.bin first on PATH. */
-const run = (step: Step) => {
+const run = (step: Step): { name: string; ok: boolean; detail: string } => {
   const [tool = '', ...args] = step.command()
   const started = performance.now()
   const { exitCode, signalCode } = xSync(tool, args, {
@@ -56,7 +56,7 @@ rmSync(CONTRACT_OBSERVATIONS, { recursive: true, force: true })
 mkdirSync('test-results', { recursive: true })
 for (const log of serverLogs()) rmSync(log)
 
-const results = STEPS.map((step) => run(step))
+const outcomes = STEPS.map((step) => run(step))
 console.log('')
-for (const { name, ok, detail } of results) console.log(`${ok ? 'ok  ' : 'FAIL'}  ${name.padEnd(18)} ${detail}`)
-process.exitCode = results.every((result) => result.ok) ? 0 : 1
+for (const { name, ok, detail } of outcomes) console.log(`${ok ? 'ok  ' : 'FAIL'}  ${name.padEnd(18)} ${detail}`)
+process.exitCode = outcomes.every((outcome) => outcome.ok) ? 0 : 1

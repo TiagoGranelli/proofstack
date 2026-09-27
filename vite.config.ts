@@ -5,6 +5,7 @@ import { tanstackStart } from '@tanstack/react-start/plugin/vite'
 import react, { reactCompilerPreset } from '@vitejs/plugin-react'
 import { nitro } from 'nitro/vite'
 import { defineConfig, type Plugin } from 'vite'
+import { writeBuildStamp } from './scripts/build-freshness.ts'
 import { documentHeaders } from './src/lib/content-security-policy.ts'
 import { inlineSourceHashes } from './src/server/nitro/prerender-csp.ts'
 
@@ -79,6 +80,10 @@ export default defineConfig({
             ...rule,
             headers: { ...rule?.headers, ...documentHeaders(inlineSourceHashes(route.contents)) },
           }
+        },
+        // What this build was made from, so the test runners refuse a stale .output (scripts/build-freshness.ts).
+        compiled(nitroBuild) {
+          if (!nitroBuild.options.dev) writeBuildStamp(nitroBuild.options.rootDir)
         },
       },
       // Build-time .br/.gz copies of static assets, served by Nitro when the client accepts them.

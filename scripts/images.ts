@@ -30,10 +30,10 @@ export const IMAGES = {
 } as const
 
 /** The package name (package.json), which names the app's Docker artifacts. */
-export const packageName = () => (JSON.parse(readFileSync('package.json', 'utf8')) as { name: string }).name
+export const packageName = (): string => (JSON.parse(readFileSync('package.json', 'utf8')) as { name: string }).name
 
 /**
  * Prefix for every container, network and volume the scripts create, so they are easy to find and never
  * collide with another project's (`docker ps --filter name=<package name>-ci`). Override with CI_DOCKER_PREFIX.
  */
-export const dockerPrefix = () => process.env.CI_DOCKER_PREFIX || `${packageName()}-ci`
+export const dockerPrefix = (): string => process.env.CI_DOCKER_PREFIX || `${packageName()}-ci`

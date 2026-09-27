@@ -631,7 +631,7 @@ keep-alive connection. The Node server alone exits about 1 s after SIGTERM, also
 srvx skips its signal handling when `CI` or `TEST` is set in the environment (and `TEST` also hides its
 startup line). Do not set either in production, or SIGTERM ends the process immediately without draining
 or closing the pool. The Dockerfile sets `CI=true` only in its build stage, not in the runtime image.
-`scripts/app-server.ts` (used by the test runners and `lighthouse`) removes both from the test server's
+`scripts/server-process.ts` (used by the test runners and `lighthouse`) removes both from the test server's
 environment, so the tests exercise the production shutdown path even on CI, which sets `CI=true`.
 
 ## Logs

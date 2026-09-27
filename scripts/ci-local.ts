@@ -101,7 +101,7 @@ const runContainerJobs = (containerJobs: string[]) => {
     console.log(`\n▶ ci:${job} (container)`)
     rows.push(timed(job, () => inRunner(job, ['pnpm', `ci:${job}`])))
     if (job === 'build' && rows.at(-1)?.status !== 0) {
-      console.error('build failed: skipping the jobs that need it')
+      console.error(`build failed (exit ${rows.at(-1)?.status}): skipping the jobs that need it`)
       break
     }
   }
@@ -131,12 +131,20 @@ for (const job of plan.filter((j) => HOST_JOBS.has(j))) {
 }
 
 const gib = (bytes: number | undefined) => (bytes === undefined ? 'n/a' : `${(bytes / 1024 ** 3).toFixed(2)} GiB`)
-const outcome = (status: number) => (status === 0 ? 'ok' : status === 2 ? 'INCONCLUSIVE' : `FAIL (${status})`)
+/** A job's exit status in words: 2 is Lighthouse's "the machine was too slow to judge". */
+const outcome = (status: number) => {
+  if (status === 0) return 'ok'
+  return status === 2 ? 'INCONCLUSIVE' : `FAIL (${status})`
+}
+/** 1 when a job failed, else 2 when one was inconclusive, else 0. */
+const runStatus = (statuses: number[]) => {
+  if (statuses.some((status) => status !== 0 && status !== 2)) return 1
+  return statuses.includes(2) ? 2 : 0
+}
 console.log('\nci:local (reports in test-results/ci-local/)')
 console.log('job            result         time   peak memory (cgroup memory.peak, page cache included)')
 for (const row of rows)
   console.log(
     `${row.job.padEnd(14)} ${outcome(row.status).padEnd(12)} ${row.seconds.toFixed(0).padStart(5)}s   ${gib(row.peakBytes)}`,
   )
-const statuses = rows.map((row) => row.status)
-process.exitCode = statuses.some((s) => s !== 0 && s !== 2) ? 1 : statuses.includes(2) ? 2 : 0
+process.exitCode = runStatus(rows.map((row) => row.status))

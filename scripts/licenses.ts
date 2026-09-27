@@ -44,7 +44,10 @@ let byLicense: Record<string, Package[]>
 try {
   byLicense = JSON.parse(listed.stdout) as Record<string, Package[]>
 } catch {
-  console.error(`pnpm licenses list failed:\n${(listed.stderr || listed.stdout).trim()}`)
+  console.error(
+    `pnpm licenses list failed (exit ${listed.exitCode}, expected JSON on stdout):\n` +
+      (listed.stderr || listed.stdout).trim(),
+  )
   process.exit(1)
 }
 
@@ -61,26 +64,31 @@ const acceptable = (expression: string, name: string) => {
   }
 }
 
+/** Every installed version of every production package, with the license it declares. */
+const installed = Object.entries(byLicense).flatMap(([license, packages]) =>
+  packages.flatMap(({ name, versions }) => versions.map((version) => ({ id: `${name}@${version}`, name, license }))),
+)
+
 const problems: string[] = []
 const used = new Set<string>()
-let count = 0
-for (const [license, packages] of Object.entries(byLicense))
-  for (const { name, versions } of packages)
-    for (const version of versions) {
-      count++
-      const id = `${name}@${version}`
-      if (acceptable(license, name)) continue
-      if (EXCEPTIONS[id]) {
-        used.add(id)
-        continue
-      }
-      const copyleft = /\b(A?GPL|LGPL|SSPL|BUSL|EUPL|OSL|CPAL)\b/i.test(license)
-      problems.push(`${id}: ${license}${copyleft ? ' (copyleft: not allowed in the shipped bundle)' : ''}`)
-    }
+for (const { id, name, license } of installed) {
+  if (acceptable(license, name)) continue
+  if (EXCEPTIONS[id]) {
+    used.add(id)
+    continue
+  }
+  const copyleft = /\b(A?GPL|LGPL|SSPL|BUSL|EUPL|OSL|CPAL)\b/i.test(license)
+  problems.push(`${id}: ${license}${copyleft ? ' (copyleft: not allowed in the shipped bundle)' : ''}`)
+}
 for (const id of Object.keys(EXCEPTIONS))
   if (!used.has(id)) problems.push(`EXCEPTIONS in scripts/licenses.ts: ${id} is not needed anymore; remove it`)
 
 if (problems.length) {
-  console.error(`License check failed (${count} production packages):\n${problems.map((p) => `  - ${p}`).join('\n')}`)
+  console.error(
+    `License check failed (${installed.length} production packages):\n${problems.map((p) => `  - ${p}`).join('\n')}`,
+  )
   process.exitCode = 1
-} else console.log(`ok    ${count} production packages, licenses: ${Object.keys(byLicense).toSorted().join(', ')}`)
+} else
+  console.log(
+    `ok    ${installed.length} production packages, licenses: ${Object.keys(byLicense).toSorted().join(', ')}`,
+  )

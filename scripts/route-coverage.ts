@@ -56,26 +56,28 @@ const reaches = (reached: Set<string>, route: string) => {
   return [...reached].some((path) => pattern.test(path))
 }
 
+/** A spec file and its text. */
+type Spec = { file: string; text: string }
+
+const readSpec = (file: string): Spec => ({ file, text: readFileSync(file, 'utf8') })
+
 /** The text from `start` to the next `end` after it; both must be there (a renamed block fails loudly). */
-const between = (file: string, text: string, start: string, end?: string) => {
-  const from = text.indexOf(start)
-  const to = end === undefined ? text.length : text.indexOf(end, from + start.length)
+const between = (spec: Spec, start: string, end?: string) => {
+  const from = spec.text.indexOf(start)
+  const to = end === undefined ? spec.text.length : spec.text.indexOf(end, from + start.length)
   if (from === -1 || to === -1)
-    throw new Error(`${file}: cannot find the block from "${start}" to "${end ?? 'the end'}"`)
-  return text.slice(from, to)
+    throw new Error(`${spec.file}: cannot find the block from "${start}" to "${end ?? 'the end of the file'}"`)
+  return spec.text.slice(from, to)
 }
 
 /** What each page lacks, as `path: missing, missing`; empty when every page is covered. */
 export const routeCoverageProblems = (): string[] => {
-  const a11y = readFileSync(A11Y, 'utf8')
-  const keyboard = readFileSync(KEYBOARD, 'utf8')
+  const a11y = readSpec(A11Y)
+  const keyboard = readSpec(KEYBOARD)
   const suites: Array<[string, Set<string>]> = [
-    [`an axe state in STATES (${A11Y})`, reachedPaths(between(A11Y, a11y, 'const STATES', "test.describe('axe'"))],
-    [`a landmark snapshot (${A11Y})`, reachedPaths(between(A11Y, a11y, "test.describe('landmarks'"))],
-    [
-      `a tab-order row (${KEYBOARD})`,
-      reachedPaths(between(KEYBOARD, keyboard, "test.describe('tab order'", "test.describe('")),
-    ],
+    [`an axe state in STATES (${A11Y})`, reachedPaths(between(a11y, 'const STATES', "test.describe('axe'"))],
+    [`a landmark snapshot (${A11Y})`, reachedPaths(between(a11y, "test.describe('landmarks'"))],
+    [`a tab-order row (${KEYBOARD})`, reachedPaths(between(keyboard, "test.describe('tab order'", "test.describe('"))],
   ]
   return pageRoutes().flatMap((path) => {
     const missing = suites.filter(([, reached]) => !reaches(reached, path)).map(([what]) => what)
@@ -83,7 +85,7 @@ export const routeCoverageProblems = (): string[] => {
   })
 }
 
-export const routeCoverage = () => {
+export const routeCoverage = (): boolean => {
   const problems = routeCoverageProblems()
   for (const problem of problems) console.error(problem)
   return problems.length === 0

@@ -122,7 +122,7 @@ change most:
 
 - Coverage: `COVERAGE_FLOOR` and `COVERAGE_GATE` in `vitest.config.ts`. Raise the floor as coverage grows;
   add modules that must stay fully covered to the gate.
-- Lighthouse: `PAGES` and `POLICY` in `scripts/lighthouse.ts`. Add your pages; loosen the policy for a
+- Lighthouse: `PAGES` and `POLICY` in `scripts/lighthouse-policy.ts`. Add your pages; loosen the policy for a
   page with a reason, not globally.
 - Complexity and duplication: per-function overrides in `.fallowrc.json` (`health.thresholdOverrides`,
   `duplicates.ignoredClones`), never a higher global ceiling.

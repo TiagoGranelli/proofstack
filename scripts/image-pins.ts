@@ -20,7 +20,7 @@ const PATTERNS = Object.values(IMAGES).map((ref) => {
   return { ref, pattern: new RegExp(`(?<![\\w./-])${escaped}:[\\w.-]+(@sha256:[0-9a-f]{64})?`, 'g') }
 })
 
-export const pinProblems = () =>
+export const pinProblems = (): string[] =>
   PINNED_COPIES.flatMap((file) => {
     const text = readFileSync(file, 'utf8')
     return PATTERNS.flatMap(({ ref, pattern }) =>

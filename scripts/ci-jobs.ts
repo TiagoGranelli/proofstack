@@ -27,7 +27,8 @@ const run = (command: string, args: string[] = [], env: NodeJS.ProcessEnv = {}) 
   }
 }
 
-// GitHub Actions tests the build job's artifact: its file times say nothing about the checkout's.
+// GitHub Actions tests the build job's artifact, built from this commit by another job (its .output/build-inputs.json
+// should match the checkout, so this override may go once a CI run confirms it: scripts/build-freshness.ts).
 const downloadedBuild = process.env.GITHUB_ACTIONS === 'true' ? { ALLOW_STALE_BUILD: '1' } : {}
 
 /** Runs every step even after a failure, so one run shows every problem. */
@@ -41,31 +42,23 @@ const sequence = (steps: [string, () => number][]) => {
   return failed.length ? 1 : 0
 }
 
+/** `docker run` options for a linter: no network, and this checkout read-only in /repo. */
+const OFFLINE = ['--rm', '--network', 'none', '--memory', '512m']
+const CHECKOUT_READ_ONLY = ['--volume', `${process.cwd()}:/repo:ro`, '--workdir', '/repo']
+const ZIZMOR = [IMAGES.zizmor, '--offline', '--config', '.github/zizmor.yml', '.']
+
 /** actionlint (with shellcheck) and zizmor from their pinned images, offline and read-only. */
-const workflows = () => {
-  const mount = ['--rm', '--network', 'none', '--memory', '512m', '--volume', `${process.cwd()}:/repo:ro`]
-  const steps: [string, () => number][] = [
-    ['actionlint', () => run('docker', ['run', ...mount, '--workdir', '/repo', IMAGES.actionlint, '-color'])],
-    [
-      'zizmor',
-      () =>
-        run('docker', [
-          'run',
-          ...mount,
-          '--workdir',
-          '/repo',
-          IMAGES.zizmor,
-          '--offline',
-          '--config',
-          '.github/zizmor.yml',
-          '.',
-        ]),
-    ],
+const workflows = () =>
+  sequence([
+    ['actionlint', () => run('docker', ['run', ...OFFLINE, ...CHECKOUT_READ_ONLY, IMAGES.actionlint, '-color'])],
+    ['zizmor', () => run('docker', ['run', ...OFFLINE, ...CHECKOUT_READ_ONLY, ...ZIZMOR])],
     ['image pins', imagePins],
     ['deploy recipes', deployRecipes],
-  ]
-  return sequence(steps)
-}
+  ])
+
+const EXAMPLE_DEPLOY = ['-f', 'deploy/compose.production.yaml', '--env-file', 'deploy/deploy.env.example']
+const DEPLOY_READ_ONLY = ['--volume', `${process.cwd()}/deploy:/deploy:ro`]
+const KUBERNETES_1_33 = ['-strict', '-summary', '-kubernetes-version', '1.33.0', '/deploy/kubernetes.yaml']
 
 /**
  * The production compose file resolves with the example settings, and the Kubernetes manifests match the
@@ -73,32 +66,11 @@ const workflows = () => {
  */
 const deployRecipes = () =>
   sequence([
-    [
-      'compose.production.yaml',
-      () =>
-        run(
-          'docker',
-          ['compose', '-f', 'deploy/compose.production.yaml', '--env-file', 'deploy/deploy.env.example'].concat([
-            'config',
-            '--quiet',
-          ]),
-        ),
-    ],
+    ['compose.production.yaml', () => run('docker', ['compose', ...EXAMPLE_DEPLOY, 'config', '--quiet'])],
     [
       'kubernetes.yaml',
       () =>
-        run(
-          'docker',
-          [
-            'run',
-            '--rm',
-            '--memory',
-            '256m',
-            '--volume',
-            `${process.cwd()}/deploy:/deploy:ro`,
-            IMAGES.kubeconform,
-          ].concat(['-strict', '-summary', '-kubernetes-version', '1.33.0', '/deploy/kubernetes.yaml']),
-        ),
+        run('docker', ['run', '--rm', '--memory', '256m', ...DEPLOY_READ_ONLY, IMAGES.kubeconform, ...KUBERNETES_1_33]),
     ],
   ])
 

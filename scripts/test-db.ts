@@ -15,7 +15,7 @@ const assertTestName = (name: string) => {
 const adminUrl = (url: string) => Object.assign(new URL(url), { pathname: '/postgres' }).toString()
 
 /** The base DATABASE_URL (from the environment or .env), with a message that says how to get one. */
-export const baseDatabaseUrl = () => {
+export const baseDatabaseUrl = (): string => {
   if (!process.env.DATABASE_URL && existsSync('.env')) process.loadEnvFile('.env')
   const url = process.env.DATABASE_URL?.trim()
   if (!url)
@@ -31,7 +31,7 @@ export const baseDatabaseUrl = () => {
  * URL of this process's test database: `override` (an env var such as DRIFT_DATABASE_URL) when set, otherwise
  * DATABASE_URL with the database name replaced by `app_<purpose>_<pid>_test`.
  */
-export const testDatabaseUrl = (purpose: string, override?: string) => {
+export const testDatabaseUrl = (purpose: string, override?: string): string => {
   const url = override?.trim()
     ? new URL(override.trim())
     : Object.assign(new URL(baseDatabaseUrl()), { pathname: `/app_${purpose}_${process.pid}_test` })
@@ -66,7 +66,7 @@ const administer = async (testUrl: string, statements: (name: string) => string[
   }
 }
 
-export const dropTestDatabase = (testUrl: string) =>
+export const dropTestDatabase = (testUrl: string): Promise<void> =>
   administer(testUrl, (name) => [`drop database if exists "${name}" with (force)`])
 
 /** A per-run database name (`testDatabaseUrl`) and the pid of the run that made it. */
@@ -81,6 +81,12 @@ const isRunning = (pid: number) => {
   }
 }
 
+/** Whether `name` is a per-run database of another run that is gone. */
+const isAbandoned = (name: string) => {
+  const pid = Number(RUN_DATABASE.exec(name)?.[1])
+  return Boolean(pid) && pid !== process.pid && !isRunning(pid)
+}
+
 /**
  * Drops the per-run databases of runs that are gone. A run stopped with Ctrl-C or killed never reaches the
  * `finally` that drops its own, and each one would stay on the server for good.
@@ -89,25 +95,22 @@ const dropAbandoned = async (testUrl: string) => {
   const admin = await connectAdmin(testUrl)
   try {
     const { rows } = await admin.query<{ datname: string }>('select datname from pg_database')
-    for (const { datname } of rows) {
-      const pid = Number(RUN_DATABASE.exec(datname)?.[1])
-      // `if exists`: another run's sweep may drop the same one first.
-      if (pid && pid !== process.pid && !isRunning(pid))
-        await admin.query(`drop database if exists "${datname}" with (force)`)
-    }
+    // `if exists`: another run's sweep may drop the same one first.
+    for (const name of rows.map(({ datname }) => datname).filter((datname) => isAbandoned(datname)))
+      await admin.query(`drop database if exists "${name}" with (force)`)
   } finally {
     await admin.end()
   }
 }
 
 /** Recreates the test database, empty, after dropping the ones abandoned by runs that no longer exist. */
-export const emptyTestDatabase = async (testUrl: string) => {
+export const emptyTestDatabase = async (testUrl: string): Promise<void> => {
   await dropAbandoned(testUrl)
   await administer(testUrl, (name) => [`drop database if exists "${name}" with (force)`, `create database "${name}"`])
 }
 
 /** Recreates an empty test database and applies every migration in drizzle/. */
-export const resetTestDatabase = async (testUrl: string) => {
+export const resetTestDatabase = async (testUrl: string): Promise<void> => {
   await emptyTestDatabase(testUrl)
   const pool = new Pool({ connectionString: testUrl })
   // Postgres NOTICEs ("schema drizzle already exists, skipping") are noise here.
@@ -120,7 +123,7 @@ export const resetTestDatabase = async (testUrl: string) => {
 }
 
 /** Sessions other than our own connected to the test database, e.g. an app that did not close its pool. */
-export const openConnections = async (testUrl: string) => {
+export const openConnections = async (testUrl: string): Promise<{ application_name: string; n: number }[]> => {
   const name = assertTestName(new URL(testUrl).pathname.slice(1))
   const admin = await connectAdmin(testUrl)
   try {
@@ -137,7 +140,8 @@ export const openConnections = async (testUrl: string) => {
 
 if (import.meta.main) {
   const url = process.env.TEST_DATABASE_URL
-  if (!url) throw new Error('TEST_DATABASE_URL is required (a postgres:// URL whose database name ends in _test)')
+  if (!url)
+    throw new Error('TEST_DATABASE_URL is not set; expected a postgres:// URL whose database name ends in _test')
   await resetTestDatabase(url)
   console.log(`reset ${new URL(url).pathname.slice(1)} and applied migrations`)
 }
