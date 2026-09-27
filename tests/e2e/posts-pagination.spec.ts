@@ -26,7 +26,11 @@ const loadMoreWithKeyboard = async (page: Page, testId: string, key: 'Enter' | '
 }
 
 test.describe('as the seeded author', () => {
-  test.use({ storageState: PAGINATED_AUTHOR.storageState })
+  test.use({
+    // Playwright reads the fixtures a fixture uses from its first parameter, which must be a destructuring.
+    // oxlint-disable-next-line no-empty-pattern
+    storageState: async ({}, provide, testInfo) => provide(PAGINATED_AUTHOR.storageState(testInfo)),
+  })
 
   test('the dashboard renders the first page on the server and loads the rest with Load more', async ({ page }) => {
     const listRequests: string[] = []
