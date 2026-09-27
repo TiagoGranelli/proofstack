@@ -65,7 +65,8 @@
     "ci:verify": "node scripts/ci-jobs.ts verify",
     "ci:lighthouse": "node scripts/ci-jobs.ts lighthouse",
     "ci:docker": "node scripts/ci-jobs.ts docker",
-    "ci:local": "node scripts/ci-local.ts"
+    "ci:local": "node scripts/ci-local.ts",
+    "agent-eval": "node scripts/agent-eval.ts"
   },
   "dependencies": {
     "@better-auth/drizzle-adapter": "1.7.6",

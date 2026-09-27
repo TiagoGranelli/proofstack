@@ -16,3 +16,4 @@ sbom/
 !.env.example
 .DS_Store
 .claude/worktrees/
+evals/results/
