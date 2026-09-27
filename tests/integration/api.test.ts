@@ -33,7 +33,7 @@ const create = async (client: ReturnType<typeof sdkClient>, body: string) => {
 
 describe('contract', () => {
   it('serves exactly the committed openapi.json', async () => {
-    const served = await (await fetch(`${appUrl}/api/openapi.json`)).json()
+    const served: unknown = await (await fetch(`${appUrl}/api/openapi.json`)).json()
     expect(served).toEqual(JSON.parse(readFileSync('openapi.json', 'utf8')))
   })
 

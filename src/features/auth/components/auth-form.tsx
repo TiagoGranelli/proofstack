@@ -18,7 +18,7 @@ export function AuthForm(props: {
   submitVariant?: 'default' | 'destructive'
   pending: boolean
   /** The mutation's error, if the last attempt failed. */
-  error: unknown
+  error: Error | null
   onSubmit: (form: FormData) => void
   children: ReactNode
 }) {

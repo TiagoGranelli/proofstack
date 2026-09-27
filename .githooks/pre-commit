@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# Opt-in: `pnpm hooks:install` (sets git core.hooksPath to .githooks); undo with `pnpm hooks:uninstall`.
+# Active by default: `pnpm install` runs the `prepare` script, which sets git core.hooksPath to .githooks
+# (`pnpm hooks:uninstall` turns it off until the next install). `git commit --no-verify` skips it once, so it is a
+# convenience, not a control: CI runs the same gates on every push and pull request.
 # Runs `pnpm check` (the same static gates as CI) on exactly what is being committed. The tree about to be
 # committed is copied into a temporary directory and checked there, so the working tree, the index, the
 # stash and any merge or cherry-pick state are never touched: unstaged edits, untracked files and edits
-# made while the check runs stay where they are. Bypass once with `git commit --no-verify`.
+# made while the check runs stay where they are.
 set -euo pipefail
 
 # Nothing staged (e.g. `git commit --allow-empty`): nothing to check.
@@ -36,6 +38,15 @@ mkdir "$tmp/tree"
 GIT_INDEX_FILE="$tmp/.index" git read-tree "$tree"
 GIT_INDEX_FILE="$tmp/.index" git checkout-index --all --prefix="$tmp/tree/"
 rm -f "$tmp/.index"
+
+# Baselines for the gates that compare with what is already committed (scripts/check.ts): HEAD's drizzle/ for the
+# applied-migrations guard, and the diff being committed for the `security` gate. The copy has no git history.
+mkdir "$tmp/base"
+if git rev-parse --verify --quiet HEAD:drizzle >/dev/null; then
+  git archive HEAD drizzle | tar -x -C "$tmp/base"
+fi
+git diff --cached --no-color --no-ext-diff --src-prefix=a/ --dst-prefix=b/ >"$tmp/staged.diff"
+export PROOFSTACK_BASE_DIR="$tmp/base" PROOFSTACK_DIFF_FILE="$tmp/staged.diff"
 
 # The gates resolve binaries and packages through this link. They do not depend on git, and none of them
 # writes into the repository (check-drift works in its own temporary directory).

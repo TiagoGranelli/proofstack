@@ -7,7 +7,7 @@
 // With `tls`, the edge serves https://localhost:<port> with a certificate from Caddy's internal CA, over
 // HTTP/2 and HTTP/3 as production does with a public certificate. This process then trusts that CA for its
 // own requests, and `certificateSpki` lets a browser trust exactly the served key.
-import { spawn, spawnSync } from 'node:child_process'
+import { type ChildProcess, spawn, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -29,6 +29,95 @@ const CADDYFILE = resolve('deploy/Caddyfile')
 /** Caddy's internal root certificate, relative to its data directory. */
 const ROOT_CERTIFICATE = 'caddy/pki/authorities/local/root.crt'
 
+type EdgeEnv = Record<'EDGE_ADDRESS' | 'EDGE_UPSTREAM' | 'EDGE_TRUSTED_PROXIES' | 'EDGE_HTTP_PORT', string>
+
+/** How EDGE_RUNTIME runs Caddy: a local binary, or the pinned image on the host network (pulled if missing). */
+const edgeCommand = (runtime: string, container: string, env: EdgeEnv) => {
+  if (runtime === 'binary')
+    return { command: process.env.CADDY_BIN || 'caddy', args: ['run', '--adapter', 'caddyfile', '--config', CADDYFILE] }
+  if (runtime !== 'docker') throw new Error(`EDGE_RUNTIME must be docker or binary, not ${runtime}`)
+  if (spawnSync('docker', ['image', 'inspect', IMAGES.caddy], { stdio: 'ignore' }).status !== 0)
+    spawnSync('docker', ['pull', '--quiet', IMAGES.caddy], { stdio: 'inherit' })
+  const args = [
+    'run',
+    '--rm',
+    '--name',
+    container,
+    '--network',
+    'host',
+    '--memory',
+    '256m',
+    '--read-only',
+    '--tmpfs',
+    '/data',
+    '--tmpfs',
+    '/config',
+    ...Object.keys(env).flatMap((key) => ['--env', key]),
+    '--volume',
+    `${CADDYFILE}:/etc/caddy/Caddyfile:ro`,
+    IMAGES.caddy,
+    'caddy',
+    'run',
+    '--adapter',
+    'caddyfile',
+    '--config',
+    '/etc/caddy/Caddyfile',
+  ]
+  return { command: 'docker', args }
+}
+
+/**
+ * Stops the edge (SIGKILL after 10 s) and removes what it left: the container, or the binary's data directory.
+ * The same cleanup runs if this process exits first.
+ */
+const edgeStopper = (child: ChildProcess, container: string | undefined, dataHome: string | undefined) => {
+  const exited = new Promise<void>((done) => child.once('exit', () => done()))
+  const cleanUp = () => {
+    if (container) spawnSync('docker', ['rm', '--force', container], { stdio: 'ignore' })
+    if (dataHome) rmSync(dataHome, { recursive: true, force: true })
+  }
+  process.once('exit', cleanUp)
+  return async () => {
+    if (child.exitCode === null && child.signalCode === null) {
+      if (container) spawnSync('docker', ['stop', '--timeout', '5', container], { stdio: 'ignore' })
+      else child.kill('SIGTERM')
+      const killer = setTimeout(() => child.kill('SIGKILL'), 10_000)
+      await exited
+      clearTimeout(killer)
+    }
+    cleanUp()
+    process.off('exit', cleanUp)
+  }
+}
+
+/**
+ * Polls for up to 30 s until the edge answers /api/ready. With `certificateSpki` (TLS), that runs first on every
+ * attempt until it succeeds. Throws at once if the edge exits.
+ */
+const waitForEdge = async (edge: {
+  child: ChildProcess
+  command: string
+  url: string
+  logFile: string
+  certificateSpki: (() => Promise<string>) | undefined
+}) => {
+  let certificateSpki: string | undefined
+  for (let attempt = 0; attempt < 120; attempt++) {
+    if (edge.child.exitCode !== null || edge.child.signalCode !== null)
+      throw new Error(
+        `the edge (${edge.command}) exited with ${edge.child.exitCode ?? edge.child.signalCode}; see ${edge.logFile}`,
+      )
+    try {
+      certificateSpki ??= await edge.certificateSpki?.()
+      if ((await fetch(`${edge.url}/api/ready`)).ok) return { ready: true, certificateSpki }
+    } catch {
+      // Not listening yet: try again below.
+    }
+    await new Promise((r) => setTimeout(r, 250))
+  }
+  return { ready: false, certificateSpki }
+}
+
 export const startEdge = async (options: {
   /** Port the edge listens on (all interfaces, like the app). */
   port: string
@@ -43,7 +132,7 @@ export const startEdge = async (options: {
   tls?: { httpPort: string }
   logFile: string
 }): Promise<RunningEdge> => {
-  const env = {
+  const env: EdgeEnv = {
     EDGE_ADDRESS: options.tls ? `https://localhost:${options.port}` : `:${options.port}`,
     EDGE_UPSTREAM: `127.0.0.1:${options.upstreamPort}`,
     EDGE_TRUSTED_PROXIES: options.trustedProxies ?? '',
@@ -51,44 +140,10 @@ export const startEdge = async (options: {
   }
   const runtime = process.env.EDGE_RUNTIME ?? 'docker'
   const name = `${dockerPrefix()}-edge-${process.pid}-${options.port}`
+  const { command, args } = edgeCommand(runtime, name, env)
   // The binary keeps its CA and certificates here (XDG_DATA_HOME); the container in its /data tmpfs.
   const dataHome = runtime === 'binary' ? mkdtempSync(join(tmpdir(), 'proofstack-edge-')) : undefined
-  let command: string
-  let args: string[]
-  if (runtime === 'binary') {
-    command = process.env.CADDY_BIN || 'caddy'
-    args = ['run', '--adapter', 'caddyfile', '--config', CADDYFILE]
-  } else if (runtime === 'docker') {
-    command = 'docker'
-    args = [
-      'run',
-      '--rm',
-      '--name',
-      name,
-      '--network',
-      'host',
-      '--memory',
-      '256m',
-      '--read-only',
-      '--tmpfs',
-      '/data',
-      '--tmpfs',
-      '/config',
-      ...Object.keys(env).flatMap((key) => ['--env', key]),
-      '--volume',
-      `${CADDYFILE}:/etc/caddy/Caddyfile:ro`,
-      IMAGES.caddy,
-      'caddy',
-      'run',
-      '--adapter',
-      'caddyfile',
-      '--config',
-      '/etc/caddy/Caddyfile',
-    ]
-  } else throw new Error(`EDGE_RUNTIME must be docker or binary, not ${runtime}`)
 
-  if (runtime === 'docker' && spawnSync('docker', ['image', 'inspect', IMAGES.caddy], { stdio: 'ignore' }).status !== 0)
-    spawnSync('docker', ['pull', '--quiet', IMAGES.caddy], { stdio: 'inherit' })
   mkdirSync(dirname(options.logFile), { recursive: true })
   const log = openSync(options.logFile, 'w')
   const child = spawn(command, args, {
@@ -100,41 +155,23 @@ export const startEdge = async (options: {
     },
   })
   closeSync(log)
-  const exited = new Promise<void>((done) => child.once('exit', () => done()))
   child.once('error', () => {})
-  // A crash of this process must not leave the container or the CA behind.
-  const cleanUp = () => {
-    if (runtime === 'docker') spawnSync('docker', ['rm', '--force', name], { stdio: 'ignore' })
-    if (dataHome) rmSync(dataHome, { recursive: true, force: true })
-  }
-  process.once('exit', cleanUp)
-
-  const stop = async () => {
-    if (child.exitCode === null && child.signalCode === null) {
-      if (runtime === 'docker') spawnSync('docker', ['stop', '--timeout', '5', name], { stdio: 'ignore' })
-      else child.kill('SIGTERM')
-      const killer = setTimeout(() => child.kill('SIGKILL'), 10_000)
-      await exited
-      clearTimeout(killer)
-    }
-    cleanUp()
-    process.off('exit', cleanUp)
-  }
+  const stop = edgeStopper(child, runtime === 'docker' ? name : undefined, dataHome)
 
   const url = options.tls ? `https://localhost:${options.port}` : `http://localhost:${options.port}`
-  let certificateSpki: string | undefined
-  for (let attempt = 0; attempt < 120; attempt++) {
-    if (child.exitCode !== null || child.signalCode !== null)
-      throw new Error(`the edge (${command}) exited with ${child.exitCode ?? child.signalCode}; see ${options.logFile}`)
-    try {
-      if (options.tls && !certificateSpki) {
-        trustCertificateAuthority(readRootCertificate(name, dataHome))
-        certificateSpki = await servedCertificateSpki(options.port)
-      }
-      if ((await fetch(`${url}/api/ready`)).ok) return { url, certificateSpki, stop }
-    } catch {}
-    await new Promise((r) => setTimeout(r, 250))
-  }
+  const { ready, certificateSpki } = await waitForEdge({
+    child,
+    command,
+    url,
+    logFile: options.logFile,
+    certificateSpki: options.tls
+      ? () => {
+          trustCertificateAuthority(readRootCertificate(name, dataHome))
+          return servedCertificateSpki(options.port)
+        }
+      : undefined,
+  })
+  if (ready) return { url, certificateSpki, stop }
   await stop()
   throw new Error(`the edge did not answer /api/ready in 30 s; see ${options.logFile}`)
 }
@@ -163,7 +200,10 @@ const servedCertificateSpki = (port: string) =>
     const socket = connect({ host: '127.0.0.1', port: Number(port), servername: 'localhost' }, () => {
       const certificate = socket.getPeerX509Certificate()
       socket.end()
-      if (!certificate) return reject(new Error('the edge sent no certificate'))
+      if (!certificate) {
+        reject(new Error('the edge sent no certificate'))
+        return
+      }
       resolveSpki(
         createHash('sha256')
           .update(certificate.publicKey.export({ type: 'spki', format: 'der' }))

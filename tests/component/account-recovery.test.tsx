@@ -87,7 +87,8 @@ describe('SignUpForm', () => {
     await expect.element(formOf('Create account')).toHaveAccessibleDescription(message)
     await expect.element(button('Create account')).toHaveFocus()
     await expect.element(password()).toHaveValue('a long enough password')
-    if (failure !== 'network') expect(document.body.textContent).not.toContain(failure.code)
+    // No raw Better Auth code (SCREAMING_SNAKE_CASE) reaches the page, whatever the failure.
+    expect(document.body.textContent).not.toMatch(/\b[A-Z]+(?:_[A-Z]+)+\b/)
   })
 })
 

@@ -87,7 +87,7 @@ describe('MyPost', () => {
         return HttpResponse.json({ ...original, body: 'The new body', updatedAt: '2026-01-03T00:00:00.000Z' })
       }),
     )
-    const onUpdated = vi.fn()
+    const onUpdated = vi.fn<() => void>()
     const { queryClient } = await renderInApp(<MyPost post={original} onUpdated={onUpdated} />)
     queryClient.setQueryData(getMyPostsQueryOptions().queryKey, postPages(postPage([original])))
     await startEditing()
@@ -134,7 +134,7 @@ describe('MyPost', () => {
   ]
   it.each(saveFailures)('keeps the draft on $name, then Cancel clears the error', async ({ handler, message }) => {
     worker.use(handler())
-    const onUpdated = vi.fn()
+    const onUpdated = vi.fn<() => void>()
     await renderInApp(<MyPost post={original} onUpdated={onUpdated} />)
     await startEditing()
     await field().fill('my draft')
@@ -162,7 +162,7 @@ describe('MyPost', () => {
         return new HttpResponse(null, { status: 204 })
       }),
     )
-    const onDeleted = vi.fn()
+    const onDeleted = vi.fn<() => void>()
     const { queryClient } = await renderInApp(<MyPost post={original} onDeleted={onDeleted} />)
     queryClient.setQueryData(getMyPostsQueryOptions().queryKey, postPages(postPage([original])))
     await deleteButton().click()
@@ -177,7 +177,7 @@ describe('MyPost', () => {
 
   it('stays quiet when the post was already deleted elsewhere, and refreshes the lists', async () => {
     worker.use(apiError('myPostsRemove', 404, { _tag: 'PostNotFound', id: original.id }))
-    const onDeleted = vi.fn()
+    const onDeleted = vi.fn<() => void>()
     const { queryClient } = await renderInApp(<MyPost post={original} onDeleted={onDeleted} />)
     queryClient.setQueryData(getPublicPostsQueryOptions().queryKey, postPages(postPage([original])))
     await deleteButton().click()

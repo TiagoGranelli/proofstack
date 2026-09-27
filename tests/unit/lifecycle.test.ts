@@ -53,7 +53,7 @@ describe('runShutdown', () => {
 
   it('logs a failed step and still runs the later ones, once', async () => {
     const lines = logged()
-    const pool = vi.fn()
+    const pool = vi.fn<() => void>()
     onShutdown('mailer', () => {
       throw new Error('smtp gone')
     })

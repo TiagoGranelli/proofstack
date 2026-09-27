@@ -50,7 +50,7 @@ describe('open sign-up', () => {
     expect(value).toEqual({ ok: true, value: null })
     // No session before verification (requireEmailVerification, autoSignIn off).
     expect(
-      response.headers.getSetCookie().filter((cookie) => cookie.includes('session_token=') && !/=;/.test(cookie)),
+      response.headers.getSetCookie().filter((cookie) => cookie.includes('session_token=') && !cookie.includes('=;')),
     ).toEqual([])
     const signIn = await postSignIn(account, { 'x-forwarded-for': nextIp() })
     expect(signIn.status).toBe(403)

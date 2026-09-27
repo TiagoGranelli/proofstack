@@ -18,8 +18,9 @@ const serializeError = (error: unknown, depth = 0): unknown => {
   // Other thrown objects (Effect data classes, library error shapes) can hold request or response
   // data in any field: keep only what identifies them.
   if (!(error instanceof Error)) {
-    const tag = (error as { _tag?: unknown })._tag
-    return { type: error.constructor?.name ?? 'Object', ...(typeof tag === 'string' ? { _tag: tag } : {}) }
+    // `Object.create(null)` objects have no constructor, whatever the lib types say.
+    const { constructor, _tag: tag } = error as { constructor?: { name: string }; _tag?: unknown }
+    return { type: constructor?.name ?? 'Object', ...(typeof tag === 'string' ? { _tag: tag } : {}) }
   }
   const code = (error as { code?: unknown }).code
   return {

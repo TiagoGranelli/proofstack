@@ -16,7 +16,7 @@ const askHidden = (question: string) =>
   new Promise<string>((resolve, reject) => {
     let muted = false
     const output = new Writable({
-      write(chunk, encoding, callback) {
+      write(chunk: Buffer | string, encoding: BufferEncoding, callback) {
         if (!muted) stderr.write(chunk, encoding)
         callback()
       },

@@ -95,7 +95,7 @@ if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) fail(`invalid repo "${repo}"`)
 const ref =
   values.ref ?? (preset ? preset.tag(installedVersion(preset.pkg)) : fail('--ref is required without a preset'))
 const paths = (values.path ?? preset?.paths ?? fail('--path is required without a preset')).map((p) =>
-  posix.normalize(p).replace(/^\/+|\/+$/g, ''),
+  posix.normalize(p).replaceAll(/^\/+|\/+$/g, ''),
 )
 if (paths.length === 0 || paths.some((p) => p === '.' || p.startsWith('..'))) fail('paths must be repository subpaths')
 const maxDownload = Number(values['max-download-mb']) * 1024 * 1024
@@ -135,7 +135,8 @@ class ByteReader {
 
   async read(n: number) {
     if (!(await this.fill(n))) return undefined
-    const all = this.chunks.length === 1 ? this.chunks[0]! : Buffer.concat(this.chunks)
+    const [first] = this.chunks
+    const all = first && this.chunks.length === 1 ? first : Buffer.concat(this.chunks)
     const rest = all.subarray(n)
     this.chunks = rest.length > 0 ? [rest] : []
     this.length = rest.length
@@ -146,13 +147,13 @@ class ByteReader {
     let remaining = n
     while (remaining > 0) {
       if (this.length === 0 && !(await this.fill(1))) return
-      const head = this.chunks[0]!
+      const head = this.chunks.shift()
+      if (!head) return
       if (head.length <= remaining) {
         remaining -= head.length
         this.length -= head.length
-        this.chunks.shift()
       } else {
-        this.chunks[0] = head.subarray(remaining)
+        this.chunks.unshift(head.subarray(remaining))
         this.length -= remaining
         remaining = 0
       }
@@ -209,40 +210,68 @@ const counter = new Transform({
   },
 })
 
+/** A tar header block (ustar, with pax records applied by the caller). */
+const readHeader = (block: Buffer) => {
+  const size = Number.parseInt(field(block, 124, 12).trim() || '0', 8)
+  const fileName = field(block, 0, 100)
+  const prefix = field(block, 345, 155)
+  return {
+    size,
+    padded: Math.ceil(size / 512) * 512,
+    type: String.fromCodePoint(block[156] ?? 0x30),
+    path: prefix ? `${prefix}/${fileName}` : fileName,
+  }
+}
+type TarEntry = ReturnType<typeof readHeader>
+
+const readBody = async (reader: ByteReader, entry: TarEntry) =>
+  (await reader.read(entry.padded))?.subarray(0, entry.size) ?? abort('truncated archive')
+
+/** The entry's path in the repository, without the archive's top-level "<owner>-<repo>-<sha>/"; undefined if unsafe. */
+const repositoryPath = (archivePath: string) => {
+  const path = posix.normalize(archivePath.split('/').slice(1).join('/')).replace(/\/+$/, '')
+  const safe = path !== '' && path !== '.' && !path.startsWith('..') && !posix.isAbsolute(path)
+  return safe ? path : undefined
+}
+
+const isRegularFile = (type: string) => type === '0' || type === '\0'
+const isLink = (type: string) => type === '1' || type === '2'
+
+const writeFile = async (reader: ByteReader, entry: TarEntry, path: string) => {
+  extracted += entry.size
+  if (extracted > maxExtract) abort(`extracted size exceeded --max-extract-mb ${values['max-extract-mb']}`)
+  const data = await readBody(reader, entry)
+  const out = join(staging, path)
+  mkdirSync(dirname(out), { recursive: true })
+  writeFileSync(out, data)
+  files++
+  for (const p of paths) if (path === p || path.startsWith(`${p}/`)) matched.add(p)
+}
+
+/** Writes a selected regular file; skips everything else, noting selected links (they are not extracted). */
+const extractEntry = async (reader: ByteReader, entry: TarEntry, archivePath: string) => {
+  const path = repositoryPath(archivePath)
+  const wanted = path !== undefined && selected(path)
+  if (wanted && isRegularFile(entry.type)) return writeFile(reader, entry, path)
+  if (wanted && isLink(entry.type)) skippedLinks.push(path)
+  return reader.skip(entry.padded)
+}
+
+/** A tar archive ends with zero-filled blocks. */
+const isEndOfArchive = (block: Buffer) => block.every((b) => b === 0)
+
 const extract = async (source: AsyncIterable<Buffer>) => {
   const reader = new ByteReader(source[Symbol.asyncIterator]())
   let pax = new Map<string, string>()
-  for (;;) {
-    const header = await reader.read(512)
-    if (!header || header.every((b) => b === 0)) break
-    const size = Number.parseInt(field(header, 124, 12).trim() || '0', 8)
-    const type = String.fromCharCode(header[156] ?? 0x30)
-    const padded = Math.ceil(size / 512) * 512
-    if (type === 'x' || type === 'g') {
-      const records = parsePax((await reader.read(padded))?.subarray(0, size) ?? abort('truncated archive'))
-      if (type === 'g') archiveCommit = records.get('comment')
-      else pax = records
-      continue
+  for (let block = await reader.read(512); block && !isEndOfArchive(block); block = await reader.read(512)) {
+    const entry = readHeader(block)
+    // pax headers: 'g' (global) carries the commit id, 'x' overrides the next entry's fields.
+    if (entry.type === 'g') archiveCommit = parsePax(await readBody(reader, entry)).get('comment')
+    else if (entry.type === 'x') pax = parsePax(await readBody(reader, entry))
+    else {
+      await extractEntry(reader, entry, pax.get('path') ?? entry.path)
+      pax = new Map()
     }
-    const prefix = field(header, 345, 155)
-    const rawPath = pax.get('path') ?? (prefix ? `${prefix}/${field(header, 0, 100)}` : field(header, 0, 100))
-    pax = new Map()
-    // Drop the archive's top-level "<owner>-<repo>-<sha>/" directory.
-    const path = posix.normalize(rawPath.split('/').slice(1).join('/')).replace(/\/+$/, '')
-    const safe = path !== '' && path !== '.' && !path.startsWith('..') && !posix.isAbsolute(path)
-    if (!safe || !selected(path) || (type !== '0' && type !== '\0')) {
-      if (safe && selected(path) && (type === '1' || type === '2')) skippedLinks.push(path)
-      await reader.skip(padded)
-      continue
-    }
-    extracted += size
-    if (extracted > maxExtract) abort(`extracted size exceeded --max-extract-mb ${values['max-extract-mb']}`)
-    const data = (await reader.read(padded))?.subarray(0, size) ?? abort('truncated archive')
-    const out = join(staging, path)
-    mkdirSync(dirname(out), { recursive: true })
-    writeFileSync(out, data)
-    files++
-    for (const p of paths) if (path === p || path.startsWith(`${p}/`)) matched.add(p)
   }
 }
 

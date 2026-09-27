@@ -8,6 +8,8 @@ allowBuilds:
   # component tests serve the worker straight from node_modules (vitest.config.ts).
   msw: false
 engineStrict: true
+# `pnpm add` writes exact versions (package.json pins every dependency; the `guards` gate in scripts/check.ts checks).
+savePrefix: ''
 
 # Release quarantine: no version younger than one day is resolved. Set explicitly, which makes it strict: a
 # release inside the window fails the install (or prompts) instead of being appended silently to

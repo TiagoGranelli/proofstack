@@ -19,13 +19,13 @@ const CHANNELS: Record<string, { tag: string; why: string }> = {
 const DAY_MS = 24 * 60 * 60 * 1000
 
 const table = (header: string[], rows: string[][]) => {
-  const widths = header.map((cell, i) => Math.max(cell.length, ...rows.map((row) => row[i]!.length)))
+  const widths = header.map((cell, i) => Math.max(cell.length, ...rows.map((row) => (row[i] ?? '').length)))
   const line = (row: string[]) =>
     row
-      .map((cell, i) => cell.padEnd(widths[i]!))
+      .map((cell, i) => cell.padEnd(widths[i] ?? 0))
       .join('  ')
       .trimEnd()
-  return [line(header), line(widths.map((w) => '-'.repeat(w))), ...rows.map(line)].join('\n')
+  return [line(header), line(widths.map((w) => '-'.repeat(w))), ...rows.map((row) => line(row))].join('\n')
 }
 
 const problems: string[] = []

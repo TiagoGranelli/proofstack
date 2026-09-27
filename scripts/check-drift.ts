@@ -56,7 +56,9 @@ const run = (command: string, args: string[], env: NodeJS.ProcessEnv = process.e
     stdio: ['ignore', 'pipe', 'pipe'],
     timeout: 120_000,
   })
-  const output = `${result.stdout ?? ''}${result.stderr ?? ''}`
+  // Node types these as strings, but a stream that is not piped, or a command that did not start, gives null.
+  const { stdout, stderr } = result as { stdout: string | null; stderr: string | null }
+  const output = `${stdout ?? ''}${stderr ?? ''}`
   // A drizzle-kit rename prompt cannot be answered without a TTY; it ends here as a failure or a timeout.
   if (result.status !== 0)
     throw new Error(`${command} ${args.join(' ')} failed (${result.status ?? result.signal})\n${output}`)
@@ -115,7 +117,9 @@ const checks = {
       timeout: 120_000,
     })
     if (result.status === 0) return []
-    const report = `${result.stdout ?? ''}${result.stderr ?? ''}`.trim()
+    // Node types these as strings, but a stream that is not piped, or a command that did not start, gives null.
+    const { stdout, stderr } = result as { stdout: string | null; stderr: string | null }
+    const report = `${stdout ?? ''}${stderr ?? ''}`.trim()
     return [`src/server/db/schema/auth.ts does not hold what src/server/auth.ts writes:\n${report}`]
   },
 

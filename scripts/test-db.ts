@@ -55,26 +55,23 @@ const connectAdmin = async (url: string) => {
   return admin
 }
 
-export const dropTestDatabase = async (testUrl: string) => {
+/** Runs `statements(name)` one after the other on the server of the test database `name` in `testUrl`. */
+const administer = async (testUrl: string, statements: (name: string) => string[]) => {
   const name = assertTestName(new URL(testUrl).pathname.slice(1))
   const admin = await connectAdmin(testUrl)
   try {
-    await admin.query(`drop database if exists "${name}" with (force)`)
+    for (const statement of statements(name)) await admin.query(statement)
   } finally {
     await admin.end()
   }
 }
 
+export const dropTestDatabase = (testUrl: string) =>
+  administer(testUrl, (name) => [`drop database if exists "${name}" with (force)`])
+
 /** Recreates an empty test database and applies every migration in drizzle/. */
 export const resetTestDatabase = async (testUrl: string) => {
-  const name = assertTestName(new URL(testUrl).pathname.slice(1))
-  const admin = await connectAdmin(testUrl)
-  try {
-    await admin.query(`drop database if exists "${name}" with (force)`)
-    await admin.query(`create database "${name}"`)
-  } finally {
-    await admin.end()
-  }
+  await administer(testUrl, (name) => [`drop database if exists "${name}" with (force)`, `create database "${name}"`])
   const pool = new Pool({ connectionString: testUrl })
   // Postgres NOTICEs ("schema drizzle already exists, skipping") are noise here.
   pool.on('connect', (client) => client.on('notice', () => {}))

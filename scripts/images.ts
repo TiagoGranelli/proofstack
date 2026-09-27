@@ -4,6 +4,8 @@
 // `pnpm images:check` reports newer tags and rebuilt digests. Update a pin here
 // (`docker buildx imagetools inspect <name>:<tag>` prints the index digest), then `pnpm images:sync` rewrites
 // the copies.
+import { spawnSync } from 'node:child_process'
+
 export const IMAGES = {
   /** Same version as @playwright/test in package.json (browsers match the installed library). */
   playwright:
@@ -33,3 +35,18 @@ export const IMAGES = {
  * PROOFSTACK_DOCKER_PREFIX.
  */
 export const dockerPrefix = () => process.env.PROOFSTACK_DOCKER_PREFIX || 'proofstack-ci'
+
+/**
+ * Waits up to 30 s for the Postgres container `container` (IMAGES.postgres) to accept connections. -h forces
+ * TCP: the image's init phase answers on the socket before the real server is up.
+ */
+export const waitForPostgres = async (container: string) => {
+  for (let i = 0; i < 60; i++) {
+    const ready = spawnSync('docker', ['exec', container, 'pg_isready', '-h', '127.0.0.1', '-U', 'proofstack'], {
+      stdio: 'ignore',
+    })
+    if (ready.status === 0) return
+    await new Promise((r) => setTimeout(r, 500))
+  }
+  throw new Error('Postgres did not become ready in 30 s')
+}

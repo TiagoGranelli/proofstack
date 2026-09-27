@@ -47,7 +47,10 @@ describe('/api/auth/* over HTTP', () => {
 
     const session = await fetch(`${appUrl}/api/auth/get-session`, { headers: { cookie, 'x-forwarded-for': nextIp() } })
     const text = await session.text()
-    expect(JSON.parse(text)).toMatchObject({ user: { email: account.email }, session: { userId: expect.any(String) } })
+    expect(JSON.parse(text)).toMatchObject({
+      user: { email: account.email },
+      session: { userId: expect.any(String) as unknown },
+    })
     expect(text).not.toContain(tokenOf(cookie))
 
     const res = await fetch(`${appUrl}/api/auth/sign-in/email`, {

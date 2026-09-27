@@ -57,7 +57,8 @@ describe.runIf(production)('database failure', () => {
   }, 60_000)
 
   afterAll(async () => {
-    await app?.stop()
+    // Still unassigned when beforeAll failed before the app started.
+    await (app as RunningApp | undefined)?.stop()
     if (databaseUrl) await dropTestDatabase(databaseUrl)
   })
 

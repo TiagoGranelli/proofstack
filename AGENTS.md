@@ -119,7 +119,7 @@ Postgres and Mailpit (`pnpm mail:up`, the local inbox for account emails), and a
 
 | Command | Covers |
 | --- | --- |
-| `pnpm check` | `format:check`, `lint` (zero warnings: `--deny-warnings`, every rule is error or off), `typecheck`, `deadcode` (Fallow with `--fail-on-issues`: unused files, exports, types and dependencies, zones), `tests` (`pnpm test:fast`: Vitest projects `unit`, `api` and `component` with the coverage gate, see [Tests](#tests)), the database-free drift checks (contract, migrations, auth), `migration-lint` (`pnpm check:migrations`: squawk over the migrations after 0004), `licenses` (`pnpm licenses:check`: every production dependency under an allowed license, `scripts/licenses.ts`) and repo guards (including kebab-case folder names). No database, no build, about 9 s. Needs Playwright's Chromium, and the network once to download the pinned squawk binary into `~/.cache/proofstack`. Run it before every hand-off. |
+| `pnpm check` | `format:check`, `lint` (type-aware Oxlint with the `pedantic` category and TanStack Query/Router rules; zero warnings: `--deny-warnings`, every rule is error or off), `typecheck`, `effect` (Effect language-service diagnostics, `effect-tsgo`), `deadcode` (Fallow with `--fail-on-issues`: unused files, exports, types and dependencies, zones), `complexity` (Fallow: cognitive 15, cyclomatic 20 per function), `dupes` (any clone group outside generated code and tests), `security` (new security-sink candidates in `src/` since `HEAD`), `tests` (`pnpm test:fast`: Vitest projects `unit`, `api` and `component` with the coverage gate, see [Tests](#tests)), the database-free drift checks (contract, migrations, auth), `migration-lint` (`pnpm check:migrations`: squawk over the migrations after 0004), `licenses` (`pnpm licenses:check`: every production dependency under an allowed license) and `guards` (see [Gates](#gates-and-escape-hatches)). No database, no build, about 12 s. Needs Playwright's Chromium, and the network once to download the pinned squawk binary into `~/.cache/proofstack`. Run it before every hand-off; the pre-commit hook runs it on what you commit. |
 | `pnpm test:unit\|test:api\|test:component [filter ...]` | One fast layer (see [Tests](#tests)); `pnpm test:fast` runs all three with coverage |
 | `pnpm format`, `pnpm lint:fix` | Autofixes |
 | `pnpm check:drift [contract\|migrations\|auth\|database]` | Checks that generated files match their sources and that the auth schema holds what Better Auth writes; `database` needs Postgres |
@@ -135,6 +135,35 @@ Postgres and Mailpit (`pnpm mail:up`, the local inbox for account emails), and a
 `APP_URL`; both also need `CLOSED_APP_URL` and `MAILPIT_URL`, the integration tests `TEST_USER_*`, and E2E
 the app's own environment (`DATABASE_URL` and the rest, to create its authors). `verify:app` provides all
 of it.
+
+### Gates and escape hatches
+
+Fix what a gate reports; every failure message says how. `pnpm install` activates the pre-commit hook
+(`prepare` sets `core.hooksPath` unless the clone already has one); `git commit --no-verify` skips it, and CI runs the same gates anyway. An
+exception is always a visible edit next to its reason, and `.github/CODEOWNERS` routes the gate files to review:
+
+- **Lint:** a rule that is wrong for one line takes `// oxlint-disable-next-line <rule>` under a comment line
+  saying why (the `bare-disable` guard rejects one without; a stale directive fails). `@ts-expect-error` needs a
+  reason of 10 or more characters; `@ts-ignore` and `@ts-nocheck` are banned. Turned-off rules are commented in
+  `.oxlintrc.json`.
+- **effect:** the JSDoc tag or `@effect-diagnostics` comment the diagnostic names, with the reason (see
+  `Authentication` in `src/contract/middleware.ts`).
+- **complexity:** split the function into named steps. A function that is irreducible gets a
+  `health.thresholdOverrides` entry in `.fallowrc.json` with its reason. **dupes:** extract the shared code; a
+  deliberate clone goes in `duplicates.ignoredClones`. **security:** keep untrusted input away from the sink; a
+  reviewed false positive gets `// fallow-ignore-next-line security-sink` with the reason.
+- **guards** (`scripts/check.ts`): `focused-test` (`.only`, `.fixme`, `.todo`), `skipped-test` (a skip without
+  a condition; `test.skip(({ isMobile }) => isMobile, 'reason')` is fine), `test-sleep` (fixed waits in
+  component, integration and E2E tests), `tautology` (`expect(<literal>)`), `double-cast` (`as unknown as` in
+  `src`) and `cors` accept `// guards-allow <guard>: <reason>` on the line above. The others use allowlists in
+  `scripts/check.ts`: `vite-env` (`PUBLIC_VITE_ENV`), `openapi-security` (`PUBLIC_OPERATIONS`: operations
+  without a session), `server-routes` (`SERVER_ROUTES`: the only Start server routes). `exact-versions`,
+  `server-fn-validator` (Effect Schema only), `applied-migrations` (migrations in the journal at `HEAD` never
+  change; on CI, at `HEAD^`) and `bare-disable` have no exception.
+- **migration-lint:** make the migration safe, or waive one statement with `-- squawk-ignore <rule>` under a
+  comment line giving the reason ([docs/operations.md](docs/operations.md#migration-safety)). **licenses:** an
+  acceptable license goes in `ALLOWED` in `scripts/licenses.ts`, one exact version in `EXCEPTIONS`, each with the
+  reason. **audit:check** and the image scan: `security/*-allowlist.json` entries need a reason and an expiry.
 
 **Lighthouse policy** (`POLICY` in `scripts/lighthouse.ts`): per page and form factor, accessibility, best
 practices and SEO must score 100 on every run; performance needs a median of at least 99, at most one run
@@ -249,13 +278,15 @@ Regenerate these files; never edit them by hand:
 
 - `src/sdk/**` and `openapi.json`: `pnpm codegen`
 - `src/routeTree.gen.ts`: `pnpm dev` or `pnpm build`
-- `drizzle/**`: `pnpm db:generate` (only the new SQL file may be adjusted by hand, before it is applied anywhere)
+- `drizzle/**`: `pnpm db:generate` (only the new SQL file may be adjusted by hand, before it is committed; the
+  `applied-migrations` guard rejects edits to migrations already in the journal)
 - `.agents/skills/**`, `.claude/skills/**`, and `skills-lock.json`: the `skills` CLI
 - `repos/**`: `scripts/vendor-source.ts`
 
 ## Version policy
 
-- `package.json` uses exact versions, and `pnpm-lock.yaml` is committed with them. pnpm 12 blocks dependency build scripts (`allowBuilds`) and quarantines fresh releases
+- `package.json` uses exact versions (`savePrefix: ''`; the `exact-versions` guard checks), and `pnpm-lock.yaml` is
+  committed with them. pnpm 12 blocks dependency build scripts (`allowBuilds`) and quarantines fresh releases
   (`minimumReleaseAge`, one day, strict: a younger version fails the install instead of being excluded
   silently). Each exception names an exact version and its reason in `pnpm-workspace.yaml`.
   `trustPolicy: no-downgrade` fails a version published with weaker provenance than an earlier one, and
@@ -286,7 +317,10 @@ Regenerate these files; never edit them by hand:
   `next` snapshot `0.0.0-next-20260824173136` because the stable 0.99.0 needs that API and crashes on TS 7.
   Do not "upgrade" it to 0.99.0; Dependabot ignores it ([ADR 0002](docs/decisions/0002-typescript-7.md)).
   `scripts/*.ts` run through Node's type stripping, so use erasable syntax only (no enums, namespaces,
-  or constructor parameter properties).
+  or constructor parameter properties). Effect's language service for TS 7 is `@effect/tsgo` (0.x): the tsconfig
+  plugin serves editors and `effect-tsgo diagnostics` is the `effect` gate; never run `effect-tsgo patch`. The
+  TanStack ESLint plugins (Oxlint `jsPlugins`) declare a TypeScript peer below 7; their rules use no type
+  information and run fine.
 - **Prerender.** Static routes go in `nitro({ prerender: { routes } })` in `vite.config.ts`: Nitro, the
   deployment layer, prerenders and serves them, and its `prerender:generate` hook writes each page's
   hash-based CSP ([ADR 0004](docs/decisions/0004-prerender-via-nitro.md)).
