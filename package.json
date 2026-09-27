@@ -33,6 +33,7 @@
     "lint:fix": "oxlint --type-aware --fix",
     "typecheck": "tsc --noEmit",
     "deadcode": "fallow dead-code --fail-on-issues",
+    "security:check": "fallow security --gate new --changed-since ${CHECK_BASE_REF:-HEAD} src",
     "db:up": "docker compose up -d --wait db",
     "db:down": "docker compose down",
     "mail:up": "docker compose up -d --wait mailpit",

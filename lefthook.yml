@@ -63,10 +63,11 @@ pre-commit:
         extract the duplicated block into one function and call it from both places (`pnpm exec fallow dupes --trace
         <file>:<line>` shows every copy). A deliberate clone goes in `duplicates.ignoredClones` in .fallowrc.json
 
-    # New security-sink candidates on lines changed since CHECK_BASE_REF (default HEAD: uncommitted changes).
+    # New security-sink candidates on lines changed since CHECK_BASE_REF (default HEAD: uncommitted changes). A pnpm
+    # script, because lefthook runs commands without a shell on Windows and pnpm's shell emulator expands the default.
     - name: security
       glob: 'src/**/*.{ts,tsx}'
-      run: pnpm exec fallow security --gate new --changed-since "${CHECK_BASE_REF:-HEAD}" src
+      run: pnpm run --silent security:check
       fail_text: >-
         keep untrusted input away from the sink (validate, encode, allowlist). A reviewed false positive gets
         `// fallow-ignore-next-line security-sink` above it with the reason

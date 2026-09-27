@@ -10,6 +10,9 @@ allowBuilds:
   # component tests serve the worker straight from node_modules (vitest.config.ts).
   msw: false
 engineStrict: true
+# Scripts run in pnpm's own shell on every platform, so `${VAR:-default}` and globs in package.json behave the
+# same on Windows (cmd.exe expands neither) as on Linux and macOS.
+shellEmulator: true
 # `pnpm add` writes exact versions (package.json pins every dependency; tests/unit/repo-policy.test.ts checks).
 savePrefix: ''
 
