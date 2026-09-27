@@ -78,6 +78,7 @@
     "drizzle-kit": "0.31.11",
     "fallow": "3.29.0",
     "lighthouse": "13.5.0",
+    "msw": "2.15.0",
     "nitro": "3.0.260903-beta",
     "oxfmt": "0.70.0",
     "oxlint": "1.85.0",
