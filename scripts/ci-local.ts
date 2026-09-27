@@ -33,13 +33,13 @@ const git = (...args: string[]) => spawnSync('git', args, { encoding: 'utf8', ma
 const TOP = git('rev-parse', '--show-toplevel').trim()
 const RESULTS = resolve('test-results/ci-local')
 const PROJECT = `${dockerPrefix()}-local-${process.pid}`
+/** `pnpm@<version>[+<hash>]` in package.json#packageManager. */
+const { packageManager } = JSON.parse(readFileSync('package.json', 'utf8')) as { packageManager: string }
 /** What compose.ci.yaml interpolates. */
 const env = {
   ...process.env,
   CI_DOCKER_PREFIX: dockerPrefix(),
-  PNPM_VERSION: (JSON.parse(readFileSync('package.json', 'utf8')) as { packageManager: string }).packageManager
-    .split('@')[1]
-    ?.split('+')[0],
+  PNPM_VERSION: packageManager.replace(/^pnpm@/, '').replace(/\+.*$/, ''),
   CI_LOCAL_TOP: TOP,
   CI_LOCAL_GIT: resolve(git('rev-parse', '--git-common-dir').trim()),
   CI_LOCAL_RESULTS: RESULTS,
@@ -53,17 +53,15 @@ const compose = (args: string[], input?: string) =>
     stdio: [input === undefined ? 'inherit' : 'pipe', 'inherit', 'inherit'],
   }).status ?? 1
 
-/** One step in a fresh runner container: the command, then its peak memory (compose.ci.yaml's entrypoint). */
-const inRunner = (step: string, command: string[], input?: string) =>
-  compose(
-    ['run', '--rm', ...(input === undefined ? [] : ['-T']), '-e', `STEP=${step}`].concat([
-      '-e',
-      `HOST_UID=${process.getuid?.() ?? 0}`,
-      'runner',
-      ...command,
-    ]),
-    input,
-  )
+/**
+ * One step in a fresh runner container: the command, then its peak memory and reports in RESULTS/<step>/
+ * (compose.ci.yaml's entrypoint). `input` goes to the command's stdin.
+ */
+const inRunner = (step: string, command: string[], input?: string) => {
+  const noTty = input === undefined ? [] : ['-T']
+  const owner = ['-e', `STEP=${step}`, '-e', `HOST_UID=${process.getuid?.() ?? 0}`]
+  return compose(['run', '--rm', ...noTty, ...owner, 'runner', ...command], input)
+}
 
 /**
  * The checkout CI would get, in the `work` volume: HEAD and its parent (jobs diff against HEAD^), with the files

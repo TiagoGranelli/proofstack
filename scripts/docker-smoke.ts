@@ -97,25 +97,32 @@ const appliedBy = (output: string) => {
 const migrateOnce = (...overrides: string[]) =>
   composeAsync(['run', '--rm', '--no-deps', ...overrides.flatMap((e) => ['--env', e]), 'migrate'])
 
+/** Three runs at once through the pooler: exactly one applies the migrations. */
 const migrateConcurrently = async () => {
   const outputs = await Promise.all([1, 2, 3].map(() => migrateOnce()))
   for (const output of outputs) console.log(`  pooled: ${output}`)
   const applied = outputs.map((output) => appliedBy(output)).toSorted((a, b) => (a ?? 0) - (b ?? 0))
   if (applied.join() !== `0,0,${MIGRATIONS}`)
     throw new Error(`expected one run to apply ${MIGRATIONS} migrations and two to apply none, got ${applied.join()}`)
-  // MIGRATION_DATABASE_URL (direct) wins over DATABASE_URL (the pooler).
+}
+
+/** MIGRATION_DATABASE_URL (direct) wins over DATABASE_URL (the pooler), and finds nothing to do. */
+const migrateDirectly = async () => {
   const direct = await migrateOnce(`MIGRATION_DATABASE_URL=postgres://app:${env.APP_DB_PASSWORD}@db:5432/app`)
   console.log(`  direct: ${direct}`)
   if (appliedBy(direct) !== 0) throw new Error('the direct run applied something')
-  const locks = compose(
-    ['exec', '-T', 'db', 'psql', '-U', 'postgres', '-d', 'app', '-Atc'].concat(
-      "select count(*) from pg_locks where locktype = 'advisory'",
-    ),
-  )
+  const query = "select count(*) from pg_locks where locktype = 'advisory'"
+  const locks = compose(['exec', '-T', 'db', 'psql', '-U', 'postgres', '-d', 'app', '-Atc', query])
   if (locks !== '0') throw new Error(`${locks} advisory lock(s) left behind on the pooler's server connections`)
 }
 
 const account = { email: 'first@example.test', password: randomBytes(18).toString('base64url') }
+
+/** The bundled create-user in the app's container, through the pooler, the password on stdin. */
+const createFirstAccount = () => {
+  const command = ['node', '.output/create-user.mjs', account.email, 'First User']
+  console.log(`  ${compose(['run', '--rm', '--no-deps', '-T', 'app', ...command], `${account.password}\n`)}`)
+}
 
 const checkPages = async (base: string) => {
   const problems: string[] = []
@@ -174,21 +181,9 @@ try {
   // Reported now, failed at the end: the rest of the smoke test still runs.
   scanStatus = await step('scan the image for fixable vulnerabilities (grype)', scanImage)
   await step('start Postgres and PgBouncer (transaction mode)', () => compose(['up', '--detach', '--wait', 'pooler']))
-  await step('migrate: three runs at once through the pooler, then one direct run', migrateConcurrently)
-  await step('create the first account with the bundled create-user, password on stdin', () => {
-    const args = [
-      'run',
-      '--rm',
-      '--no-deps',
-      '-T',
-      'app',
-      'node',
-      '.output/create-user.mjs',
-      account.email,
-      'First User',
-    ]
-    console.log(`  ${compose(args, `${account.password}\n`)}`)
-  })
+  await step('migrate: three runs at once through the pooler', migrateConcurrently)
+  await step('migrate: one direct run, which applies nothing', migrateDirectly)
+  await step('create the first account with the bundled create-user', createFirstAccount)
   await step('bring the stack up (migrate, app, edge)', () => compose(['up', '--detach', '--wait']))
   const base = `http://${compose(['port', 'edge', '8080'])}`
   await step(`check pages through the edge at ${base}`, () => checkPages(base))

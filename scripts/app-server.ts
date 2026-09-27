@@ -274,11 +274,46 @@ export type TestServers = {
   otherUser: User
 }
 
+type Mail = Awaited<ReturnType<typeof mailpit>>
+
+/** Open sign-up, loopback trusted as a proxy; TEST_EDGE=1 puts the reference edge in front. */
+const startOpenServer = (runner: string, databaseUrl: string, mail: Mail) =>
+  startApp({
+    databaseUrl,
+    logFile: `test-results/app-server-${runner}.log`,
+    trustedProxies: LOOPBACK,
+    // Behind the edge the test process is a proxy in front of Caddy instead: Caddy believes its
+    // X-Forwarded-For (it connects from loopback) and hands the resolved client IP to the app.
+    ...(process.env.TEST_EDGE === '1'
+      ? { edge: { trustedProxies: 'private_ranges', logFile: `test-results/edge-${runner}.log` } }
+      : {}),
+    settings: { AUTH_SIGN_UP: 'open', ...mail.settings },
+  })
+
+/** The shipped defaults next to `open`, on its database and accounts: closed sign-up, the tests not a proxy. */
+const startClosedServer = (runner: string, open: RunningApp, mail: Mail) =>
+  startApp({
+    databaseUrl: open.databaseUrl,
+    logFile: `test-results/app-server-${runner}-closed.log`,
+    trustedProxies: '10.0.0.0/8',
+    settings: { AUTH_SIGN_UP: 'closed', ...mail.settings },
+    alongside: open,
+  })
+
+const handOver = (open: RunningApp, closed: RunningApp, mail: Mail): TestServers => ({
+  appUrl: open.url,
+  closedAppUrl: closed.url,
+  mailpitUrl: mail.api,
+  databaseUrl: open.databaseUrl,
+  env: Object.fromEntries(SERVER_SETTINGS.map((name) => [name, open.env[name] ?? ''])),
+  user: open.user,
+  otherUser: open.otherUser,
+})
+
 /**
  * The two servers a test runner tests, on a fresh `app_<runner>_<pid>_test` database with two verified authors.
- * TEST_EDGE=1 puts the reference edge in front of the open server. `stop` ends both servers and drops the
- * database (KEEP_TEST_DB=1 keeps it). A run killed before `stop` (Vitest skips its teardown on Ctrl-C) leaves
- * the database behind, and the next run's sweep drops it (resetTestDatabase, scripts/test-db.ts).
+ * `stop` ends both and drops the database (KEEP_TEST_DB=1 keeps it). A run killed before `stop` (Vitest skips
+ * its teardown on Ctrl-C) leaves the database behind, and the next run's sweep drops it (scripts/test-db.ts).
  */
 export const startTestServers = async (runner: 'integration' | 'e2e') => {
   const mail = await mailpit()
@@ -289,38 +324,11 @@ export const startTestServers = async (runner: 'integration' | 'e2e') => {
     if (process.env.KEEP_TEST_DB !== '1') await dropTestDatabase(databaseUrl)
   }
   try {
-    const app = await startApp({
-      databaseUrl,
-      logFile: `test-results/app-server-${runner}.log`,
-      trustedProxies: LOOPBACK,
-      // Behind the edge the test process is a proxy in front of Caddy instead: Caddy believes its
-      // X-Forwarded-For (it connects from loopback) and hands the resolved client IP to the app.
-      ...(process.env.TEST_EDGE === '1'
-        ? { edge: { trustedProxies: 'private_ranges', logFile: `test-results/edge-${runner}.log` } }
-        : {}),
-      settings: { AUTH_SIGN_UP: 'open', ...mail.settings },
-    })
-    running.push(app)
-    const closed = await startApp({
-      databaseUrl,
-      logFile: `test-results/app-server-${runner}-closed.log`,
-      trustedProxies: '10.0.0.0/8',
-      settings: { AUTH_SIGN_UP: 'closed', ...mail.settings },
-      alongside: app,
-    })
+    const open = await startOpenServer(runner, databaseUrl, mail)
+    running.push(open)
+    const closed = await startClosedServer(runner, open, mail)
     running.push(closed)
-    const env = Object.fromEntries(SERVER_SETTINGS.map((name) => [name, app.env[name] ?? '']))
-    const { user, otherUser } = app
-    const servers: TestServers = {
-      appUrl: app.url,
-      closedAppUrl: closed.url,
-      mailpitUrl: mail.api,
-      databaseUrl,
-      env,
-      user,
-      otherUser,
-    }
-    return { servers, stop }
+    return { servers: handOver(open, closed, mail), stop }
   } catch (error) {
     await stop()
     throw error
