@@ -3,7 +3,7 @@ import { setResponseHeader } from '@tanstack/react-start/server'
 import { Schema } from 'effect'
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '#/contract/limits.ts'
 import { env } from '#/server/env.ts'
-import { type AuthEndpointResult, callAuthEndpoint } from '#/server/http/auth-handler.ts'
+import { type AuthEndpointResult, type AuthErrorCode, callAuthEndpoint } from '#/server/http/auth-handler.ts'
 import { displayClientAddress } from '#/server/http/client-address.ts'
 
 // Every account action the UI offers, as server functions: the browser bundle carries no Better Auth client.
@@ -11,9 +11,15 @@ import { displayClientAddress } from '#/server/http/client-address.ts'
 // (callAuthEndpoint), so rate limiting, the endpoint allowlist and the origin check apply exactly as they do on
 // /api/auth/*, and Better Auth's cookies reach the browser on this response.
 
-/** Why an action failed. `code` is Better Auth's error code, or RATE_LIMITED, NOT_FOUND or UNEXPECTED. */
+/**
+ * Why an action failed: a Better Auth error code the exposed endpoints answer with, RATE_LIMITED (429), NOT_FOUND
+ * (an endpoint that is off, such as sign-up when closed) or UNEXPECTED (anything else). A closed union: the UI's
+ * describeAuthFailure stops compiling until it handles a new code.
+ */
+export type AuthFailureCode = AuthErrorCode | 'RATE_LIMITED' | 'NOT_FOUND' | 'UNEXPECTED'
+
 export interface AuthFailure {
-  readonly code: string
+  readonly code: AuthFailureCode
   /** Seconds until a rate-limited client may retry. */
   readonly retryAfter?: number
 }

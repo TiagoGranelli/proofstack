@@ -111,8 +111,10 @@ is created verified. Public sign-up is `AUTH_SIGN_UP=closed` by default
 **Auth endpoint.** A new account action is a server function in `src/lib/auth.functions.ts` calling
 `callAuthEndpoint`, plus its `METHOD /path` in `EXPOSED` (`src/server/http/auth-endpoints.ts`; not in
 `HTTP_ENDPOINTS`, which `/api/auth/*` answers from outside), a hook in
-`src/features/auth/api/`, and a message for any new Better Auth error code in
-`src/features/auth/utils/describe-auth-failure.ts`. Mail goes through `authMail` (`src/server/mail/`).
+`src/features/auth/api/`, and any new Better Auth error code in `BETTER_AUTH_CODES`
+(`src/server/http/auth-handler.ts`); `pnpm typecheck` then fails until
+`src/features/auth/utils/describe-auth-failure.ts` handles it. Which surface an operation belongs on:
+[ADR 0012](docs/decisions/0012-three-request-surfaces.md). Mail goes through `authMail` (`src/server/mail/`).
 
 **First setup.** Run `pnpm install && pnpm bootstrap`. This creates `.env` with a secret, starts
 Postgres and Mailpit (`pnpm mail:up`, the local inbox for account emails), and applies migrations.

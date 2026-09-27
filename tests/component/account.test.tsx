@@ -5,7 +5,7 @@ import { sessionsQueryKey } from '#/features/auth/api/get-sessions.ts'
 import { ChangePasswordForm } from '#/features/auth/components/change-password-form.tsx'
 import { DeleteAccountForm } from '#/features/auth/components/delete-account-form.tsx'
 import { SessionList } from '#/features/auth/components/session-list.tsx'
-import type { AuthOutcome, SessionView } from '#/lib/auth.functions.ts'
+import type { AuthFailure, AuthOutcome, SessionView } from '#/lib/auth.functions.ts'
 import { authCalls, authFunction, held, worker } from './api-mocks.ts'
 import { expectFocusedStatus, pressAndKeepFocus, renderInApp, statusText, testQueryClient } from './test-utils.tsx'
 
@@ -110,7 +110,7 @@ describe('ChangePasswordForm', () => {
     await expect.element(page.getByRole('button', { name: otherName })).not.toBeInTheDocument()
   })
 
-  it.each([
+  it.each<[string, AuthFailure, string]>([
     ['a wrong current password', { code: 'INVALID_PASSWORD' }, 'That password is not correct.'],
     ['a new password the server finds too short', { code: 'PASSWORD_TOO_SHORT' }, 'Use at least 12 characters.'],
     ['a new password the server finds too long', { code: 'PASSWORD_TOO_LONG' }, 'Use at most 128 characters.'],

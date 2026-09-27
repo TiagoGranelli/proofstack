@@ -1,5 +1,6 @@
 import '@tanstack/react-start/server-only'
 import { getRequestHeaders, getRequestIP, getResponseHeaders } from '@tanstack/react-start/server'
+import type { BASE_ERROR_CODES } from 'better-auth'
 import { auth } from '../auth.ts'
 import { env } from '../env.ts'
 import { log } from '../log.ts'
@@ -32,17 +33,70 @@ const dispatch = async (request: Request): Promise<Response> => {
   }
 }
 
+/**
+ * Every error code the exposed endpoints (./auth-endpoints.ts) can answer with for the input the server functions
+ * send, read from Better Auth 1.7.6's routes and middleware (api/routes/*.mjs, origin-check.mjs, better-call's
+ * validation). Each is checked against Better Auth's exported BASE_ERROR_CODES, so an upstream rename fails the
+ * typecheck; UNAUTHORIZED is the one literal its session middleware throws outside that list. A code outside this
+ * list is logged and reported as undefined (the UI says "something went wrong").
+ */
+const BETTER_AUTH_CODES = [
+  // Any POST: the origin check, and the form CSRF check of sign-in and sign-up.
+  'INVALID_ORIGIN',
+  'MISSING_OR_NULL_ORIGIN',
+  'CROSS_SITE_NAVIGATION_LOGIN_BLOCKED',
+  'VALIDATION_ERROR',
+  // Sign-in and sign-up.
+  'INVALID_EMAIL',
+  'INVALID_EMAIL_OR_PASSWORD',
+  'EMAIL_NOT_VERIFIED',
+  'USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL',
+  'FAILED_TO_CREATE_USER',
+  'FAILED_TO_CREATE_SESSION',
+  // New passwords (sign-up, reset, change).
+  'PASSWORD_TOO_SHORT',
+  'PASSWORD_TOO_LONG',
+  // Links: verify-email and reset-password.
+  'INVALID_TOKEN',
+  'TOKEN_EXPIRED',
+  'USER_NOT_FOUND',
+  'INVALID_USER',
+  // Resending a verification link while signed in.
+  'EMAIL_MISMATCH',
+  'EMAIL_ALREADY_VERIFIED',
+  // Signed-in actions: sessions, change-password, delete-user (and requirePasswordToDelete in ../auth.ts).
+  'SESSION_NOT_FRESH',
+  'SESSION_EXPIRED',
+  'INVALID_PASSWORD',
+  'CREDENTIAL_ACCOUNT_NOT_FOUND',
+  'FAILED_TO_GET_SESSION',
+] as const satisfies ReadonlyArray<keyof typeof BASE_ERROR_CODES>
+
+/** An error code an exposed Better Auth endpoint answers with. */
+export type AuthErrorCode = (typeof BETTER_AUTH_CODES)[number] | 'UNAUTHORIZED'
+
+const KNOWN_CODES: ReadonlySet<string> = new Set<AuthErrorCode>([...BETTER_AUTH_CODES, 'UNAUTHORIZED'])
+const isKnownCode = (code: string): code is AuthErrorCode => KNOWN_CODES.has(code)
+
 /** What a Better Auth endpoint answered to callAuthEndpoint. */
 export type AuthEndpointResult =
   | { readonly ok: true; readonly body: unknown }
   | {
       readonly ok: false
       readonly status: number
-      /** Better Auth's error code (`INVALID_EMAIL_OR_PASSWORD`, ...), when the body carries one. */
-      readonly code: string | undefined
+      /** Better Auth's error code (`INVALID_EMAIL_OR_PASSWORD`, ...), when the body carries a known one. */
+      readonly code: AuthErrorCode | undefined
       /** Seconds until a rate-limited client may retry. */
       readonly retryAfter: number | undefined
     }
+
+const codeOf = (body: unknown, path: string): AuthErrorCode | undefined => {
+  const code =
+    typeof body === 'object' && body !== null && 'code' in body && typeof body.code === 'string' ? body.code : undefined
+  if (code === undefined || isKnownCode(code)) return code
+  log('warn', 'unknown Better Auth error code', { path, code })
+  return undefined
+}
 
 const parseJson = (text: string): unknown => {
   try {
@@ -79,8 +133,7 @@ export const callAuthEndpoint = async (
 
   const body = parseJson(await response.text())
   if (response.ok) return { ok: true, body }
-  const code =
-    typeof body === 'object' && body !== null && 'code' in body && typeof body.code === 'string' ? body.code : undefined
+  const code = codeOf(body, path)
   const retryAfter = Number(response.headers.get('x-retry-after'))
   return {
     ok: false,

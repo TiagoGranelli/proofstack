@@ -1,9 +1,9 @@
 import { useMutation, type UseMutationOptions } from '@tanstack/react-query'
-import type { AuthFailure, AuthOutcome } from '#/lib/auth.functions.ts'
+import type { AuthFailure, AuthFailureCode, AuthOutcome } from '#/lib/auth.functions.ts'
 
 /** A failed account action, thrown so TanStack Query reports it as the mutation's (or query's) error. */
 export class AuthActionError extends Error {
-  readonly code: string
+  readonly code: AuthFailureCode
   readonly retryAfter: number | undefined
 
   constructor(failure: AuthFailure) {

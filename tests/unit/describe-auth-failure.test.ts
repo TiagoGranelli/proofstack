@@ -3,8 +3,9 @@
 import { describe, expect, it } from 'vitest'
 import { AuthActionError } from '#/features/auth/api/auth-action.ts'
 import { describeAuthFailure } from '#/features/auth/utils/describe-auth-failure.ts'
+import type { AuthFailureCode } from '#/lib/auth.functions.ts'
 
-const failure = (code: string, retryAfter?: number) => new AuthActionError({ code, retryAfter })
+const failure = (code: AuthFailureCode, retryAfter?: number) => new AuthActionError({ code, retryAfter })
 
 describe('describeAuthFailure', () => {
   // What a server function rejects with when the request failed or the handler threw.
@@ -18,9 +19,12 @@ describe('describeAuthFailure', () => {
     expect(describeAuthFailure(error)).toBe('Could not reach the server. Check your connection and try again.')
   })
 
-  it.each([
+  it.each<[AuthFailureCode, string]>([
     ['INVALID_EMAIL_OR_PASSWORD', 'Wrong email or password.'],
+    ['INVALID_EMAIL', 'Enter a valid email address.'],
     ['INVALID_PASSWORD', 'That password is not correct.'],
+    ['EMAIL_ALREADY_VERIFIED', 'This email address is already confirmed.'],
+    ['INVALID_USER', 'This link is invalid or has expired. Ask for a new one.'],
     ['EMAIL_NOT_VERIFIED', 'Confirm your email address first. We have sent you a new link.'],
     ['PASSWORD_TOO_SHORT', 'Use at least 12 characters.'],
     ['PASSWORD_TOO_LONG', 'Use at most 128 characters.'],
@@ -43,10 +47,27 @@ describe('describeAuthFailure', () => {
     expect(describeAuthFailure(failure('RATE_LIMITED', retryAfter))).toBe(message)
   })
 
-  it.each(['UNEXPECTED', 'NOT_FOUND', 'FAILED_TO_CREATE_USER', 'relation "session" does not exist'])(
-    'shows a generic message for %s, never the code',
-    (code) => {
-      expect(describeAuthFailure(failure(code))).toBe('Something went wrong. Try again.')
-    },
-  )
+  it.each<AuthFailureCode>([
+    'INVALID_ORIGIN',
+    'MISSING_OR_NULL_ORIGIN',
+    'CROSS_SITE_NAVIGATION_LOGIN_BLOCKED',
+    'VALIDATION_ERROR',
+    'EMAIL_MISMATCH',
+    'USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL',
+    'CREDENTIAL_ACCOUNT_NOT_FOUND',
+    'FAILED_TO_CREATE_USER',
+    'FAILED_TO_CREATE_SESSION',
+    'FAILED_TO_GET_SESSION',
+    'NOT_FOUND',
+    'UNEXPECTED',
+  ])('shows a generic message for %s, never the code', (code) => {
+    expect(describeAuthFailure(failure(code))).toBe('Something went wrong. Try again.')
+  })
+
+  it('shows the generic message for a code from a newer server, never the code', () => {
+    // A server deployed after this client can send a code the union does not have yet.
+    const fromNewerServer = new AuthActionError({ code: 'UNEXPECTED' })
+    Object.defineProperty(fromNewerServer, 'code', { value: 'relation "session" does not exist' })
+    expect(describeAuthFailure(fromNewerServer)).toBe('Something went wrong. Try again.')
+  })
 })
