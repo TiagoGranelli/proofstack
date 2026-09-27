@@ -156,8 +156,8 @@ test('author signs in, publishes, edits, sees the post publicly, deletes it and 
   await expect(page.getByLabel('Edit post')).toHaveCount(0)
   await expect(myPost(page, edited)).toBeVisible()
   await expect(myPost(page, body)).toHaveCount(0)
-  const saved = (await (await page.request.get('/api/me/posts')).json()) as Array<{ body: string }>
-  expect(saved.filter((post) => post.body.includes(body)).map((post) => post.body)).toEqual([edited])
+  const saved = (await (await page.request.get('/api/me/posts')).json()) as { items: Array<{ body: string }> }
+  expect(saved.items.filter((post) => post.body.includes(body)).map((post) => post.body)).toEqual([edited])
   await page.reload()
   await expect(myPost(page, edited)).toBeVisible()
 

@@ -81,7 +81,7 @@ describe('posts', () => {
   it('reads public posts anonymously', async () => {
     const { data, response } = await publicPostsList({ client: anonymous })
     expect(response?.status).toBe(200)
-    expect(Array.isArray(data)).toBe(true)
+    expect(Array.isArray(data?.items)).toBe(true)
   })
 
   it('rejects private operations without a session', async () => {
@@ -97,7 +97,7 @@ describe('posts', () => {
     expect(updated.data).toMatchObject({ id, body: 'edited', authorName: users.author.name })
 
     const pub = await publicPostsList({ client: anonymous })
-    expect(pub.data?.some((p) => p.id === id && p.body === 'edited')).toBe(true)
+    expect(pub.data?.items.some((p) => p.id === id && p.body === 'edited')).toBe(true)
 
     expect((await myPostsRemove({ client: author, path: { id } })).response?.status).toBe(204)
     const again = await myPostsRemove({ client: author, path: { id } })
@@ -125,7 +125,7 @@ describe('author isolation', () => {
 
     const mine = await myPostsList({ client: author })
     expect(mine.response?.status).toBe(200)
-    expect(mine.data!.map((p) => p.id)).not.toContain(theirs.id)
+    expect(mine.data!.items.map((p) => p.id)).not.toContain(theirs.id)
 
     const update = await myPostsUpdate({ client: author, path: { id: theirs.id }, body: { body: 'hijacked' } })
     expect(update.response?.status).toBe(404)
@@ -136,9 +136,12 @@ describe('author isolation', () => {
 
     // Still there, unchanged, and still theirs.
     const own = await myPostsList({ client: other })
-    expect(own.data!.find((p) => p.id === theirs.id)).toEqual(theirs)
+    expect(own.data!.items.find((p) => p.id === theirs.id)).toEqual(theirs)
     const pub = await publicPostsList({ client: anonymous })
-    expect(pub.data!.find((p) => p.id === theirs.id)).toMatchObject({ body: theirs.body, authorName: users.other.name })
+    expect(pub.data!.items.find((p) => p.id === theirs.id)).toMatchObject({
+      body: theirs.body,
+      authorName: users.other.name,
+    })
 
     expect((await myPostsRemove({ client: other, path: { id: theirs.id } })).response?.status).toBe(204)
   })
@@ -150,7 +153,7 @@ describe('author isolation', () => {
       [author, mine, theirs, users.author.name],
       [other, theirs, mine, users.other.name],
     ] as const) {
-      const list = (await myPostsList({ client })).data!
+      const list = (await myPostsList({ client })).data!.items
       expect(list.map((p) => p.id)).toContain(own.id)
       expect(list.map((p) => p.id)).not.toContain(foreign.id)
       expect(new Set(list.map((p) => p.authorName))).toEqual(new Set([name]))
@@ -167,7 +170,7 @@ describe('author isolation', () => {
     for (const user of Object.values(users)) expect(text).not.toContain(user.email)
     expect(text).not.toMatch(/authorId|author_id|email/i)
 
-    const posts = JSON.parse(text) as Array<Record<string, unknown>>
+    const { items: posts } = JSON.parse(text) as { items: Array<Record<string, unknown>> }
     for (const post of posts)
       expect(Object.keys(post).toSorted()).toEqual(['authorName', 'body', 'createdAt', 'id', 'updatedAt'])
     expect(posts.find((p) => p.id === mine.id)?.authorName).toBe(users.author.name)
@@ -200,7 +203,7 @@ describe('security', () => {
       })
       expect(res.status, `${method} ${path}`).toBe(403)
     }
-    const own = (await myPostsList({ client: author })).data!
+    const own = (await myPostsList({ client: author })).data!.items
     expect(own.find((p) => p.id === post.id)?.body).toBe(post.body)
     expect(own.filter((p) => p.body === 'csrf')).toEqual([])
     await myPostsRemove({ client: author, path: { id: post.id } })

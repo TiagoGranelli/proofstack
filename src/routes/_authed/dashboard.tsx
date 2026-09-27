@@ -1,4 +1,4 @@
-import { useSuspenseQuery } from '@tanstack/react-query'
+import { useSuspenseInfiniteQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { useRef, useState } from 'react'
 import { SignOutAlert, SignOutButton, useSignOut } from '#/features/auth/components/sign-out-button.tsx'
@@ -9,13 +9,13 @@ import { PostList } from '#/features/posts/components/post-list.tsx'
 
 export const Route = createFileRoute('/_authed/dashboard')({
   head: () => ({ meta: [{ title: 'Dashboard · ProofStack' }, { name: 'robots', content: 'noindex' }] }),
-  loader: ({ context }) => context.queryClient.fetchQuery(getMyPostsQueryOptions()),
+  loader: ({ context }) => context.queryClient.ensureInfiniteQueryData(getMyPostsQueryOptions()),
   component: Dashboard,
 })
 
 function Dashboard() {
   const { user } = Route.useRouteContext()
-  const { data: posts } = useSuspenseQuery(getMyPostsQueryOptions())
+  const posts = useSuspenseInfiniteQuery(getMyPostsQueryOptions())
   // Screen-reader confirmation for writes whose result is otherwise only visual. `id` changes on every
   // write, so the same sentence twice in a row ("Post saved.") is a new node and is announced again.
   const [status, setStatus] = useState({ text: '', id: 0 })
@@ -35,7 +35,7 @@ function Dashboard() {
           Published
         </h2>
         <PostList
-          posts={posts}
+          pages={posts}
           empty="You have not published anything yet."
           testId="my-posts"
           renderPost={(post) => (

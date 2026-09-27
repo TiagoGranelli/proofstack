@@ -1,7 +1,7 @@
 import '@tanstack/react-start/server-only'
-import { and, desc, eq, sql } from 'drizzle-orm'
+import { and, desc, eq, sql, type SQL } from 'drizzle-orm'
 import { Context, Data, Effect, Layer } from 'effect'
-import type { Post } from '#/contract/posts.ts'
+import type { PageCursor, Post, PostPage } from '#/contract/posts.ts'
 import { Database } from '../db/client.ts'
 import { post, user } from '../db/schema/index.ts'
 
@@ -17,13 +17,47 @@ const toPost = (row: { id: string; body: string; createdAt: Date; updatedAt: Dat
   updatedAt: row.updatedAt.toISOString(),
 })
 
-const listColumns = {
+const pageColumns = {
   id: post.id,
   body: post.body,
   createdAt: post.createdAt,
   updatedAt: post.updatedAt,
-  authorName: user.name,
+  // The sort key at full (microsecond) precision. `createdAt` as a JS Date is rounded to milliseconds, and a
+  // cursor built from it would skip or repeat posts created within the same millisecond.
+  cursorAt: sql<string>`to_char(${post.createdAt} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
 }
+
+/** A page of a list ordered by (created_at desc, id desc): the first `limit` posts after the cursor's key. */
+export interface PageRequest {
+  readonly cursor?: PageCursor | undefined
+  readonly limit: number
+}
+
+// A row-value comparison, which Postgres answers from the (…, created_at desc, id desc) indexes: the scan
+// starts right after the cursor instead of skipping over an offset.
+const afterCursor = (cursor: PageCursor | undefined): SQL | undefined =>
+  cursor ? sql`(${post.createdAt}, ${post.id}) < (${cursor.createdAt}::timestamptz, ${cursor.id}::uuid)` : undefined
+
+const newestFirst = [desc(post.createdAt), desc(post.id)]
+
+interface PageRow {
+  readonly id: string
+  readonly body: string
+  readonly createdAt: Date
+  readonly updatedAt: Date
+  readonly cursorAt: string
+}
+
+/** `rows` come from a query with `limit + 1`: the extra row only tells whether another page exists. */
+const toPage = <R extends PageRow>(rows: ReadonlyArray<R>, limit: number, authorName: (row: R) => string): PostPage => {
+  const items = rows.slice(0, limit)
+  const last = items.at(-1)
+  return {
+    items: items.map((row) => toPost(row, authorName(row))),
+    nextCursor: rows.length > limit && last ? { createdAt: last.cursorAt, id: last.id } : null,
+  }
+}
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 interface Author {
@@ -34,8 +68,8 @@ interface Author {
 export class PostsRepo extends Context.Service<
   PostsRepo,
   {
-    readonly listPublic: (limit: number) => Effect.Effect<ReadonlyArray<Post>, DbError>
-    readonly listByAuthor: (author: Author) => Effect.Effect<ReadonlyArray<Post>, DbError>
+    readonly listPublic: (page: PageRequest) => Effect.Effect<PostPage, DbError>
+    readonly listByAuthor: (author: Author, page: PageRequest) => Effect.Effect<PostPage, DbError>
     readonly create: (author: Author, body: string) => Effect.Effect<Post, DbError>
     readonly update: (author: Author, id: string, body: string) => Effect.Effect<Post | undefined, DbError>
     readonly remove: (author: Author, id: string) => Effect.Effect<boolean, DbError>
@@ -47,22 +81,28 @@ export class PostsRepo extends Context.Service<
     Effect.gen(function* () {
       const db = yield* Database
       return {
-        listPublic: Effect.fn('PostsRepo.listPublic')(function* (limit) {
+        listPublic: Effect.fn('PostsRepo.listPublic')(function* (page) {
           const rows = yield* query(() =>
             db
-              .select(listColumns)
+              .select({ ...pageColumns, authorName: user.name })
               .from(post)
               .innerJoin(user, eq(user.id, post.authorId))
-              .orderBy(desc(post.createdAt))
-              .limit(limit),
+              .where(afterCursor(page.cursor))
+              .orderBy(...newestFirst)
+              .limit(page.limit + 1),
           )
-          return rows.map((r) => toPost(r, r.authorName))
+          return toPage(rows, page.limit, (row) => row.authorName)
         }),
-        listByAuthor: Effect.fn('PostsRepo.listByAuthor')(function* (author) {
+        listByAuthor: Effect.fn('PostsRepo.listByAuthor')(function* (author, page) {
           const rows = yield* query(() =>
-            db.select().from(post).where(eq(post.authorId, author.id)).orderBy(desc(post.createdAt)),
+            db
+              .select(pageColumns)
+              .from(post)
+              .where(and(eq(post.authorId, author.id), afterCursor(page.cursor)))
+              .orderBy(...newestFirst)
+              .limit(page.limit + 1),
           )
-          return rows.map((r) => toPost(r, author.name))
+          return toPage(rows, page.limit, () => author.name)
         }),
         create: Effect.fn('PostsRepo.create')(function* (author, body) {
           const [row] = yield* query(() => db.insert(post).values({ authorId: author.id, body }).returning())
