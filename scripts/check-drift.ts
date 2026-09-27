@@ -1,53 +1,25 @@
-// Fails when a generated artifact no longer matches its source. Nothing in the repository is written:
-// every generator runs into a temporary directory and its output is compared byte for byte.
-//   contract   src/contract -> openapi.json -> src/sdk (Hey API)
-//   migrations src/server/db/schema -> drizzle/ (`drizzle-kit generate` adds nothing, `drizzle-kit check` passes)
+// Fails when a generated artifact no longer matches its source.
+//   contract   src/contract -> openapi.json -> src/sdk: `pnpm codegen` in place, then `git diff` (a drift is left
+//              regenerated in the working tree, ready to review and commit)
+//   migrations src/server/db/schema -> drizzle/ (`drizzle-kit generate` into a copy adds nothing, and
+//              `drizzle-kit check` passes)
 //   auth       src/server/db/schema/auth.ts holds what src/server/auth.ts writes (Better Auth `auth check schema`)
 //   database   drizzle/*.sql applied to an empty database == the Drizzle schema (`drizzle-kit push` changes nothing)
 // Usage: pnpm check:drift [contract] [migrations] [auth] [database]   (default: all; database needs Postgres)
 // `pnpm check` runs the first three. The database check uses DRIFT_DATABASE_URL if set, otherwise a
 // throwaway app_drift_<pid>_test next to DATABASE_URL.
-import { createHash } from 'node:crypto'
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { cpSync, existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
-import { createClient } from '@hey-api/openapi-ts'
 import { Client } from 'pg'
 import { xSync } from 'tinyexec'
-import heyApiConfig from '../openapi-ts.config.ts'
-import { renderOpenApi } from './openapi.ts'
 import { dropTestDatabase, resetTestDatabase, testDatabaseUrl } from './test-db.ts'
 
 if (existsSync('.env')) process.loadEnvFile('.env')
 
-// One directory per process, outside the repository (the pre-commit hook runs this in a copy of the index
-// whose node_modules links to the real one): concurrent runs never touch each other's files.
-const SCRATCH = mkdtempSync(join(tmpdir(), 'check-drift-'))
 const SCHEMA = './src/server/db/schema/index.ts'
 const MIGRATIONS = 'drizzle'
-
-const hashTree = (dir: string): Map<string, string> => {
-  const files = new Map<string, string>()
-  const walk = (current: string) => {
-    for (const entry of readdirSync(current, { withFileTypes: true })) {
-      const path = join(current, entry.name)
-      if (entry.isDirectory()) walk(path)
-      else files.set(relative(dir, path), createHash('sha256').update(readFileSync(path)).digest('hex'))
-    }
-  }
-  if (existsSync(dir)) walk(dir)
-  return files
-}
-
-/** Compares the committed directory with freshly generated output, naming each file by its repo path. */
-const diffTrees = (committed: string, generated: string): string[] => {
-  const [repo, fresh] = [hashTree(committed), hashTree(generated)]
-  return [...new Set([...repo.keys(), ...fresh.keys()])].toSorted().flatMap((file) => {
-    if (!fresh.has(file)) return [`not generated anymore: ${join(committed, file)}`]
-    if (!repo.has(file)) return [`missing from repo: ${join(committed, file)}`]
-    return repo.get(file) === fresh.get(file) ? [] : [`differs: ${join(committed, file)}`]
-  })
-}
 
 /** `pnpm <args>` with its output captured; throws with the output when it fails. */
 const pnpm = (args: string[]) => {
@@ -60,40 +32,33 @@ const pnpm = (args: string[]) => {
   return output
 }
 
-const scratch = (name: string) => {
-  const dir = join(SCRATCH, name)
-  rmSync(dir, { recursive: true, force: true })
-  mkdirSync(dir, { recursive: true })
-  return dir
-}
+const git = (args: string[]) => spawnSync('git', args, { encoding: 'utf8' })
 
 const checks = {
   async contract() {
-    const dir = scratch('contract')
-    const openapi = join(dir, 'openapi.json')
-    writeFileSync(openapi, renderOpenApi())
-    // The SDK is generated from the committed openapi.json, exactly like `pnpm sdk:generate`.
-    const config = await heyApiConfig
-    const output = typeof config.output === 'object' ? config.output : {}
-    await createClient({ ...config, output: { ...output, path: join(dir, 'sdk') }, logs: { level: 'silent' } })
-    const problems =
-      readFileSync(openapi, 'utf8') === readFileSync('openapi.json', 'utf8')
-        ? []
-        : ['differs: openapi.json (run `pnpm codegen`)']
-    return [...problems, ...diffTrees('src/sdk', join(dir, 'sdk')).map((p) => `${p} (run \`pnpm codegen\`)`)]
+    // The baseline is the working tree as it is, so a `pnpm codegen` output not staged yet is not drift.
+    // `git stash create` stores it as a commit without touching the tree or the stash list (nothing when clean).
+    const before = git(['stash', 'create']).stdout.trim() || 'HEAD'
+    pnpm(['codegen'])
+    const diff = git(['diff', '--exit-code', '--stat', before, '--', 'openapi.json', 'src/sdk'])
+    if (diff.status === 0) return []
+    return [`\`pnpm codegen\` changed these files; review and commit them:\n${diff.stdout.trimEnd()}${diff.stderr}`]
   },
 
   async migrations() {
-    const dir = join(scratch('migrations'), 'drizzle')
-    cpSync(MIGRATIONS, dir, { recursive: true })
-    // drizzle-kit prefixes --out with './', so an absolute path breaks; a relative one reaches the temp dir.
-    const out = relative(process.cwd(), dir)
-    pnpm(['exec', 'drizzle-kit', 'generate', '--dialect=postgresql', `--schema=${SCHEMA}`, `--out=${out}`])
-    pnpm(['exec', 'drizzle-kit', 'check', '--dialect=postgresql', `--out=${MIGRATIONS}`])
-    // The generated folder starts as a copy of drizzle/, so a difference is a migration the schema needs.
-    return diffTrees(MIGRATIONS, dir).map(
-      (p) => `${p} (the schema changed without a migration: run \`pnpm db:generate --name <slug>\`)`,
-    )
+    // drizzle-kit writes a new migration when the schema changed, so it runs on a copy of drizzle/.
+    const dir = join(mkdtempSync(join(tmpdir(), 'check-drift-')), 'drizzle')
+    try {
+      cpSync(MIGRATIONS, dir, { recursive: true })
+      // drizzle-kit prefixes --out with './', so an absolute path breaks; a relative one reaches the temp dir.
+      const out = relative(process.cwd(), dir)
+      pnpm(['exec', 'drizzle-kit', 'generate', '--dialect=postgresql', `--schema=${SCHEMA}`, `--out=${out}`])
+      pnpm(['exec', 'drizzle-kit', 'check', '--dialect=postgresql', `--out=${MIGRATIONS}`])
+      const added = readdirSync(dir).filter((file) => !existsSync(join(MIGRATIONS, file)))
+      return added.map((file) => `the schema needs ${file}: run \`pnpm db:generate --name <slug>\``)
+    } finally {
+      rmSync(join(dir, '..'), { recursive: true, force: true })
+    }
   },
 
   async auth() {
@@ -185,5 +150,4 @@ for (const name of requested.length ? requested : (Object.keys(checks) as CheckN
     console.error(`ERROR ${name}: ${error instanceof Error ? error.message : String(error)}`)
   }
 }
-rmSync(SCRATCH, { recursive: true, force: true })
 process.exitCode = failed ? 1 : 0

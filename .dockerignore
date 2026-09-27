@@ -20,12 +20,13 @@ sbom/
 .env.*
 !.env.example
 deploy/deploy.env
+lefthook-local.yml
 .DS_Store
 
 # Not needed to build the image
 .git/
 .github/
-.githooks/
+lefthook.yml
 .vscode/
 .agents/
 .claude/
