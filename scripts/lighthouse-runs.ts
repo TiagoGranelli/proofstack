@@ -12,7 +12,16 @@ export type Lhr = {
   runWarnings: string[]
   environment: { benchmarkIndex: number }
   categories: Record<string, { score: number | null; auditRefs: { id: string; weight: number }[] }>
-  audits: Record<string, { score: number | null; numericValue?: number; scoreDisplayMode: string; title: string }>
+  audits: Record<
+    string,
+    {
+      score: number | null
+      numericValue?: number
+      scoreDisplayMode: string
+      title: string
+      details?: { items?: Record<string, unknown>[] }
+    }
+  >
 }
 
 const METRIC_AUDITS: Record<Metric, string> = {
@@ -111,6 +120,37 @@ const metricMedians = (lhrs: Lhr[]): Record<Metric, number> =>
     ]),
   ) as Record<Metric, number>
 
+/**
+ * Lantern keeps a main-thread task in its simulation only from this duration up; shorter ones are pruned and cost
+ * nothing (`SIGNIFICANT_DUR_THRESHOLD_MS` in @paulirish/trace_engine's lantern/graph/PageDependencyGraph.js).
+ */
+export const LANTERN_TASK_THRESHOLD_MS = 10
+
+const numberIn = (entry: Record<string, unknown>, key: string): number | undefined => {
+  const value = entry[key]
+  return typeof value === 'number' ? value : undefined
+}
+
+/**
+ * How long the main-thread task ran that requested the page's first stylesheet or script: Chrome's navigation
+ * commit, which also creates the page's JavaScript contexts. From LANTERN_TASK_THRESHOLD_MS up, Lantern makes
+ * every preloaded script wait for it, times the CPU slowdown (4 on mobile), so the simulated mobile FCP and LCP
+ * grow on a contended host (ADR 0011). Null when the report does not show it.
+ */
+export const preloadTaskMs = (lhr: Lhr): number | null => {
+  const requests = lhr.audits['network-requests']?.details?.items ?? []
+  const first = requests.find((request) => request.resourceType === 'Stylesheet' || request.resourceType === 'Script')
+  const sentAt = first && numberIn(first, 'rendererStartTime')
+  if (sentAt === undefined) return null
+  const tasks = lhr.audits['main-thread-tasks']?.details?.items ?? []
+  const sender = tasks.find((task) => {
+    const start = numberIn(task, 'startTime') ?? Number.NaN
+    return start <= sentAt && sentAt <= start + (numberIn(task, 'duration') ?? Number.NaN)
+  })
+  const duration = sender && numberIn(sender, 'duration')
+  return duration === undefined ? null : Math.round(duration * 10) / 10
+}
+
 export type RunsSummary = Measured & { scores: Record<Category, ScoreRange | null> }
 
 /** What the runs of one page and form factor measured: each category's range, each metric's median, each run. */
@@ -121,6 +161,7 @@ export const summarizeRuns = (lhrs: Lhr[]): RunsSummary => ({
     run: index + 1,
     benchmarkIndex: Math.round(lhr.environment.benchmarkIndex),
     runWarnings: lhr.runWarnings,
+    preloadTaskMs: preloadTaskMs(lhr),
     scores: byCategory((category) => score(lhr, category)),
   })),
 })

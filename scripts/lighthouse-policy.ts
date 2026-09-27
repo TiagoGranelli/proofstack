@@ -57,6 +57,8 @@ export type RunSummary = {
   run: number
   benchmarkIndex: number
   runWarnings: string[]
+  /** Reported, not judged: see `preloadTaskMs` in scripts/lighthouse-runs.ts. */
+  preloadTaskMs: number | null
   scores: Record<Category, number | null>
 }
 
