@@ -18,8 +18,16 @@ export const auth = betterAuth({
   // The HTTP router is further restricted to an allowlist in ./http/auth-handler.ts.
   disabledPaths: ['/sign-up/email'],
   // Built-in rules still apply on top of this default: /sign-in/* allows 3 requests per 10 s per IP.
-  // The memory store is per process; see docs/operations.md before running several instances.
-  rateLimit: { enabled: env.isProduction, window: 60, max: 100, storage: 'memory' },
+  // Counters live in the rateLimit table, so every instance shares them; Better Auth increments them with
+  // one conditional UPDATE, which is atomic under concurrent requests. /get-session is a read that every
+  // page guard makes, so it is not counted.
+  rateLimit: {
+    enabled: env.isProduction,
+    window: 60,
+    max: 100,
+    storage: 'database',
+    customRules: { '/get-session': false },
+  },
   advanced: {
     // Every request reaches Better Auth with the TCP peer as the last X-Forwarded-For hop
     // (./http/forwarded-for.ts). Hops inside TRUSTED_PROXIES are skipped from the right; the first address

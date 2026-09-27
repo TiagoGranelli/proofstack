@@ -15,6 +15,13 @@
       "when": 1790464749260,
       "tag": "0001_post_author_created_idx",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790505680079,
+      "tag": "0002_auth_rate_limit",
+      "breakpoints": true
     }
   ]
 }
