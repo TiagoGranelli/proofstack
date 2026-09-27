@@ -104,6 +104,51 @@ that, judged by `Content-Length`), answers 400 to a non-numeric `Content-Length`
 chunked bodies (`Transfer-Encoding` without `Content-Length`). Proxies that buffer requests (nginx by
 default) send a length.
 
+### Edge proxy (Caddy)
+
+`deploy/Caddyfile` is the reference edge, and the topology the tests measure: `pnpm lighthouse` always
+runs through it, `pnpm verify:app --edge` optionally, and `pnpm ci:docker` serves the image behind it.
+It uses Caddy 2.11.4 (image pinned by digest in `compose.yaml` and `scripts/images.ts`) and does four
+things:
+
+- **TLS:** with a domain as `EDGE_ADDRESS` (`app.example.com`), Caddy obtains and renews the certificate
+  and redirects HTTP to HTTPS. `:8080` (the default) serves plain HTTP. Set `APP_URL` to the resulting
+  origin.
+- **Compression:** `encode zstd gzip` compresses what the app sends uncompressed: SSR HTML, API JSON.
+  The build's precompressed `.br` assets already carry `Content-Encoding` and pass through unchanged, as
+  do their `Cache-Control: public, max-age=31536000, immutable` headers. Nitro does not compress
+  responses itself; compression is the edge's job.
+- **No caching:** Caddy has no response cache. Nothing is stored, and `Cache-Control`, `ETag` and
+  `Set-Cookie` reach the client as the app sent them, so `private` and `no-store` pages are never shared.
+  `Host`, `Origin`, `Referer` and `Sec-Fetch-*` are forwarded as received.
+- **Client IP:** Caddy resolves the client IP with its `trusted_proxies` rules and overwrites
+  `X-Real-IP` with it (`header_up X-Real-IP {client_ip}`). Run the app with `TRUSTED_IP_HEADER=x-real-ip`.
+  By default no proxy is trusted: the TCP peer is the client, and an `X-Forwarded-For` or `X-Real-IP`
+  sent by the client is replaced. If a load balancer or CDN sits in front of Caddy, list its ranges in
+  `EDGE_TRUSTED_PROXIES` (space-separated CIDRs, or `private_ranges`). With `trusted_proxies_strict`,
+  Caddy walks `X-Forwarded-For` from the right and takes the first address that is not trusted, so a
+  client cannot pick its IP by prepending entries.
+
+Caddy streams request bodies without buffering them, so a chunked upload reaches the app without a
+length and gets 411; browsers and the SDK always send `Content-Length`.
+
+`EDGE_UPSTREAM` is the app's `host:port` (default `app:3000`). The admin API is off, so a configuration
+change means restarting Caddy.
+
+Try the whole production topology locally (Postgres, the image, migrations, the app, Caddy):
+
+```sh
+docker compose --profile edge up --build --wait   # http://localhost:8080 (EDGE_PORT); BETTER_AUTH_SECRET from .env
+docker compose --profile edge down
+```
+
+The profile keeps `pnpm dev` and `pnpm db:up` to Postgres only. In front of a locally running build
+(`pnpm lighthouse`, `pnpm verify:app --edge`), `scripts/edge.ts` starts the same Caddyfile, either from
+the pinned image with `--network host` (`EDGE_RUNTIME=docker`, the default; Linux, because Docker
+Desktop's host networking differs) or from a `caddy` binary (`EDGE_RUNTIME=binary`, `CADDY_BIN`), which
+is what `pnpm ci:local` uses inside its container. The edge log goes next to the app log
+(`test-results/edge.log`, `lighthouse-report/edge.log`).
+
 ### Client IP and rate limiting
 
 The client IP keys the sign-in rate limit and is stored on each session.
@@ -118,8 +163,8 @@ The client IP keys the sign-in rate limit and is stored on each session.
   arrives from a public address. A client that reaches the Node process directly therefore cannot
   choose its bucket or fill the rate-limit store with invented addresses. Your proxy must reach the app
   over loopback or a private network; a proxy that connects from a public address (for example
-  Cloudflare straight to the origin) needs a local proxy in between. Examples: `x-real-ip` (nginx `proxy_set_header
-  X-Real-IP $remote_addr`), `x-forwarded-for` with a single proxy that appends, `cf-connecting-ip`
+  Cloudflare straight to the origin) needs a local proxy in between. Examples: `x-real-ip` (the Caddy edge
+  above, or nginx `proxy_set_header X-Real-IP $remote_addr`), `x-forwarded-for` with a single proxy that appends, `cf-connecting-ip`
   (Cloudflare), `fly-client-ip` (Fly.io). With several proxy layers, pick a header that only the outermost
   trusted layer sets, because the last hop of `X-Forwarded-For` would be your own proxy.
 
@@ -246,3 +291,43 @@ one. Unhandled promise rejections are logged and the process continues.
   `secureSessionCookie` (`__Secure-better-auth.session_token`, https); the server accepts whichever
   name Better Auth uses for the current `APP_URL`. Only operations that take input document a 400
   `ValidationError`.
+
+## CI and local CI
+
+Every job in `.github/workflows/ci.yml` runs one script; the YAML only checks out, sets up Node, pnpm,
+browsers and Postgres, and moves artifacts. The logic lives in `scripts/ci-jobs.ts`:
+
+| Script | Job |
+| --- | --- |
+| `pnpm ci:workflows` | actionlint 1.7.12 and zizmor 1.30.1 (images pinned by digest, offline, read-only), and a check that `compose.yaml` and `ci.yml` pin the same images as `scripts/images.ts`. Needs Docker. |
+| `pnpm ci:static` | `pnpm check` without its drift gate |
+| `pnpm ci:drift` | `pnpm check:drift`, all four checks (`DATABASE_URL`) |
+| `pnpm ci:build` | `pnpm build` with placeholder configuration (the same as the Dockerfile's) |
+| `pnpm ci:verify` | `verify:app` on all five Playwright projects |
+| `pnpm ci:lighthouse` | `pnpm lighthouse --runs=5`, through the edge. Exit 2 means inconclusive (see AGENTS.md) |
+| `pnpm ci:docker` | `scripts/docker-smoke.ts`: builds the image, migrates twice, serves it behind Caddy on a private network, checks pages through the edge, stops it gracefully. Brings its own Postgres. Needs Docker. |
+
+`pnpm ci:local [job ...]` is the faithful local equivalent (default: every job, in CI order). It runs the
+container jobs (`static`, `drift`, `build`, `verify`, `lighthouse`) in the official Playwright image
+for `@playwright/test` 1.63.0 (Ubuntu 24.04, all browsers including WebKit), with Node from
+`.node-version`, pnpm from `packageManager` and the pinned Caddy binary added, next to Postgres 18.6 on a
+private Docker network. The host jobs (`workflows`, `docker`) drive Docker and run on the host.
+
+- The repository is mounted read-only. The container copies what a CI checkout would contain (tracked
+  files and untracked files that are not ignored, as they are on disk) and installs its own
+  `node_modules` with `pnpm install --frozen-lockfile`; the host's `node_modules` and `.output` are never
+  touched. The pnpm store is the volume `<prefix>-pnpm-store`, kept between runs.
+- Limits: `CI_LOCAL_CPUS` (default 4, like a GitHub-hosted runner), `CI_LOCAL_MEMORY` (default `6g`, no
+  swap) and `CI_LOCAL_SHM` (default `2g`; Chrome needs a large `/dev/shm`). Postgres keeps its data in
+  memory (1 GB limit).
+- `verify` and `lighthouse` add `build` when it is missing, like CI's `needs: build`. Jobs run one at a
+  time; a Lighthouse run shares the machine with nothing else.
+- Reports are copied to `test-results/ci-local/<job>/`. The summary lists every job's time and the
+  runner container's peak memory (cgroup `memory.current`, including page cache, and anonymous memory).
+- Containers and the network are named `<prefix>-local-<pid>-*` and removed at the end, also on Ctrl-C.
+  `PROOFSTACK_DOCKER_PREFIX` sets the prefix (default `proofstack-ci`). The runner image
+  (`<prefix>-runner:<hash>`) and the store volume stay for the next run; remove them with
+  `docker image rm` and `docker volume rm`.
+
+`act` still works as a smoke test of the YAML for the jobs without artifacts, but not as a CI
+replacement: `actions/upload-artifact` v7 fails under act (nektos/act#6022).
