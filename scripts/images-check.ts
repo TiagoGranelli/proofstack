@@ -10,6 +10,7 @@
 //        pnpm images:sync           (rewrites the copies, offline)
 import { pinProblems, syncPins } from './image-pins.ts'
 import { IMAGES } from './images.ts'
+import { table } from './report-table.ts'
 
 if (process.argv.includes('--sync')) {
   const changed = syncPins()
@@ -71,7 +72,7 @@ const tags = async (host: string, path: string) => {
 /** A tag's form: `v1.63.0-noble` is prefix `v`, numbers [1, 63, 0] and suffix `-noble`. */
 const shape = (tag: string) => {
   const match = /^([a-z]*)(\d+(?:\.\d+)*)(.*)$/i.exec(tag)
-  return match ? { prefix: match[1], numbers: match[2]!.split('.').map(Number), suffix: match[3] } : undefined
+  return match ? { prefix: match[1], numbers: (match[2] ?? '').split('.').map(Number), suffix: match[3] } : undefined
 }
 const compare = (a: number[], b: number[]) => {
   for (let i = 0; i < Math.max(a.length, b.length); i++)
@@ -96,19 +97,20 @@ for (const [key, ref] of Object.entries(IMAGES)) {
     tagDigest = !current ? `? (HTTP ${head.status})` : current === digest ? 'same' : `moved: ${current.slice(0, 19)}…`
     if (pinned) {
       const sameForm = (await tags(host, path))
-        .map((candidate) => ({ candidate, form: shape(candidate) }))
-        .filter(
-          ({ form }) =>
-            form &&
+        .flatMap((candidate) => {
+          const form = shape(candidate)
+          if (!form) return []
+          const newer =
             form.prefix === pinned.prefix &&
             form.suffix === pinned.suffix &&
             form.numbers.length === pinned.numbers.length &&
-            compare(form.numbers, pinned.numbers) > 0,
-        )
-        .toSorted((a, b) => compare(b.form!.numbers, a.form!.numbers))
+            compare(form.numbers, pinned.numbers) > 0
+          return newer ? [{ candidate, numbers: form.numbers }] : []
+        })
+        .toSorted((a, b) => compare(b.numbers, a.numbers))
       newest = sameForm[0]?.candidate ?? 'up to date'
       inMajor =
-        sameForm.find(({ form }) => form!.numbers[0] === pinned.numbers[0])?.candidate ??
+        sameForm.find(({ numbers }) => numbers[0] === pinned.numbers[0])?.candidate ??
         (sameForm.length ? 'none' : 'up to date')
     }
   } catch (error) {
@@ -117,14 +119,7 @@ for (const [key, ref] of Object.entries(IMAGES)) {
   rows.push([key, tag, tagDigest, inMajor, newest])
 }
 
-const header = ['Image', 'Pinned tag', 'Tag digest', 'Newer, same major', 'Newest']
-const widths = header.map((cell, i) => Math.max(cell.length, ...rows.map((row) => row[i]!.length)))
-const line = (row: string[]) =>
-  row
-    .map((cell, i) => cell.padEnd(widths[i]!))
-    .join('  ')
-    .trimEnd()
-console.log([line(header), line(widths.map((w) => '-'.repeat(w))), ...rows.map(line)].join('\n'))
+console.log(table(['Image', 'Pinned tag', 'Tag digest', 'Newer, same major', 'Newest'], rows))
 if (notes.length) console.log(`\nIncomplete (not a failure):\n${notes.map((n) => `  ${n}`).join('\n')}`)
 console.log(
   '\nReport only. A moved tag digest is a rebuild of the same version (usually OS security fixes). To move a ' +

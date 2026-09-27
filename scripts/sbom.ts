@@ -36,8 +36,9 @@ writeFileSync(join(OUT, 'proofstack-npm.cdx.json'), npm.stdout)
 console.log(`wrote sbom/proofstack-npm.cdx.json (${version})`)
 
 if (!process.argv.includes('--no-image')) {
-  const built = option('image') ? undefined : `${dockerPrefix()}-app:sbom`
-  const image = option('image') ?? built!
+  const requested = option('image')
+  const built = requested ? undefined : `${dockerPrefix()}-app:sbom`
+  const image = requested ?? `${dockerPrefix()}-app:sbom`
   const dir = mkdtempSync(join(tmpdir(), 'proofstack-sbom-'))
   try {
     if (built) docker(['build', '--tag', built, '.'])

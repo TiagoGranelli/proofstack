@@ -62,7 +62,7 @@ for (const entry of entries)
 const counts = ORDER.map((s) => [s, advisories.filter((a) => a.severity === s).length] as const).filter(([, n]) => n)
 console.log(
   `\n${advisories.length} advisories${counts.length ? ` (${counts.map(([s, n]) => `${n} ${s}`).join(', ')})` : ''}, ` +
-    `${advisories.filter(allowed).length} allowlisted`,
+    `${advisories.filter((advisory) => allowed(advisory)).length} allowlisted`,
 )
 if (problems.length) {
   console.error(`\npnpm audit:check failed:\n${problems.map((p) => `  - ${p}`).join('\n')}`)

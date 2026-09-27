@@ -56,10 +56,12 @@ const acceptable = (expression: string, name: string): boolean => {
     const token = tokens[position++]
     if (token === '(') {
       const value = or()
-      position++ // ')'
+      // Past the closing parenthesis.
+      position++
       return value
     }
-    if (tokens[position] === 'WITH') position += 2 // an exception (Classpath, LLVM) only widens what is allowed
+    // A WITH exception (Classpath, LLVM) only widens what the license allows.
+    if (tokens[position] === 'WITH') position += 2
     const license = token?.replace(/\+$/, '')
     const rule = license ? ALLOWED[license] : undefined
     return Boolean(rule && (!rule.onlyFor || rule.onlyFor.includes(name)))

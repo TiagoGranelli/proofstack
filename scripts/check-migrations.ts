@@ -128,7 +128,7 @@ for (const file of linted) {
   lines.forEach((line, index) => {
     if (!/^\s*--\s*squawk-ignore/.test(line)) return
     const above = lines[index - 1] ?? ''
-    if (!/^\s*--\s*\S/.test(above) || /squawk-ignore/.test(above))
+    if (!/^\s*--\s*\S/.test(above) || above.includes('squawk-ignore'))
       problems.push(`${file}:${index + 1}: a squawk-ignore needs its reason in a comment on the line above`)
   })
 }
