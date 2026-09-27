@@ -4,7 +4,7 @@
 //   workflows   actionlint + zizmor on .github, image pins (compose files, ci.yml, Dockerfile) consistent with
 //               scripts/images.ts, and the deploy recipes in deploy/ valid (Docker)
 //   static      pnpm check without its drift gate (the drift job runs every drift check)
-//   supply-chain registry signatures of every installed package, and the vulnerability gate (scripts/audit.ts)
+//   supply-chain registry signatures of every installed package, and the vulnerability gate (`pnpm audit:check`)
 //   secrets     gitleaks over every commit of HEAD's history (.gitleaks.toml; Docker, a full clone)
 //   drift       every drift check, including the database one (DATABASE_URL)
 //   build       the production build, with placeholder configuration
@@ -141,7 +141,7 @@ const JOBS: Record<string, (args: string[]) => number> = {
   'supply-chain': () =>
     sequence([
       ['registry signatures', () => run(pnpmInvocation(['audit', 'signatures']))],
-      ['vulnerabilities', () => run('node', ['scripts/audit.ts'])],
+      ['vulnerabilities', () => run(pnpmInvocation(['audit:check']))],
     ]),
   secrets,
   drift: (args) => run('node', ['scripts/check-drift.ts', ...args]),

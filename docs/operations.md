@@ -842,15 +842,16 @@ What guards the dependencies, the image and the repository, and where each gate 
 | --- | --- | --- |
 | pnpm policies (`pnpm-workspace.yaml`) | every `pnpm install --frozen-lockfile` (CI setup, Dockerfile) | a lockfile entry younger than `minimumReleaseAge` (one day, strict) or published with weaker provenance than an earlier version (`trustPolicy: no-downgrade`, for versions under 30 days old); an unmet peer (`strictPeerDependencies`); a dependency build script not listed in `allowBuilds` |
 | `pnpm audit signatures` | CI `supply-chain` | a package whose registry signature does not verify |
-| `pnpm audit:check` | CI `supply-chain` | a high or critical advisory in any package, production or development, not in `security/audit-allowlist.json`; an expired or stale allowlist entry |
+| `pnpm audit:check` | CI `supply-chain` | a high or critical advisory in any package, production or development, not in `auditConfig.ignoreGhsas` (`pnpm-workspace.yaml`) |
 | `pnpm licenses:check` | `pnpm check` | a production dependency whose license is not allowed (`scripts/licenses.ts`) |
 | `pnpm check:migrations` | `pnpm check` | a migration statement that locks or rewrites a busy table ([Migration safety](#migration-safety)) |
 | `pnpm ci:secrets` | CI `secrets`; the pre-commit hook when a `gitleaks` binary is installed | a secret anywhere in the history (`.gitleaks.toml`) |
 | grype in `pnpm ci:docker` | CI `docker` | a high or critical vulnerability with a released fix in the production image, not in `security/image-allowlist.json` |
 
-- **Allowlists.** Both files in `security/` take `{ <id>, package, reason, expires }`; the expiry is at most
-  180 days ahead. A finding goes there only when it cannot apply here (the reason says why); the usual fix is
-  an upgrade, an exact `overrides` entry in `pnpm-workspace.yaml` naming the advisory, or a newer base image.
+- **Exceptions.** An advisory goes in `auditConfig.ignoreGhsas` (`pnpm-workspace.yaml`, with a comment giving the
+  reason and a review date), and an image finding in `security/image-allowlist.json` (`{ <id>, package, reason,
+  expires }`, at most 180 days ahead), only when it cannot apply here. The usual fix is an upgrade, an exact
+  `overrides` entry in `pnpm-workspace.yaml` naming the advisory, or a newer base image.
 - **Renovate** (`renovate.json`; install the Renovate GitHub App to turn it on) proposes updates for the npm
   packages, pnpm (`packageManager`), Node (`devEngines`), every container image and the GitHub Actions, the
   last two pinned by digest. An image pinned in several files (`scripts/images.ts`, the compose files, `ci.yml`,

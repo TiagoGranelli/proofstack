@@ -49,7 +49,7 @@
     "check:drift": "node scripts/check-drift.ts",
     "check:migrations": "node scripts/check-migrations.ts",
     "sbom:release": "node scripts/sbom.ts",
-    "audit:check": "node scripts/audit.ts",
+    "audit:check": "pnpm audit --audit-level high",
     "licenses:check": "node scripts/licenses.ts",
     "lighthouse": "node scripts/lighthouse.ts",
     "db:reset-test": "node --env-file-if-exists=.env scripts/test-db.ts",

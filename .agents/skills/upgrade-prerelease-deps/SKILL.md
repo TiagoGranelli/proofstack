@@ -15,8 +15,9 @@ description: Upgrade dependencies in this repo, above all the pinned pre-release
   `strictPeerDependencies` an unmet peer. Every frozen install checks the lockfile against these policies.
 - A vulnerable transitive package gets an exact `overrides` entry in `pnpm-workspace.yaml` naming the advisory
   (and an `ignoreDependencyOverrides` entry in `.fallowrc.json`, since the overridden version is no longer in
-  the lockfile). What cannot be fixed goes in `security/audit-allowlist.json` with a reason and an expiry.
-  Dependabot security alerts do not work with pnpm 12 lockfiles; `pnpm audit:check` is the gate.
+  the lockfile). An advisory that cannot apply here goes in `auditConfig.ignoreGhsas` in
+  `pnpm-workspace.yaml`, with a comment giving the reason and a review date (write it by hand; `pnpm audit
+  --ignore` adds the id without the comment). `pnpm audit:check` is the gate; Renovate's OSV alerts open fix PRs.
 - Pre-release packages, pinned exactly: `effect` and `@effect/vitest` (4.0.0 RCs from the `rc` dist-tag; npm
   `latest` is v3), `nitro` (its npm `latest` is a `-beta` build), `@tanstack/react-start` (npm `latest` is a 1.x
   release, but Start's docs still call it a Release Candidate), `oxfmt` (0.x, announced as beta) and

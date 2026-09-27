@@ -48,7 +48,8 @@ routes the gate files to review:
 - **migration-lint:** make the migration safe, or waive one statement with `-- squawk-ignore <rule>` under a
   comment line giving the reason ([docs/operations.md](../operations.md#migration-safety)). **licenses:** an
   acceptable license goes in `ALLOWED` in `scripts/licenses.ts`, one exact version in `EXCEPTIONS`, each with the
-  reason. **audit:check** and the image scan: `security/*-allowlist.json` entries need a reason and an expiry.
+  reason. **audit:check:** an `auditConfig.ignoreGhsas` entry in `pnpm-workspace.yaml` needs a comment with the reason
+  and a review date. The image scan: `security/image-allowlist.json` entries need a reason and an expiry.
 
 ## Claude Code hooks and permissions
 
@@ -104,7 +105,7 @@ production (needs Docker); see [ADR 0011](../decisions/0011-lighthouse-over-http
 
 | Command | Covers |
 | --- | --- |
-| `pnpm audit:check` | Vulnerability gate over production and development packages (`pnpm audit`): fails on a high or critical advisory unless `security/audit-allowlist.json` accepts it (reason, expiry), and on an expired or stale entry. Needs the npm registry; CI job `supply-chain` |
+| `pnpm audit:check` | `pnpm audit --audit-level high` over production and development packages: fails on a high or critical advisory not in `auditConfig.ignoreGhsas` (`pnpm-workspace.yaml`). Needs the npm registry; CI job `supply-chain` |
 | `pnpm sbom:release [--image=<ref>] [--no-image]` | CycloneDX SBOMs in `sbom/` for a release: production npm dependencies, and the production image with syft (Docker). Not a gate |
 | `pnpm ci:local [job ...]` | The CI jobs (`workflows secrets static supply-chain drift build verify lighthouse docker`, default all) as `pnpm ci:<job>` scripts in the Playwright Ubuntu container next to Postgres and Mailpit, all five browser projects included. Needs Docker. See [docs/operations.md](../operations.md#ci-and-local-ci) |
 | `harbor run -p evals/tasks -a <agent> -m <model>` | The agent eval ([evals.md](evals.md)): an agent solves each task in a container, graded by `pnpm check`, drift and hidden checks. Needs Docker and Harbor, and runs a paid agent; not a gate |
