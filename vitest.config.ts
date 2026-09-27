@@ -14,7 +14,7 @@ import { defineConfig } from 'vitest/config'
 // - `component`: React components in Chromium (Vitest browser mode), network mocked by MSW.
 // - `db`: server modules against a real, freshly migrated Postgres (no build, no app): the rate-limit storage and
 //   query budgets. `pnpm test:db`; also run by `pnpm verify:app`.
-// - `integration`: the running app that `pnpm verify:app` starts.
+// - `integration`: the built app over HTTP; its global setup starts the servers (`pnpm test`).
 // `pnpm check` runs unit, api and component (the `tests` job in lefthook.yml); `pnpm verify:app` runs db and
 // integration.
 
@@ -187,8 +187,10 @@ export default defineConfig({
         test: {
           name: 'integration',
           include: ['tests/integration/**/*.test.ts'],
-          // Refuses to run without the app that `pnpm verify:app` starts (APP_URL, TEST_USER_*).
+          // Starts the built app's two servers on a fresh database and hands them over (`inject('servers')`);
+          // setup.ts gives each worker the app's environment. Needs `pnpm build`, Postgres and Mailpit.
           globalSetup: ['tests/integration/global-setup.ts'],
+          setupFiles: ['tests/integration/setup.ts'],
           // Files share only the server. Each one signs in from its own client IP (X-Forwarded-For), so they
           // cannot exhaust each other's sign-in rate limit, and they only assert on posts they created.
           fileParallelism: true,

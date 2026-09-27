@@ -3,7 +3,7 @@ import { ApiErrorAlert } from '#/components/errors/api-error-alert.tsx'
 import { useAppForm } from '#/components/form/app-form.ts'
 import { describedBy, fieldErrorMessage } from '#/components/form/field-messages.ts'
 import { FieldError } from '#/components/form/fields.tsx'
-import { loadOnInteraction, submitForm } from '#/components/form/lazy-schema.ts'
+import { loadOnInteraction, useSchemaSubmit } from '#/components/form/lazy-schema.ts'
 import { Button } from '#/components/ui/button.tsx'
 import { Label } from '#/components/ui/label.tsx'
 import { Textarea } from '#/components/ui/textarea.tsx'
@@ -31,6 +31,7 @@ export function PostComposer(props: { onPublished?: () => void }) {
     validators: { onDynamic: postDraftSchema.validator },
     onSubmit: ({ value }) => create.mutate({ body: postDraftSchema.decode(value) }),
   })
+  const { submit, schemaError } = useSchemaSubmit(form, postDraftSchema)
   const serverIssue = fieldIssue(create.error, 'body')
   const formError = create.isError && serverIssue === undefined ? create.error : null
   return (
@@ -42,7 +43,7 @@ export function PostComposer(props: { onPublished?: () => void }) {
         event.preventDefault()
         // Publish stays focusable while pending (aria-disabled, see below), so a second press lands here.
         if (create.isPending) return
-        void submitForm(event.currentTarget, form, postDraftSchema)
+        submit(event.currentTarget)
       }}
       {...loadOnInteraction(postDraftSchema)}
     >
@@ -59,7 +60,12 @@ export function PostComposer(props: { onPublished?: () => void }) {
                 value={body}
                 onChange={(event) => field.handleChange(event.target.value)}
                 onBlur={field.handleBlur}
-                aria-describedby={describedBy('post-body-count', error && 'post-body-error', formError && 'post-error')}
+                aria-describedby={describedBy(
+                  'post-body-count',
+                  error && 'post-body-error',
+                  formError && 'post-error',
+                  schemaError && 'post-schema-error',
+                )}
                 aria-invalid={isTooLong(body) || Boolean(error) || undefined}
                 required
               />
@@ -77,6 +83,7 @@ export function PostComposer(props: { onPublished?: () => void }) {
         }}
       </form.AppField>
       {formError ? <ApiErrorAlert id="post-error" error={formError} action="publish the post" /> : null}
+      <FieldError id="post-schema-error" message={schemaError} />
     </form>
   )
 }

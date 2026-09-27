@@ -1,5 +1,6 @@
 import type { StandardSchemaV1 } from '@tanstack/react-form'
 import type { Schema } from 'effect'
+import { useState } from 'react'
 import { focusFirstInvalid } from './field-messages.ts'
 
 type FormSchema<Fields, Output> = {
@@ -60,27 +61,49 @@ export const lazyFormSchema = <S extends Schema.ConstraintDecoder<unknown>>(
   }
 }
 
-const startLoading = (schema: { load: () => Promise<void> }) => () => {
+type LoadableSchema = { load: () => Promise<void> }
+
+const startLoading = (schema: LoadableSchema) => () => {
   // A failed load here is only an early start; the submit loads again and reports its own failure.
   schema.load().catch(() => {})
 }
 
 /** Props for the `<form>`: its first focus or input starts loading `schema`. */
-export const loadOnInteraction = (schema: { load: () => Promise<void> }) => ({
+export const loadOnInteraction = (schema: LoadableSchema) => ({
   onFocus: startLoading(schema),
   onInput: startLoading(schema),
 })
 
+type SubmittableForm = { handleSubmit: () => Promise<void> }
+
 /**
  * Submits a TanStack form once its schema has loaded (a submit may come before the chunk arrives), then moves
- * focus to the first field the form marked invalid.
+ * focus to the first field the form marked invalid. Resolves false, without submitting, when the schema could
+ * not be loaded.
  */
-export const submitForm = async (
-  element: HTMLFormElement,
-  form: { handleSubmit: () => Promise<void> },
-  schema?: { load: () => Promise<void> },
-) => {
-  await schema?.load()
+const submitForm = async (element: HTMLFormElement, form: SubmittableForm, schema?: LoadableSchema) => {
+  const loaded = await (schema?.load() ?? Promise.resolve()).then(
+    () => true,
+    () => false,
+  )
+  if (!loaded) return false
   await form.handleSubmit()
   focusFirstInvalid(element)
+  return true
+}
+
+/** What a form says when its schema could not be loaded, for example a chunk request lost on a bad connection. */
+const SCHEMA_LOAD_FAILED = "Couldn't load the form. Check your connection and try again."
+
+/**
+ * The submit of a form with a lazy schema. `submit(form element)` loads the schema, then submits; if the schema
+ * cannot be loaded, `schemaError` holds SCHEMA_LOAD_FAILED for the form to show in an alert, and the form stays
+ * usable: the next submit loads again and clears it.
+ */
+export const useSchemaSubmit = (form: SubmittableForm, schema?: LoadableSchema) => {
+  const [loadFailed, setLoadFailed] = useState(false)
+  const submit = (element: HTMLFormElement) => {
+    void submitForm(element, form, schema).then((loaded) => setLoadFailed(!loaded))
+  }
+  return { submit, schemaError: loadFailed ? SCHEMA_LOAD_FAILED : undefined }
 }

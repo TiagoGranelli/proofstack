@@ -5,7 +5,6 @@ import { describe, expect, it } from 'vitest'
 import { inlineSourceHashes } from '#/server/nitro/prerender-csp.ts'
 import { appUrl, clientIps, signIn, users } from './helpers.ts'
 
-const production = process.env.NODE_ENV === 'production'
 const nextIp = clientIps('100.64.0')
 
 const directive = (csp: string, name: string) =>
@@ -28,7 +27,7 @@ const expectStrictPolicy = (res: Response, label: string) => {
 const openTags = (html: string, tag: 'script' | 'style') =>
   [...html.matchAll(new RegExp(`<${tag}\\b[^>]*>`, 'g'))].map((match) => match[0])
 
-describe.runIf(production)('content security policy', () => {
+describe('content security policy', () => {
   it.each([
     ['/', 200],
     ['/login', 200],

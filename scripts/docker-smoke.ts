@@ -1,55 +1,58 @@
-// The production path end to end, with Docker only: builds the image (prerender included), scans it with grype
-// (a fixable high or critical vulnerability fails, see scanImage), runs the bundled migrator three times at once
-// through PgBouncer in transaction mode (exactly one run applies the migrations) and once more directly (it
-// must apply nothing), creates the first account with the bundled create-user, serves the app through the
-// pooler and behind the reference edge (deploy/Caddyfile) on a private network, checks it through the edge
-// (pages, then signing in as that account), and stops it gracefully. Everything it starts is removed
-// afterwards, except grype's database volume. CI's `docker` job and `pnpm ci:docker`.
+// The production path end to end with Docker only, through the adopters' own recipe: deploy/compose.production.yaml
+// plus compose.smoke.yaml (PgBouncer in transaction mode, the image built here, ephemeral ports). It builds the image
+// (prerender included), scans it with grype, runs the bundled migrator three times at once through the pooler
+// (exactly one run applies the migrations) and once directly (it must apply nothing), creates the first account with
+// the bundled create-user, brings the stack up, checks it through the edge (pages, then signing in as that account)
+// and stops the app gracefully. `down -v` removes everything it started, except grype's database volume.
+// CI's `docker` job and `pnpm ci:docker`.
 // Usage: node scripts/docker-smoke.ts   (env: CI_DOCKER_PREFIX, KEEP_SMOKE_IMAGE=1)
 import { spawn, spawnSync } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { createServer } from 'node:net'
-import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
-import { readAllowlist } from './allowlist.ts'
-import { dockerPrefix, IMAGES, waitForPostgres } from './images.ts'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { dockerPrefix, IMAGES } from './images.ts'
 
-const prefix = `${dockerPrefix()}-smoke-${process.pid}`
-const IMAGE = `${dockerPrefix()}-app:smoke`
-const NETWORK = prefix
-const [DB, POOLER, APP, EDGE] = ['db', 'pooler', 'app', 'edge'].map((role) => `${prefix}-${role}`) as [
-  string,
-  string,
-  string,
-  string,
-]
-const DIRECT_URL = 'postgres://app:app-smoke@db:5432/app'
-/** PgBouncer in transaction mode, as Neon and Supabase pool connections (docs/operations.md, "Connection poolers"). */
-const POOLED_URL = 'postgres://app:app-smoke@pooler:5432/app'
+const PROJECT = `${dockerPrefix()}-smoke-${process.pid}`
+const IMAGE = `${PROJECT}-app:smoke`
+/** grype's vulnerability database, kept between runs (about 200 MB; `docker volume rm` to reclaim). */
+const GRYPE_DB = `${dockerPrefix()}-grype-db`
+/** APP_URL in compose.smoke.yaml: the origin the checks send, whatever port Docker published. */
+const ORIGIN = 'http://localhost:8080'
 const MIGRATIONS = (JSON.parse(readFileSync('drizzle/meta/_journal.json', 'utf8')) as { entries: unknown[] }).entries
   .length
-/** srvx drains in-flight requests for up to 5 s (SERVER_SHUTDOWN_TIMEOUT); an idle server stops at once. */
-const MAX_STOP_MS = 5_000
+/**
+ * Below Docker's default stop timeout (10 s), after which a stop is a kill. srvx drains in-flight requests for up
+ * to 5 s (SERVER_SHUTDOWN_TIMEOUT) and then exits even if a timer is still pending. One is, today: rendering a
+ * form page on the server starts the connect loop of TanStack Form's devtools event client
+ * (@tanstack/devtools-event-client, `startConnectLoop`), which outlives the shutdown, so the stop takes about 5 s
+ * instead of 1 s after /login has been served.
+ */
+const MAX_STOP_MS = 8_000
 
-const docker = (args: string[], options: { quiet?: boolean; allowFailure?: boolean } = {}) => {
-  const result = spawnSync('docker', args, {
-    encoding: 'utf8',
-    stdio: options.quiet ? ['ignore', 'pipe', 'pipe'] : ['ignore', 'pipe', 'inherit'],
-    maxBuffer: 64 * 1024 * 1024,
-  })
-  // Node types these as strings, but a stream that is not piped, or a command that did not start, gives null.
-  if (result.status !== 0 && !options.allowFailure)
-    throw new Error(
-      `docker ${args.slice(0, 2).join(' ')} failed (${result.status ?? result.signal})\n${(result.stderr as string | null) ?? ''}`,
-    )
-  return ((result.stdout as string | null) ?? '').trim()
+const secret = () => randomBytes(24).toString('hex')
+/** What compose.production.yaml interpolates (deploy.env on a real server). */
+const env = {
+  ...process.env,
+  APP_IMAGE: IMAGE,
+  DOMAIN: 'localhost',
+  POSTGRES_PASSWORD: secret(),
+  APP_DB_PASSWORD: secret(),
+  BETTER_AUTH_SECRET: randomBytes(32).toString('base64'),
+}
+const COMPOSE = ['compose', '-p', PROJECT, '-f', 'deploy/compose.production.yaml', '-f', 'compose.smoke.yaml']
+
+/** `docker compose <args>` on the smoke project; returns stdout, throws with stderr when it fails. */
+const compose = (args: string[], input?: string) => {
+  const result = spawnSync('docker', [...COMPOSE, ...args], { env, input, encoding: 'utf8', maxBuffer: 64 * 2 ** 20 })
+  if (result.status !== 0)
+    throw new Error(`docker compose ${args.join(' ')} failed (${result.status ?? result.signal})\n${result.stderr}`)
+  return result.stdout.trim()
 }
 
-/** `docker` without blocking, for containers that must run at the same time. Resolves with the output. */
-const dockerAsync = (args: string[]) =>
+/** `docker compose <args>` without blocking, for runs that must overlap. Resolves with stdout. */
+const composeAsync = (args: string[]) =>
   new Promise<string>((done, reject) => {
-    const child = spawn('docker', args, { stdio: ['ignore', 'pipe', 'pipe'] })
+    const child = spawn('docker', [...COMPOSE, ...args], { env, stdio: ['ignore', 'pipe', 'pipe'] })
     let [stdout, stderr] = ['', '']
     child.stdout.on('data', (chunk: Buffer) => (stdout += chunk.toString()))
     child.stderr.on('data', (chunk: Buffer) => (stderr += chunk.toString()))
@@ -57,26 +60,9 @@ const dockerAsync = (args: string[]) =>
     child.once('exit', (code) =>
       code === 0
         ? done(stdout.trim())
-        : reject(new Error(`docker ${args.slice(0, 2).join(' ')} failed (${code})\n${stderr}`)),
+        : reject(new Error(`docker compose ${args.join(' ')} failed (${code})\n${stderr}`)),
     )
   })
-
-/** The `applied` count of the migrator's last log line. */
-const appliedBy = (output: string) => {
-  const last = JSON.parse(output.split('\n').at(-1) ?? '{}') as { msg?: string; applied?: number }
-  if (last.msg !== 'migrations applied') throw new Error(`unexpected migrator output: ${output}`)
-  return last.applied
-}
-
-/** One run of the image's migrator on the smoke network, with `env` (NAME=value). */
-const migrateOnce = (env: string[]) =>
-  dockerAsync(
-    ['run', '--rm', '--network', NETWORK, '--memory', '256m', ...env.flatMap((e) => ['--env', e])].concat([
-      IMAGE,
-      'node',
-      '.output/migrate.mjs',
-    ]),
-  )
 
 const step = async <T>(name: string, run: () => T | Promise<T>): Promise<T> => {
   const started = performance.now()
@@ -86,90 +72,102 @@ const step = async <T>(name: string, run: () => T | Promise<T>): Promise<T> => {
   return value
 }
 
-const freePort = () =>
-  new Promise<number>((done, reject) => {
-    const probe = createServer().once('error', reject)
-    probe.listen(0, '127.0.0.1', () => {
-      const { port } = probe.address() as { port: number }
-      probe.close(() => done(port))
-    })
-  })
-
-const IMAGE_ALLOWLIST = 'security/image-allowlist.json'
-/** grype's vulnerability database, kept between runs (about 200 MB; `docker volume rm` to reclaim). */
-const GRYPE_DB = `${dockerPrefix()}-grype-db`
-const BLOCKING = new Set(['High', 'Critical'])
-type GrypeMatch = {
-  vulnerability: { id: string; severity: string; fix?: { state?: string; versions?: string[] } }
-  artifact: { name: string; version: string; type: string }
-}
-
 /**
- * grype over the built image (its final filesystem, from `docker save`): a high or critical vulnerability
- * with a released fix fails, unless security/image-allowlist.json accepts it. Unfixed ones are counted, not
- * failed: nothing can be done about them but wait. Returns the problems.
+ * grype over the built image, from the Docker daemon: a high or critical vulnerability with a released fix
+ * fails, unless an ignore rule in .grype.yaml gives the reason it does not apply. Returns grype's exit code.
  */
-const scanImage = () => {
-  const { entries, problems } = readAllowlist(
-    IMAGE_ALLOWLIST,
-    'vulnerabilities',
-    'vulnerability',
-    /^(CVE-\d{4}-\d{4,}|GHSA(-[23456789cfghjmpqrvwx]{4}){3})$/,
-  )
-  const dir = mkdtempSync(join(tmpdir(), 'grype-'))
-  try {
-    docker(['save', '--output', join(dir, 'image.tar'), IMAGE], { quiet: true })
-    const ignore = entries.map((entry) => ({
-      vulnerability: entry.id,
-      package: { name: entry.name },
-      reason: IMAGE_ALLOWLIST,
-    }))
-    // JSON is YAML: grype reads it as its configuration file.
-    writeFileSync(join(dir, 'grype.yaml'), JSON.stringify({ ignore }))
-    const scan = spawnSync(
-      'docker',
-      ['run', '--rm', '--memory', '2g', '--volume', `${dir}:/scan`, '--volume', `${GRYPE_DB}:/grype-db`]
-        .concat(['--env', 'GRYPE_DB_CACHE_DIR=/grype-db', IMAGES.grype, 'docker-archive:/scan/image.tar'])
-        .concat(['--config', '/scan/grype.yaml', '--output', 'json', '--file', '/scan/report.json', '--quiet']),
-      { stdio: 'inherit' },
-    )
-    if (scan.status !== 0) return [...problems, `grype failed (exit ${scan.status ?? scan.signal})`]
-    const report = JSON.parse(readFileSync(join(dir, 'report.json'), 'utf8')) as {
-      matches: GrypeMatch[]
-      ignoredMatches?: GrypeMatch[]
-    }
-    const fixed = report.matches.filter((match) => match.vulnerability.fix?.state === 'fixed')
-    for (const { vulnerability, artifact } of fixed.filter((match) => BLOCKING.has(match.vulnerability.severity)))
-      problems.push(
-        `${vulnerability.severity} ${vulnerability.id} in ${artifact.name}@${artifact.version} (${artifact.type}), ` +
-          `fixed in ${vulnerability.fix?.versions?.join(', ') || '?'}`,
-      )
-    for (const entry of entries)
-      if (!report.ignoredMatches?.some((m) => m.vulnerability.id === entry.id && m.artifact.name === entry.name))
-        problems.push(`${IMAGE_ALLOWLIST}: ${entry.id} in ${entry.name} matches no finding anymore; remove the entry`)
-    const count = (matches: GrypeMatch[]) =>
-      ['Critical', 'High', 'Medium', 'Low', 'Negligible', 'Unknown']
-        .map((severity) => [severity, matches.filter((m) => m.vulnerability.severity === severity).length] as const)
-        .filter(([, n]) => n)
-        .map(([severity, n]) => `${n} ${severity.toLowerCase()}`)
-        .join(', ') || 'none'
-    console.log(`  with a fix: ${count(fixed)}`)
-    console.log(`  without a fix yet (not failed): ${count(report.matches.filter((m) => !fixed.includes(m)))}`)
-    console.log(`  allowlisted: ${report.ignoredMatches?.length ?? 0}`)
-    return problems
-  } finally {
-    rmSync(dir, { recursive: true, force: true })
-  }
+const scanImage = () =>
+  spawnSync(
+    'docker',
+    ['run', '--rm', '--memory', '2g', '--volume', '/var/run/docker.sock:/var/run/docker.sock']
+      .concat(['--volume', `${GRYPE_DB}:/grype-db`, '--env', 'GRYPE_DB_CACHE_DIR=/grype-db'])
+      .concat(['--volume', `${resolve('.grype.yaml')}:/grype.yaml:ro`, IMAGES.grype, `docker:${IMAGE}`])
+      .concat(['--only-fixed', '--fail-on', 'high', '--config', '/grype.yaml']),
+    { stdio: 'inherit' },
+  ).status
+
+/** The `applied` count of the migrator's last log line. */
+const appliedBy = (output: string) => {
+  const last = JSON.parse(output.split('\n').at(-1) ?? '{}') as { msg?: string; applied?: number }
+  if (last.msg !== 'migrations applied') throw new Error(`unexpected migrator output: ${output}`)
+  return last.applied
 }
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
-const running = (name: string) =>
-  docker(['inspect', '--format', '{{.State.Running}}', name], { quiet: true }) === 'true'
+/** One run of the image's migrator (the `migrate` service), with `env` (NAME=value) on top of its own. */
+const migrateOnce = (...overrides: string[]) =>
+  composeAsync(['run', '--rm', '--no-deps', ...overrides.flatMap((e) => ['--env', e]), 'migrate'])
+
+/** Three runs at once through the pooler: exactly one applies the migrations. */
+const migrateConcurrently = async () => {
+  const outputs = await Promise.all([1, 2, 3].map(() => migrateOnce()))
+  for (const output of outputs) console.log(`  pooled: ${output}`)
+  const applied = outputs.map((output) => appliedBy(output)).toSorted((a, b) => (a ?? 0) - (b ?? 0))
+  if (applied.join() !== `0,0,${MIGRATIONS}`)
+    throw new Error(`expected one run to apply ${MIGRATIONS} migrations and two to apply none, got ${applied.join()}`)
+}
+
+/** MIGRATION_DATABASE_URL (direct) wins over DATABASE_URL (the pooler), and finds nothing to do. */
+const migrateDirectly = async () => {
+  const direct = await migrateOnce(`MIGRATION_DATABASE_URL=postgres://app:${env.APP_DB_PASSWORD}@db:5432/app`)
+  console.log(`  direct: ${direct}`)
+  if (appliedBy(direct) !== 0) throw new Error('the direct run applied something')
+  const query = "select count(*) from pg_locks where locktype = 'advisory'"
+  const locks = compose(['exec', '-T', 'db', 'psql', '-U', 'postgres', '-d', 'app', '-Atc', query])
+  if (locks !== '0') throw new Error(`${locks} advisory lock(s) left behind on the pooler's server connections`)
+}
+
+const account = { email: 'first@example.test', password: randomBytes(18).toString('base64url') }
+
+/** The bundled create-user in the app's container, through the pooler, the password on stdin. */
+const createFirstAccount = () => {
+  const command = ['node', '.output/create-user.mjs', account.email, 'First User']
+  console.log(`  ${compose(['run', '--rm', '--no-deps', '-T', 'app', ...command], `${account.password}\n`)}`)
+}
+
+const checkPages = async (base: string) => {
+  const problems: string[] = []
+  for (const path of ['/', '/about', '/login', '/api/health']) {
+    const res = await fetch(base + path, { headers: { 'accept-encoding': 'gzip' } })
+    await res.arrayBuffer()
+    if (!res.ok) problems.push(`${path}: ${res.status}`)
+  }
+  const home = await fetch(base, { headers: { 'accept-encoding': 'gzip' } })
+  await home.arrayBuffer()
+  if (home.headers.get('content-encoding') !== 'gzip') problems.push('/ is not compressed by the edge')
+  if (home.headers.get('cache-control') !== 'private, no-cache')
+    problems.push(`/ Cache-Control changed on the way: ${home.headers.get('cache-control')}`)
+  if (problems.length) throw new Error(problems.join('; '))
+}
+
+const signInAndReadPosts = async (base: string) => {
+  const signIn = await fetch(`${base}/api/auth/sign-in/email`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', origin: ORIGIN },
+    body: JSON.stringify(account),
+  })
+  await signIn.arrayBuffer()
+  const cookie = signIn.headers
+    .getSetCookie()
+    .map((c) => c.split(';', 1)[0])
+    .join('; ')
+  if (!signIn.ok || !cookie) throw new Error(`sign-in answered ${signIn.status}`)
+  const posts = await fetch(`${base}/api/me/posts`, { headers: { cookie } })
+  const body = (await posts.json()) as { items?: unknown[] }
+  if (!posts.ok || !Array.isArray(body.items)) throw new Error(`GET /api/me/posts answered ${posts.status}`)
+}
+
+const stopGracefully = () => {
+  const started = performance.now()
+  compose(['stop', 'app'])
+  const ms = Math.round(performance.now() - started)
+  const code = compose(['ps', '--all', '--format', '{{.ExitCode}}', 'app'])
+  console.log(`  docker compose stop took ${ms} ms, exit code ${code}`)
+  if (code !== '0' || ms >= MAX_STOP_MS) throw new Error(`graceful stop failed: exit ${code} after ${ms} ms`)
+}
 
 const cleanup = () => {
-  docker(['rm', '--force', '--volumes', APP, EDGE, POOLER, DB], { quiet: true, allowFailure: true })
-  docker(['network', 'rm', NETWORK], { quiet: true, allowFailure: true })
-  if (process.env.KEEP_SMOKE_IMAGE !== '1') docker(['image', 'rm', IMAGE], { quiet: true, allowFailure: true })
+  spawnSync('docker', [...COMPOSE, 'down', '--volumes', '--remove-orphans'], { env, stdio: 'ignore' })
+  if (process.env.KEEP_SMOKE_IMAGE !== '1') spawnSync('docker', ['image', 'rm', IMAGE], { stdio: 'ignore' })
 }
 process.once('SIGINT', () => {
   cleanup()
@@ -177,174 +175,41 @@ process.once('SIGINT', () => {
 })
 
 let failed = false
-let scanProblems: string[] = []
+let scanStatus: number | null = 0
 try {
-  await step(`build ${IMAGE}`, () =>
-    spawnSync('docker', ['build', '--tag', IMAGE, '.'], { stdio: 'inherit' }).status === 0
-      ? undefined
-      : Promise.reject(new Error('docker build failed')),
-  )
-
+  await step(`build ${IMAGE}`, () => compose(['build', 'migrate']))
   // Reported now, failed at the end: the rest of the smoke test still runs.
-  scanProblems = await step('scan the image for vulnerabilities (grype)', scanImage)
-
-  await step('start Postgres and PgBouncer (transaction mode)', async () => {
-    docker(['network', 'create', NETWORK], { quiet: true })
-    docker(
-      ['run', '--detach', '--name', DB, '--network', NETWORK, '--network-alias', 'db', '--memory', '512m']
-        .concat(['--env', 'POSTGRES_USER=app', '--env', 'POSTGRES_PASSWORD=app-smoke'])
-        .concat(['--env', 'POSTGRES_DB=app', IMAGES.postgres]),
-      { quiet: true },
-    )
-    await waitForPostgres(DB)
-    // Behind a pooler the app sends no timeouts; the role carries them (docs/operations.md, "Connection poolers").
-    const role = ['statement_timeout = 15000', 'idle_in_transaction_session_timeout = 30000']
-    docker(['exec', DB, 'psql', '-U', 'app', '-c', role.map((s) => `alter role app set ${s};`).join(' ')], {
-      quiet: true,
-    })
-    // Two server connections for every client: runs and requests share them, as on a managed pooler.
-    docker(
-      ['run', '--detach', '--name', POOLER, '--network', NETWORK, '--network-alias', 'pooler', '--memory', '64m']
-        .concat(['--env', 'DB_HOST=db', '--env', 'DB_USER=app', '--env', 'DB_PASSWORD=app-smoke'])
-        .concat(['--env', 'DB_NAME=app', '--env', 'AUTH_TYPE=scram-sha-256', '--env', 'POOL_MODE=transaction'])
-        .concat(['--env', 'DEFAULT_POOL_SIZE=2', IMAGES.pgbouncer]),
-      { quiet: true },
-    )
-    await waitForPostgres(POOLER)
-  })
-
-  await step('migrate: three runs at once through the pooler, then one direct run that applies nothing', async () => {
-    const outputs = await Promise.all([1, 2, 3].map(() => migrateOnce([`DATABASE_URL=${POOLED_URL}`])))
-    for (const output of outputs) console.log(`  pooled: ${output}`)
-    const applied = outputs.map((output) => appliedBy(output)).toSorted((a, b) => (a ?? 0) - (b ?? 0))
-    if (applied.join() !== `0,0,${MIGRATIONS}`)
-      throw new Error(`expected one run to apply ${MIGRATIONS} migrations and two to apply none, got ${applied.join()}`)
-    // MIGRATION_DATABASE_URL (direct) wins over DATABASE_URL (the pooler).
-    const direct = await migrateOnce([`DATABASE_URL=${POOLED_URL}`, `MIGRATION_DATABASE_URL=${DIRECT_URL}`])
-    console.log(`  direct: ${direct}`)
-    if (appliedBy(direct) !== 0) throw new Error('the direct run applied something')
-    const locks = docker(
-      ['exec', DB, 'psql', '-U', 'app', '-Atc', "select count(*) from pg_locks where locktype = 'advisory'"],
-      { quiet: true },
-    )
-    if (locks !== '0') throw new Error(`${locks} advisory lock(s) left behind on the pooler's server connections`)
-  })
-
-  const port = await freePort()
-  const origin = `http://localhost:${port}`
-  const secret = randomBytes(32).toString('base64')
-  const account = { email: 'first@example.test', password: randomBytes(18).toString('base64url') }
-  await step('create the first account with the bundled create-user, password on stdin', () => {
-    const created = spawnSync(
-      'docker',
-      ['run', '--rm', '--interactive', '--network', NETWORK, '--memory', '256m']
-        .concat(['--env', `DATABASE_URL=${POOLED_URL}`, '--env', 'DATABASE_URL_POOLED=true'])
-        .concat(['--env', `APP_URL=${origin}`, '--env', `BETTER_AUTH_SECRET=${secret}`])
-        .concat([IMAGE, 'node', '.output/create-user.mjs', account.email, 'First User']),
-      { input: `${account.password}\n`, encoding: 'utf8' },
-    )
-    console.log(`  ${`${created.stdout}${created.stderr}`.trim()}`)
-    if (created.status !== 0) throw new Error(`create-user failed (exit ${created.status ?? created.signal})`)
-  })
-
-  await step(`serve behind the edge at ${origin}`, async () => {
-    const subnet = docker(['network', 'inspect', NETWORK, '--format', '{{range .IPAM.Config}}{{.Subnet}},{{end}}'], {
-      quiet: true,
-    }).replace(/,$/, '')
-    docker(
-      ['run', '--detach', '--name', APP, '--network', NETWORK, '--network-alias', 'app', '--memory', '512m']
-        .concat([
-          '--env',
-          `DATABASE_URL=${POOLED_URL}`,
-          '--env',
-          'DATABASE_URL_POOLED=true',
-          '--env',
-          `APP_URL=${origin}`,
-        ])
-        .concat(['--env', `BETTER_AUTH_SECRET=${secret}`])
-        // The edge connects from this network: its X-Forwarded-For (the client IP it resolved) is believed.
-        .concat(['--env', `TRUSTED_PROXIES=${subnet}`, IMAGE]),
-      { quiet: true },
-    )
-    docker(
-      ['run', '--detach', '--name', EDGE, '--network', NETWORK, '--memory', '128m', '--read-only']
-        .concat(['--tmpfs', '/data', '--tmpfs', '/config', '--publish', `127.0.0.1:${port}:8080`])
-        .concat(['--volume', `${resolve('deploy/Caddyfile')}:/etc/caddy/Caddyfile:ro`, IMAGES.caddy]),
-      { quiet: true },
-    )
-    for (let i = 0; i < 120; i++) {
-      if (!running(APP)) throw new Error('the app container exited')
-      if (!running(EDGE)) throw new Error('the edge container exited')
-      const res = await fetch(`${origin}/api/ready`).catch(() => null)
-      if (res?.ok) return
-      await sleep(500)
-    }
-    throw new Error('the app did not become ready through the edge in 60 s')
-  })
-
-  await step('check pages through the edge', async () => {
-    const problems: string[] = []
-    for (const path of ['/', '/about', '/login', '/api/health']) {
-      const res = await fetch(origin + path, { headers: { 'accept-encoding': 'gzip' } })
-      await res.arrayBuffer()
-      if (!res.ok) problems.push(`${path}: ${res.status}`)
-    }
-    const home = await fetch(origin, { headers: { 'accept-encoding': 'gzip' } })
-    await home.arrayBuffer()
-    if (home.headers.get('content-encoding') !== 'gzip') problems.push('/ is not compressed by the edge')
-    if (home.headers.get('cache-control') !== 'private, no-cache')
-      problems.push(`/ Cache-Control changed on the way: ${home.headers.get('cache-control')}`)
-    if (problems.length) throw new Error(problems.join('; '))
-  })
-
-  await step('sign in as the first account through the edge and read its posts', async () => {
-    const signIn = await fetch(`${origin}/api/auth/sign-in/email`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', origin },
-      body: JSON.stringify(account),
-    })
-    await signIn.arrayBuffer()
-    const cookie = signIn.headers
-      .getSetCookie()
-      .map((c) => c.split(';', 1)[0])
-      .join('; ')
-    if (!signIn.ok || !cookie) throw new Error(`sign-in answered ${signIn.status}`)
-    const posts = await fetch(`${origin}/api/me/posts`, { headers: { cookie } })
-    const body = (await posts.json()) as { items?: unknown[] }
-    if (!posts.ok || !Array.isArray(body.items)) throw new Error(`GET /api/me/posts answered ${posts.status}`)
-  })
-
+  scanStatus = await step('scan the image for fixable vulnerabilities (grype)', scanImage)
+  await step('start Postgres and PgBouncer (transaction mode)', () => compose(['up', '--detach', '--wait', 'pooler']))
+  await step('migrate: three runs at once through the pooler', migrateConcurrently)
+  await step('migrate: one direct run, which applies nothing', migrateDirectly)
+  await step('create the first account with the bundled create-user', createFirstAccount)
+  await step('bring the stack up (migrate, app, edge)', () => compose(['up', '--detach', '--wait']))
+  const base = `http://${compose(['port', 'edge', '8080'])}`
+  await step(`check pages through the edge at ${base}`, () => checkPages(base))
+  await step('sign in as the first account through the edge and read its posts', () => signInAndReadPosts(base))
   await step("check that the server runs under Node's permission model", () => {
-    const logs = spawnSync('docker', ['logs', APP], { encoding: 'utf8' })
-    if (!`${logs.stdout}${logs.stderr}`.includes('"permissionModel":true'))
+    if (!compose(['logs', 'app']).includes('"permissionModel":true'))
       throw new Error('the "starting" log line does not say permissionModel: true')
   })
-
-  await step('stop gracefully', () => {
-    const started = performance.now()
-    docker(['stop', APP], { quiet: true })
-    const ms = Math.round(performance.now() - started)
-    const code = docker(['inspect', '--format', '{{.State.ExitCode}}', APP], { quiet: true })
-    console.log(`  docker stop took ${ms} ms, exit code ${code}`)
-    if (code !== '0' || ms >= MAX_STOP_MS) throw new Error(`graceful stop failed: exit ${code} after ${ms} ms`)
-  })
+  await step('stop the app gracefully', stopGracefully)
 } catch (error) {
   failed = true
   console.error(`\nFAIL ${error instanceof Error ? error.message : String(error)}`)
 } finally {
-  for (const name of [APP, EDGE]) {
-    const logs = spawnSync('docker', ['logs', name], { encoding: 'utf8' })
-    if (logs.status === 0 && (failed || name === APP))
-      console.log(`\n--- ${name} logs ---\n${`${logs.stdout}${logs.stderr}`.trim()}`)
-  }
+  const logs = spawnSync('docker', [...COMPOSE, 'logs', '--no-color', ...(failed ? [] : ['app'])], {
+    env,
+    encoding: 'utf8',
+  })
+  console.log(`\n--- ${failed ? 'every service' : 'app'} logs ---\n${`${logs.stdout}${logs.stderr}`.trim()}`)
   cleanup()
 }
-if (scanProblems.length) {
+if (scanStatus !== 0) {
   failed = true
-  console.error(`\nFAIL image scan:\n${scanProblems.map((p) => `  - ${p}`).join('\n')}`)
   console.error(
-    'Move to a base image digest with the fix (`pnpm images:check`, then scripts/images.ts and `pnpm images:sync`), ' +
-      `or add the finding to ${IMAGE_ALLOWLIST} with the reason and an expiry date.`,
+    `\nFAIL image scan (grype exit ${scanStatus}). Move to a base image digest with the fix (Renovate proposes it; ` +
+      'by hand, the digest in scripts/images.ts and every copy `pnpm ci:workflows` lists), or add an ignore rule ' +
+      'with its reason and a review date to .grype.yaml.',
   )
 }
 console.log(failed ? '\ndocker smoke test failed' : '\ndocker smoke test passed')

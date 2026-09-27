@@ -1,9 +1,12 @@
 // scripts/migrate.ts (the deploy migrator, bundled as .output/migrate.mjs) against its own empty database:
-// concurrent runs, the retry on a busy table, the bound on waiting for another run, and MIGRATION_DATABASE_URL.
+// concurrent runs, the retry on a busy table, the bound on waiting for another run, MIGRATION_DATABASE_URL, and
+// bookkeeping that Drizzle's own migrator agrees with.
 // The same script behind PgBouncer in transaction mode is covered by `pnpm ci:docker` (scripts/docker-smoke.ts).
 import { execFile } from 'node:child_process'
 import { readFileSync } from 'node:fs'
-import { Client } from 'pg'
+import { drizzle } from 'drizzle-orm/node-postgres'
+import { migrate as drizzleMigrate } from 'drizzle-orm/node-postgres/migrator'
+import { Client, Pool } from 'pg'
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { dropTestDatabase, emptyTestDatabase, testDatabaseUrl } from '../../scripts/test-db.ts'
 
@@ -41,6 +44,21 @@ const hold = async (lock: string) => {
   await client.query(lock)
   return async () => {
     await client.query('commit')
+    await client.end()
+  }
+}
+
+/** Every row of the bookkeeping table both migrators read. */
+const recorded = async () => {
+  const client = new Client({ connectionString: url })
+  await client.connect()
+  try {
+    return (
+      await client.query<{ id: number; hash: string; created_at: string }>(
+        'select id, hash, created_at from drizzle.__drizzle_migrations order by id',
+      )
+    ).rows
+  } finally {
     await client.end()
   }
 }
@@ -110,5 +128,22 @@ describe('scripts/migrate.ts', () => {
     const run = await migrate({ DATABASE_URL: 'postgres://nobody@127.0.0.1:1/none', MIGRATION_DATABASE_URL: url })
     expect(run.code).toBe(0)
     expect(run.lines.at(-1)).toMatchObject({ msg: 'migrations applied', applied: MIGRATIONS })
+  })
+
+  // scripts/migrate.ts copies Drizzle's bookkeeping instead of calling Drizzle's migrator, because it takes a
+  // transaction-scoped advisory lock inside the migrations' transaction (safe behind a pooler). If the copy drifted
+  // from Drizzle's rules, Drizzle's migrator (`drizzle-kit migrate`, resetTestDatabase in scripts/test-db.ts)
+  // would apply migrations again on a database this script had already brought up to date.
+  it("leaves nothing for Drizzle's own migrator to apply", async () => {
+    await migrate({ DATABASE_URL: url })
+    const before = await recorded()
+    const pool = new Pool({ connectionString: url })
+    try {
+      await drizzleMigrate(drizzle({ client: pool }), { migrationsFolder: 'drizzle' })
+    } finally {
+      await pool.end()
+    }
+    expect(before).toHaveLength(MIGRATIONS)
+    expect(await recorded()).toEqual(before)
   })
 })

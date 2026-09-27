@@ -27,9 +27,10 @@ node --permission --allow-fs-read=/app/.output --allow-net --disable-warning=Exp
 ```
 
 `--disable-warning=ExperimentalWarning` suppresses the one warning `--allow-net` prints at startup, which would
-be the only line in the log that is not JSON. `scripts/app-server.ts` starts the servers of `verify:app` and
+be the only line in the log that is not JSON. `scripts/app-server.ts` starts the servers of the test runners and
 `lighthouse` with the same flags, so every test runs the server as the image does, and the server logs
-`permissionModel: true` in its `starting` line, which `verify:app` and `pnpm ci:docker` check.
+`permissionModel: true` in its `starting` line, which `tests/integration/shutdown.test.ts` and `pnpm ci:docker`
+check.
 
 The one-shot commands (`node .output/migrate.mjs`, `node .output/create-user.mjs`) run without the model: the
 migrator reads `drizzle/`, and an operator runs both by hand.

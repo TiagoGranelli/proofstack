@@ -236,6 +236,10 @@ change both places if the host already routes that range). Logs: `docker compose
 back, set the previous tag and run step 3; migrations stay applied, which is why each must be compatible
 with the version before it ([Build and deploy](#build-and-deploy)).
 
+CI tests this file on every change: `pnpm ci:docker` runs it with the override `compose.smoke.yaml` (the image
+built from the checkout, PgBouncer in front of Postgres, plain HTTP on an ephemeral port, a subnet Docker
+picks) through steps 3 and 4 and a sign-in through Caddy.
+
 Tested locally with `DOMAIN=localhost`, where Caddy uses its internal CA, on ports 58080 and 58443: HTTPS
 with HTTP/2 and the redirect from HTTP, the migrations, `create-user` through the command above, a sign-in
 through Caddy (the session records the client's address, not Caddy's), the role's settings, and the backup
@@ -396,7 +400,7 @@ default) send a length.
 ### Edge proxy (Caddy)
 
 `deploy/Caddyfile` is the reference edge, and the topology the tests measure: `pnpm lighthouse` always
-runs through it, `pnpm verify:app --edge` optionally, and `pnpm ci:docker` serves the image behind it.
+runs through it, the integration and E2E tests optionally (`TEST_EDGE=1`), and `pnpm ci:docker` serves the image behind it.
 It uses Caddy 2.11.4 (image pinned by digest in `compose.yaml` and `scripts/images.ts`) and does four
 things:
 
@@ -437,7 +441,7 @@ docker compose --profile edge down
 ```
 
 The profile keeps `pnpm dev` and `pnpm db:up` to Postgres only. In front of a locally running build
-(`pnpm lighthouse`, `pnpm verify:app --edge`), `scripts/edge.ts` starts the same Caddyfile, either from
+(`pnpm lighthouse`, and the test servers with `TEST_EDGE=1`), `scripts/edge.ts` starts the same Caddyfile, either from
 the pinned image (`EDGE_RUNTIME=docker`, the default) or from a `caddy` binary (`EDGE_RUNTIME=binary`,
 `CADDY_BIN`), which is what `pnpm ci:local` uses inside its container. The image runs on the host network
 on Linux; on macOS and Windows, where Docker Desktop's host networking differs, it runs on Docker's bridge
@@ -548,7 +552,7 @@ the subject, because links carry tokens. `AUTH_SIGN_UP=open` refuses to start wi
 
 Locally, `pnpm mail:up` (also run by `pnpm bootstrap`) starts Mailpit from `compose.yaml`, pinned by
 digest: SMTP on `MAILPIT_SMTP_PORT` (54325), the inbox and its API on `MAILPIT_HTTP_PORT` (54380). Nothing
-leaves the machine. `pnpm verify:app` needs it: the E2E tests read links from its API.
+leaves the machine. The integration and E2E runs need it: the E2E tests read links from its API.
 
 ## Data retention
 
@@ -613,20 +617,22 @@ then writes the session; a load test found such writes failing with `Failed quer
 closed. Every Better Auth call therefore counts as a background task until it finishes
 (`finishBeforeShutdown`, `src/server/background-tasks.ts`).
 
-`verify:app` stops its main server the hard way (`stopWhileDraining` in `scripts/app-server.ts`): a
-request to `/api/ready` that arrives at the moment of SIGTERM must get 503 with `Connection: close`, and a
-sign-in abandoned just before it must be logged as 499 before `shutdown complete`, with no failed query
-after. It also fails when `shutdown complete` is missing or lacks `postgres-pool`, or when a connection to
-the test database outlives the process.
+`tests/integration/shutdown.test.ts` stops a server of its own the hard way: a request to `/api/ready`
+that arrives at the moment of SIGTERM must get 503 with `Connection: close`, and a sign-in abandoned just
+before it must be logged as 499 before `shutdown complete`, with no failed query after. It also fails when
+`shutdown complete` is missing or lacks `postgres-pool`, or when a connection to the test database outlives
+the process.
 
 Measured with the Docker image: `docker stop` returns in about 1.2 s with exit code 0, including an idle
-keep-alive connection. Keep the orchestrator's grace period above `SERVER_SHUTDOWN_TIMEOUT` (Docker's
+keep-alive connection. After the server has rendered a form page (`/login`), it takes about 5 s instead: the
+drain and the close hook still finish at once, but TanStack Form's devtools event client leaves a connect
+loop (`setInterval`) running on the server, and srvx exits only when its 5 s timeout ends. Keep the orchestrator's grace period above `SERVER_SHUTDOWN_TIMEOUT` (Docker's
 default of 10 s is enough).
 
 srvx skips its signal handling when `CI` or `TEST` is set in the environment (and `TEST` also hides its
 startup line). Do not set either in production, or SIGTERM ends the process immediately without draining
 or closing the pool. The Dockerfile sets `CI=true` only in its build stage, not in the runtime image.
-`scripts/app-server.ts` (used by `verify:app` and `lighthouse`) removes both from the test server's
+`scripts/app-server.ts` (used by the test runners and `lighthouse`) removes both from the test server's
 environment, so the tests exercise the production shutdown path even on CI, which sets `CI=true`.
 
 ## Logs
@@ -775,29 +781,30 @@ browsers, Postgres and (for `verify`) Mailpit, and moves artifacts. The logic li
 | `pnpm ci:build` | `pnpm build` with placeholder configuration (the same as the Dockerfile's) |
 | `pnpm ci:verify` | `verify:app` on all five Playwright projects (needs Mailpit: the `mailpit` service) |
 | `pnpm ci:lighthouse` | `pnpm lighthouse --runs=5`, through the edge. Exit 2 means inconclusive (see docs/agents/gates.md) |
-| `pnpm ci:docker` | `scripts/docker-smoke.ts`: builds the image, scans it with grype (see below), migrates with three runs at once through PgBouncer (transaction mode) and once directly, serves it through the pooler and behind Caddy on a private network, checks pages through the edge, stops it gracefully. Brings its own Postgres and PgBouncer. Needs Docker. |
+| `pnpm ci:docker` | `scripts/docker-smoke.ts` on the adopters' recipe itself: `deploy/compose.production.yaml` plus `compose.smoke.yaml` (PgBouncer in transaction mode in front of Postgres, the image built from this checkout, the edge on an ephemeral loopback port). Builds the image, scans it with grype (see below), migrates with three runs at once through the pooler and once directly, creates the first account with the bundled `create-user`, brings the stack up, checks pages and a sign-in through the edge, stops the app gracefully, and `down -v` removes everything. Needs Docker. |
 
-`pnpm ci:local [job ...]` is the faithful local equivalent (default: every job, in CI order). It runs the
-container jobs (`static`, `supply-chain`, `drift`, `build`, `verify`, `lighthouse`) in the official Playwright image
-for `@playwright/test` 1.63.0 (Ubuntu 24.04, all browsers including WebKit), with Node from
-the `node` image (the version in `devEngines`), pnpm from `packageManager` and the pinned Caddy binary added, next to Postgres 18.6 and
-Mailpit (`MAILPIT_HOST=mailpit` for `verify:app`) on a private Docker network. The host jobs (`workflows`, `secrets`, `docker`) drive Docker and run on the host.
+`pnpm ci:local [job ...]` is the faithful local equivalent (default: every job, in CI order). The container jobs
+(`static`, `supply-chain`, `drift`, `build`, `verify`, `lighthouse`) run in `compose.ci.yaml`: a `runner` built
+from the official Playwright image for `@playwright/test` 1.63.0 (Ubuntu 24.04, all browsers including WebKit)
+with pnpm from `packageManager` and the pinned Caddy binary, next to Postgres 18.6 and Mailpit
+(`MAILPIT_HOST=mailpit`). pnpm installs the Node of `devEngines.runtime` there as it does everywhere. The host
+jobs (`workflows`, `secrets`, `docker`) drive Docker themselves and run on the host.
 
-- The repository is mounted read-only. The container copies what a CI checkout would contain (tracked
-  files and untracked files that are not ignored, as they are on disk) and installs its own
-  `node_modules` with `pnpm install --frozen-lockfile`; the host's `node_modules` and `.output` are never
-  touched. The pnpm store is the volume `<prefix>-pnpm-store`, kept between runs.
-- Limits: `CI_LOCAL_CPUS` (default 4, like a GitHub-hosted runner), `CI_LOCAL_MEMORY` (default `6g`, no
-  swap) and `CI_LOCAL_SHM` (default `2g`; Chrome needs a large `/dev/shm`). Postgres keeps its data in
-  memory (1 GB limit).
+- The runner never touches the host's `node_modules` or `.output`. Once per run, the script fills the `work`
+  volume with what a CI checkout contains: a clone of HEAD and its parent (the static job diffs against
+  `HEAD^`), with the files as they are on disk on top (tracked and untracked ones that are not ignored), then
+  `pnpm install --frozen-lockfile`. The pnpm store is the volume `<prefix>-pnpm-store`, kept between runs.
+- Each job is `docker compose run --rm runner pnpm ci:<job>` in a fresh container. Limits: `CI_LOCAL_CPUS`
+  (default 4, like a GitHub-hosted runner), `CI_LOCAL_MEMORY` (default `6g`, no swap) and `CI_LOCAL_SHM`
+  (default `2g`; Chrome needs a large `/dev/shm`). Postgres keeps its data in memory.
 - `verify` and `lighthouse` add `build` when it is missing, like CI's `needs: build`. Jobs run one at a
   time; a Lighthouse run shares the machine with nothing else.
-- Reports are copied to `test-results/ci-local/<job>/`. The summary lists every job's time and the
-  runner container's peak memory (cgroup `memory.current`, including page cache, and anonymous memory).
-- Containers and the network are named `<prefix>-local-<pid>-*` and removed at the end, also on Ctrl-C.
-  `CI_DOCKER_PREFIX` sets the prefix (default `<package name>-ci`). The runner image
-  (`<prefix>-runner:<hash>`) and the store volume stay for the next run; remove them with
-  `docker image rm` and `docker volume rm`.
+- Reports are copied to `test-results/ci-local/<job>/`. The summary lists every job's time and its
+  container's peak memory, read inside the container (`/sys/fs/cgroup/memory.peak`, page cache included), so
+  it works wherever Docker runs Linux containers.
+- The compose project is `<prefix>-local-<pid>`; `docker compose down -v` removes its containers, network,
+  image tag and `work` volume at the end, also on Ctrl-C. `CI_DOCKER_PREFIX` sets the prefix (default
+  `<package name>-ci`).
 
 `act` still works as a smoke test of the YAML for the jobs without artifacts, but not as a CI
 replacement: `actions/upload-artifact` v7 fails under act (nektos/act#6022).
@@ -821,8 +828,7 @@ The tooling targets Linux, macOS and Windows; CI runs everything on Linux and `p
   path is written for Docker Desktop and has not been run there yet. On Linux it needs a host firewall that
   lets containers reach the host (it timed out on the maintainer's machine), which is why Linux keeps the
   host network by default.
-- **`pnpm ci:local` and `pnpm ci:docker`** need Docker; `ci:local` samples memory from the cgroup, which
-  exists on Linux only.
+- **`pnpm ci:local` and `pnpm ci:docker`** need Docker.
 
 ### Linux: memory caps
 
@@ -848,11 +854,11 @@ What guards the dependencies, the image and the repository, and where each gate 
 | `pnpm licenses:check` | `pnpm check` | a production dependency whose license is not allowed (`scripts/licenses.ts`) |
 | `pnpm check:migrations` | `pnpm check` | a migration statement that locks or rewrites a busy table ([Migration safety](#migration-safety)) |
 | `pnpm ci:secrets` | CI `secrets`; the pre-commit hook when a `gitleaks` binary is installed | a secret anywhere in the history (`.gitleaks.toml`) |
-| grype in `pnpm ci:docker` | CI `docker` | a high or critical vulnerability with a released fix in the production image, not in `security/image-allowlist.json` |
+| grype in `pnpm ci:docker` | CI `docker` | a high or critical vulnerability with a released fix in the production image (`grype --only-fixed --fail-on high`), unless `.grype.yaml` ignores it |
 
 - **Exceptions.** An advisory goes in `auditConfig.ignoreGhsas` (`pnpm-workspace.yaml`, with a comment giving the
-  reason and a review date), and an image finding in `security/image-allowlist.json` (`{ <id>, package, reason,
-  expires }`, at most 180 days ahead), only when it cannot apply here. The usual fix is an upgrade, an exact
+  reason and a review date), and an image finding in `.grype.yaml` (an `ignore` rule with the package, a
+  `reason` and a review date in it), only when it cannot apply here. The usual fix is an upgrade, an exact
   `overrides` entry in `pnpm-workspace.yaml` naming the advisory, or a newer base image.
 - **Renovate** (`renovate.json`; install the Renovate GitHub App to turn it on) proposes updates for the npm
   packages, pnpm (`packageManager`), Node (`devEngines`), every container image and the GitHub Actions, the

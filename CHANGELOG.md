@@ -8,6 +8,28 @@ repository created from the template.
 
 ## [Unreleased]
 
+### Changed
+
+- `pnpm test` and `pnpm test:e2e` start the built app themselves (their global setups, through
+  `startTestServers` in `scripts/app-server.ts`), so they run directly, from `playwright test --ui` and from the
+  editor extensions. `pnpm verify:app` runs the layers one after another and prints a summary; the drain check
+  is `tests/integration/shutdown.test.ts`.
+- `pnpm ci:docker` runs `deploy/compose.production.yaml` itself, with `compose.smoke.yaml` on top, and scans the
+  image with `grype --only-fixed --fail-on high`.
+- `pnpm ci:local` runs its container jobs in `compose.ci.yaml`.
+
+### Fixed
+
+- A form whose schema cannot be loaded (a lost chunk request) says so in an alert instead of doing nothing.
+
+### Upgrade notes
+
+- `verify:app` takes no arguments: instead of a filter or `--no-db`, `--no-integration`, `--no-e2e`, run that
+  runner (`pnpm test:db`, `pnpm test`, `pnpm test:e2e`, each with a filter). `--edge` is `TEST_EDGE=1`.
+  `VERIFY_PORT` and `TEST_DATABASE_URL` are gone: every run uses free ports and its own database.
+- Image scan exceptions move from `security/image-allowlist.json` to `ignore` rules in `.grype.yaml`, with the
+  reason and a review date in `reason`; nothing enforces the date any more.
+
 ## [0.1.0] - 2026-09-27
 
 The first release.

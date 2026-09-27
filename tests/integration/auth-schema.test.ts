@@ -1,6 +1,6 @@
 // Better Auth against the migrated test database: the Drizzle adapter's runtime schema check (which gates every
 // auth request) passes, and the auth tables use timestamptz. Loads the server's auth configuration in-process
-// with the environment verify:app gives the app (DATABASE_URL, APP_URL, BETTER_AUTH_SECRET).
+// with the app's environment (DATABASE_URL, APP_URL, BETTER_AUTH_SECRET; setup.ts).
 import { afterAll, describe, expect, it } from 'vitest'
 import { auth } from '#/server/auth.ts'
 import { pool } from '#/server/db/client.ts'

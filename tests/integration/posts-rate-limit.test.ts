@@ -4,10 +4,10 @@
 import { Pool } from 'pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { WRITE_WINDOW_SECONDS, WRITES_PER_WINDOW } from '#/contract/limits.ts'
-import { appUrl, clientIps, createUser, signIn } from './helpers.ts'
+import { appUrl, databaseUrl, clientIps, createUser, signIn } from './helpers.ts'
 
 const nextIp = clientIps('100.64.6')
-const pool = new Pool({ connectionString: process.env.DATABASE_URL })
+const pool = new Pool({ connectionString: databaseUrl })
 afterAll(() => pool.end())
 
 let cookie: string

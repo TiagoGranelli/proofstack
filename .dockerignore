@@ -32,7 +32,8 @@ lefthook.yml
 .claude/
 repos/
 docs/
-security/
+.grype.yaml
+compose.*.yaml
 .gitleaks.toml
 .squawk.toml
 tests/

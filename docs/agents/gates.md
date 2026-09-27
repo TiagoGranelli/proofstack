@@ -76,7 +76,7 @@ gate files to review:
   line giving the reason ([docs/operations.md](../operations.md#migration-safety)). **licenses:** an
   acceptable license goes in `ALLOWED` in `scripts/licenses.ts`, one exact version in `EXCEPTIONS`, each with the
   reason. **audit:check:** an `auditConfig.ignoreGhsas` entry in `pnpm-workspace.yaml` needs a comment with the reason
-  and a review date. The image scan: `security/image-allowlist.json` entries need a reason and an expiry.
+  and a review date. The image scan: an `ignore` rule in `.grype.yaml` needs a `reason` with a review date.
 
 ## Claude Code hooks and permissions
 

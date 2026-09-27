@@ -1,12 +1,10 @@
 // Security behavior of the running app: headers and CSP, CSRF, the Better Auth surface, sessions,
-// request limits and sign-in rate limiting. Run through `pnpm verify:app` (production build).
+// request limits and sign-in rate limiting, against the production build (global-setup.ts).
 import { beforeAll, describe, expect, it } from 'vitest'
 import { appUrl, clientIps, postSignIn, sessionCookie, signIn, users } from './helpers.ts'
 
 const nextIp = clientIps('198.51.100')
 const { email, password } = users.author
-// CSP, the static-file headers and rate limiting are production-only.
-const production = process.env.NODE_ENV === 'production'
 
 const me = (cookie: string) => fetch(`${appUrl}/api/me`, { headers: { cookie } })
 
@@ -17,7 +15,7 @@ beforeAll(async () => {
 })
 
 describe('headers', () => {
-  it.runIf(production)('gives SSR pages a nonce-based CSP that covers every script', async () => {
+  it('gives SSR pages a nonce-based CSP that covers every script', async () => {
     const res = await fetch(appUrl)
     const csp = res.headers.get('content-security-policy') ?? ''
     const nonce = csp.match(/script-src 'self' 'nonce-([^']+)'/)?.[1]
@@ -34,7 +32,7 @@ describe('headers', () => {
     expect(again).not.toContain(nonce!)
   })
 
-  it.runIf(production)('sends security headers on static files and prerendered pages too', async () => {
+  it('sends security headers on static files and prerendered pages too', async () => {
     for (const path of ['/about', '/favicon.svg']) {
       const res = await fetch(appUrl + path)
       expect(res.status, path).toBe(200)
@@ -202,7 +200,7 @@ describe('sessions', () => {
     expect(await unknown.json()).toEqual(await wrong.json())
   })
 
-  it.runIf(production)('limits sign-in to 3 attempts per 10 s per client IP', async () => {
+  it('limits sign-in to 3 attempts per 10 s per client IP', async () => {
     const client = nextIp()
     const attempts: Response[] = []
     for (let attempt = 0; attempt < 4; attempt++)

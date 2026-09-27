@@ -1,5 +1,7 @@
+import { availableParallelism } from 'node:os'
 import { defineConfig, devices } from '@playwright/test'
 
+// tests/e2e/global-setup.ts starts the app and sets APP_URL before the workers load this file again.
 const baseURL = process.env.APP_URL ?? 'http://localhost:3000'
 
 // Every flow runs on every project. WebKit (and with it iPhone 15) needs Ubuntu's libraries and does not run
@@ -40,9 +42,14 @@ if (unknown.length)
 
 export default defineConfig({
   testDir: 'tests/e2e',
-  // Playwright empties its output directory on start; test-results/app-server.log (verify:app) lives next to it.
+  globalSetup: './tests/e2e/global-setup.ts',
+  // Playwright empties its output directory on start; the app servers' logs (test-results/app-server-e2e*.log) live
+  // next to it.
   outputDir: 'test-results/playwright',
   fullyParallel: false,
+  // Half the CPUs, as Playwright's default, but the CPUs this process may use: Playwright counts os.cpus(), every
+  // core of the host, so in a container limited to 4 (`pnpm ci:local`) it started 16 workers and tests timed out.
+  workers: Math.max(1, Math.floor(availableParallelism() / 2)),
   forbidOnly: !!process.env.CI,
   // A retry keeps one bad run from hiding the report of the others, but a test that only passes on retry is a
   // failure in CI: flakiness is fixed, not absorbed (the report names the flaky test).

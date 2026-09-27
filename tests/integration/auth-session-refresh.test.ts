@@ -3,10 +3,10 @@
 // (/api/me) and Better Auth's own /get-session.
 import { Pool } from 'pg'
 import { afterAll, describe, expect, it } from 'vitest'
-import { appUrl, clientIps, sessionCookie, signIn, users } from './helpers.ts'
+import { appUrl, databaseUrl, clientIps, sessionCookie, signIn, users } from './helpers.ts'
 
 const nextIp = clientIps('100.64.4')
-const pool = new Pool({ connectionString: process.env.DATABASE_URL })
+const pool = new Pool({ connectionString: databaseUrl })
 afterAll(() => pool.end())
 
 const DAY = 24 * 60 * 60 * 1000

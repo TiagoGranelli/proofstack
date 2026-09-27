@@ -1,4 +1,4 @@
-// Cursor pagination of GET /api/posts and GET /api/me/posts against the running app (`pnpm verify:app`).
+// Cursor pagination of GET /api/posts and GET /api/me/posts against the running app (`pnpm test`).
 // Other files add and delete posts concurrently, so every assertion is either about posts this file created
 // or about invariants that hold for any single request (a page is one SELECT).
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'

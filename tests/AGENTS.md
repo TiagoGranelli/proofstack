@@ -9,9 +9,9 @@ Test each behavior in the cheapest layer that can observe it:
 | unit | `tests/unit` | `check` | Pure functions, examples plus fast-check properties. Modules in `COVERAGE_GATE` (`vitest.config.ts`) need 100% lines and branches |
 | api | `tests/api` | `check` | Effect handler branching through the typed client: in-memory `PostsRepo`, fake session store, no database |
 | component | `tests/component` | `check` | React components in Chromium (Vitest browser mode), network mocked by MSW: pending and disabled states, every error branch, limits, focus |
-| db | `tests/db` | `verify:app`, `test:db` | Server modules on a real Postgres without a build: the rate-limit storage, and the query budget of every repository method |
-| integration | `tests/integration` | `verify:app` | The built app over HTTP: SQL, Better Auth, CSRF, headers, rate limits |
-| e2e | `tests/e2e` | `verify:app` | Browser flows, axe on every page state, keyboard and focus, ARIA landmark snapshots |
+| db | `tests/db` | `test:db`, `verify:app` | Server modules on a real Postgres without a build: the rate-limit storage, and the query budget of every repository method |
+| integration | `tests/integration` | `test`, `verify:app` | The built app over HTTP: SQL, Better Auth, CSRF, headers, rate limits, shutdown |
+| e2e | `tests/e2e` | `test:e2e`, `verify:app` | Browser flows, axe on every page state, keyboard and focus, ARIA landmark snapshots |
 
 ## Running
 
@@ -19,17 +19,17 @@ Test each behavior in the cheapest layer that can observe it:
   coverage. `pnpm test:db [filter ...]` runs the `db` layer against a fresh `app_db_<pid>_test` database
   next to `DATABASE_URL` (dropped afterwards; `KEEP_TEST_DB=1` keeps it). It needs Postgres, no build. Creating
   any per-run database also drops those of runs whose pid is gone (stopped with Ctrl-C, killed).
-- `pnpm build && pnpm verify:app [--no-db] [--no-e2e] [--no-integration] [--edge] [filter ...]` runs the `db`
-  layer, then starts two built servers (open and closed sign-up) against a fresh per-run
-  `app_<purpose>_<pid>_test` database (dropped afterwards) and runs Vitest (`tests/integration`) and
-  Playwright (`tests/e2e`, projects from `PW_PROJECTS`); app logs go to `test-results/app-server*.log`. After a
-  full run (every runner, no filter) it runs the api layer again with its recorder and the contract-coverage
-  check. A filter that matches no test is an error; a runner that no filter matches is skipped. `--edge` puts
-  the Caddy edge in front of the open server. It refuses a stale `.output`.
-- `pnpm test` (Vitest project `integration`) and `pnpm test:e2e` expect an app that is already running at
-  `APP_URL`; both also need `CLOSED_APP_URL` and `MAILPIT_URL`, the integration tests `TEST_USER_*`, and E2E
-  the app's own environment (`DATABASE_URL` and the rest, to create its authors). `verify:app` provides all
-  of it.
+- `pnpm test [filter ...]` (Vitest project `integration`) and `pnpm test:e2e [filter ...]` (Playwright) each
+  start the built app themselves, after `pnpm build`, with Postgres and Mailpit (`pnpm mail:up`) running. Set no
+  variables by hand: the runner's global setup (`tests/integration/global-setup.ts`, `tests/e2e/global-setup.ts`,
+  both through `startTestServers` in `scripts/app-server.ts`) refuses a stale `.output`, creates a fresh
+  `app_<runner>_<pid>_test` database, starts the two servers described below with two verified authors, and
+  stops them and drops the database at the end. App logs go to `test-results/app-server-<runner>*.log`. The
+  same holds for `pnpm exec playwright test --ui` and the VS Code Playwright and Vitest extensions.
+- `pnpm build && pnpm verify:app` runs, in order and each even after a failure, the api layer with its recorder,
+  the `db` layer, the integration tests, the E2E tests (projects from `PW_PROJECTS`) and the contract-coverage
+  check, then prints a summary. It takes no filter: for one layer or file, run that runner directly. The
+  servers start once per runner.
 - Install the test browsers once: `pnpm exec playwright install chromium firefox`. `verify:app`,
   `lighthouse` and the `component` project use `CHROME_PATH` instead of Playwright's Chromium when it is set.
   E2E runs every flow on the Playwright projects `chromium`, `firefox`, `webkit`, `Pixel 7` and `iPhone 15`;
@@ -116,14 +116,20 @@ Test each behavior in the cheapest layer that can observe it:
   posts by an author only `posts-pagination.spec.ts` reads (`PAGINATED_AUTHOR`). Never publish many posts
   from a spec: a post published moments ago must stay on the first page of `/`.
 
-## The running app (`verify:app`)
+## The running app (integration and E2E)
 
-- `verify:app` needs Mailpit (`pnpm mail:up`; `MAILPIT_SMTP_PORT`/`MAILPIT_HTTP_PORT` from `.env`). It
-  starts two servers on one database per run: `APP_URL` with `AUTH_SIGN_UP=open` and loopback in
-  `TRUSTED_PROXIES`, and `CLOSED_APP_URL` with the default closed sign-up and a proxy list that excludes the
-  test process. The integration tests and then the E2E tests run against them, so both suites see each
-  other's data. Only `auth-client-ip.test.ts` signs in on `CLOSED_APP_URL`: every request there shares the
-  bucket of 127.0.0.1.
+- Each runner's global setup needs Mailpit (`pnpm mail:up`; `MAILPIT_SMTP_PORT`/`MAILPIT_HTTP_PORT` from
+  `.env`) and starts two servers on one database per run: the open one with `AUTH_SIGN_UP=open` and loopback in
+  `TRUSTED_PROXIES`, and the closed one with the default closed sign-up and a proxy list that excludes the
+  test process. Integration tests reach them through `tests/integration/helpers.ts` (`appUrl`, `closedAppUrl`,
+  `databaseUrl`, `users`: `inject('servers')`), and `tests/integration/setup.ts` puts the open server's settings
+  in each worker's environment for the server modules a test imports and for `scripts/create-user.ts`. E2E
+  workers get `APP_URL` (Playwright's `baseURL`), `CLOSED_APP_URL`, `MAILPIT_URL` and the server settings as
+  environment variables. Only `auth-client-ip.test.ts` signs in on the closed server: every request there
+  shares the bucket of 127.0.0.1.
+- A test that stops or breaks a server starts its own with `startApp` on its own database, as
+  `db-failure.test.ts` (tables renamed under a running app) and `shutdown.test.ts` (SIGTERM while draining,
+  the permission model, no connection left) do.
 - Integration files run in parallel against the same two test users. Each file creates its own client IP
   sequence with `clientIps('<prefix>')` from `tests/integration/helpers.ts` (for example `192.0.2`), sent
   as `X-Forwarded-For`, so each file has its own sign-in rate-limit buckets. Use a prefix no other file
@@ -138,10 +144,11 @@ Test each behavior in the cheapest layer that can observe it:
 - State-changing requests must send `Origin: <APP_URL>`. Without it, the CSRF middleware in
   `src/start.ts` answers 403 before authentication runs, so a test that expects 401 gets 403.
   `sdkClient(cookie)` and `postSignIn` send it; the anonymous `sdkClient()` does not.
-- Environment for `verify:app` (`ALLOW_STALE_BUILD` also applies to `lighthouse`):
-  - `TEST_DATABASE_URL`: use this fixed `*_test` database. It is reset (dropped and recreated) at the
-    start and not dropped afterwards.
+- Optional environment for both runners and `verify:app` (`ALLOW_STALE_BUILD` also applies to `lighthouse`):
   - `KEEP_TEST_DB=1`: keep the per-run database after the run.
   - `ALLOW_STALE_BUILD=1`: skip the check that `.output` is newer than its sources (CI tests a downloaded
     build).
-  - `VERIFY_PORT`: fixed port for the app (default: a free port).
+  - `TEST_EDGE=1`: put the Caddy edge (`deploy/Caddyfile`, `scripts/edge.ts`) in front of the open server; its
+    log is `test-results/edge-<runner>.log`.
+- Vitest skips its global teardown on Ctrl-C, and a killed run skips any teardown: the servers go with the
+  terminal's signal, and the next run that creates a test database drops the ones whose pid is gone.

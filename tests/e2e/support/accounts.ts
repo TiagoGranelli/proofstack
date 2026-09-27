@@ -1,5 +1,5 @@
 // Account lifecycle helpers for E2E specs: throwaway accounts, links read from the mail Mailpit caught, a second
-// signed-in browser, and form sign-in. The verify:app server under test has AUTH_SIGN_UP=open and sends its mail
+// signed-in browser, and form sign-in. The open server under test has AUTH_SIGN_UP=open and sends its mail
 // to Mailpit (MAILPIT_URL).
 import type { Browser, BrowserContext, Page, TestInfo } from '@playwright/test'
 import { type Author, createAuthor, expect, nextClientIp } from './app.ts'

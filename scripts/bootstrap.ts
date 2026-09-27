@@ -50,20 +50,16 @@ if (['127.0.0.1', 'localhost'].includes(url.hostname) && url.port !== port)
   )
 
 step(
-  'pnpm db:up',
-  ['pnpm', 'run', '--silent', 'db:up'],
-  'Is Docker running? If the port is taken, set POSTGRES_PORT (and the port in DATABASE_URL) in .env.',
-)
-step(
-  'pnpm mail:up',
-  ['pnpm', 'run', '--silent', 'mail:up'],
-  'Is Docker running? If a port is taken, set MAILPIT_SMTP_PORT (and the port in SMTP_URL) or MAILPIT_HTTP_PORT in .env.',
+  'docker compose up --detach --wait db mailpit',
+  ['docker', 'compose', 'up', '--detach', '--wait', 'db', 'mailpit'],
+  'Is Docker running? If a port is taken, set POSTGRES_PORT (and the port in DATABASE_URL), MAILPIT_SMTP_PORT ' +
+    '(and the port in SMTP_URL) or MAILPIT_HTTP_PORT in .env.',
 )
 // The same migrator as deploys (advisory lock, JSON logs with the failing statement's error).
 step(
   'node scripts/migrate.ts',
   [process.execPath, 'scripts/migrate.ts'],
-  'See the error above; `pnpm db:up` must have succeeded.',
+  'See the error above; Postgres must have started.',
 )
 
 console.log(`
