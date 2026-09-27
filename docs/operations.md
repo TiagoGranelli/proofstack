@@ -401,7 +401,7 @@ browsers, Postgres and (for `verify`) Mailpit, and moves artifacts. The logic li
 
 | Script | Job |
 | --- | --- |
-| `pnpm ci:workflows` | actionlint 1.7.12 and zizmor 1.30.1 (images pinned by digest, offline, read-only), and a check that `compose.yaml` and `ci.yml` pin the same images as `scripts/images.ts`. Needs Docker. |
+| `pnpm ci:workflows` | actionlint 1.7.12 and zizmor 1.30.1 (images pinned by digest, offline, read-only), and a check that `compose.yaml`, `ci.yml` and the `Dockerfile` pin the same images as `scripts/images.ts`. Needs Docker. |
 | `pnpm ci:static` | `pnpm check` without its drift gate |
 | `pnpm ci:drift` | `pnpm check:drift`, all four checks (`DATABASE_URL`) |
 | `pnpm ci:build` | `pnpm build` with placeholder configuration (the same as the Dockerfile's) |
