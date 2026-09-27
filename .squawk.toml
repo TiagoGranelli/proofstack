@@ -1,5 +1,5 @@
-# squawk (`pnpm check:migrations`, scripts/check-migrations.ts): lints drizzle/*.sql for statements that lock
-# or rewrite busy tables. See docs/operations.md, "Migration safety", for waivers and CONCURRENTLY.
+# squawk (`pnpm check:migrations`): lints drizzle/*.sql for statements that lock or rewrite busy tables, and fails
+# on any finding. See docs/operations.md, "Migration safety", for waivers and CONCURRENTLY.
 
 # compose.yaml, CI and production run Postgres 18 (scripts/images.ts).
 pg_version = "18.6"

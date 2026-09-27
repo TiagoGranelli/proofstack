@@ -1,9 +1,10 @@
 // License gate over the production dependencies, the packages whose code ships in .output and the Docker image
 // (`pnpm licenses list --json --prod`, read from node_modules: offline, well under a second). Every package must
-// carry a license from ALLOWED, satisfy one alternative of an `OR` expression and every part of an `AND`, or
-// be one of the exact versions in EXCEPTIONS. Anything else fails, including copyleft licenses (GPL, LGPL,
-// AGPL, SSPL, BUSL) and packages without a license.
+// carry a license from ALLOWED, satisfy one alternative of an `OR` expression and every part of an `AND`
+// (spdx-satisfies), or be one of the exact versions in EXCEPTIONS. Anything else fails, including copyleft
+// licenses (GPL, LGPL, AGPL, SSPL, BUSL) and packages without a license.
 // Usage: pnpm licenses:check   (a gate of `pnpm check`)
+import satisfies from 'spdx-satisfies'
 import { pnpmInvocation, runSync } from './spawn.ts'
 
 /** Licenses any production package may carry. `onlyFor` limits one to the packages named there. */
@@ -48,41 +49,17 @@ try {
   process.exit(1)
 }
 
-/** Evaluates an SPDX expression: OR takes any allowed alternative, AND needs every part, WITH keeps the license. */
-const acceptable = (expression: string, name: string): boolean => {
-  const tokens = expression.match(/\(|\)|[^\s()]+/g) ?? []
-  let position = 0
-  const term = (): boolean => {
-    const token = tokens[position++]
-    if (token === '(') {
-      const value = or()
-      // Past the closing parenthesis.
-      position++
-      return value
-    }
-    // A WITH exception (Classpath, LLVM) only widens what the license allows.
-    if (tokens[position] === 'WITH') position += 2
-    const license = token?.replace(/\+$/, '')
-    const rule = license ? ALLOWED[license] : undefined
-    return Boolean(rule && (!rule.onlyFor || rule.onlyFor.includes(name)))
+/** The SPDX expression is satisfied by the licenses this package may carry; a non-SPDX string is not. */
+const acceptable = (expression: string, name: string) => {
+  const allowed = Object.entries(ALLOWED)
+    .filter(([, { onlyFor }]) => !onlyFor || onlyFor.includes(name))
+    .map(([license]) => license)
+  try {
+    return satisfies(expression, allowed)
+  } catch {
+    // spdx-satisfies throws on anything that is not an SPDX expression ("SEE LICENSE IN ...", "UNLICENSED").
+    return false
   }
-  const and = (): boolean => {
-    let value = term()
-    while (tokens[position] === 'AND') {
-      position++
-      value = term() && value
-    }
-    return value
-  }
-  const or = (): boolean => {
-    let value = and()
-    while (tokens[position] === 'OR') {
-      position++
-      value = or() || value
-    }
-    return value
-  }
-  return tokens.length > 0 && or() && position === tokens.length
 }
 
 const problems: string[] = []
