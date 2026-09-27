@@ -4,7 +4,7 @@ import { ApiErrorAlert } from '#/components/errors/api-error-alert.tsx'
 import { useAppForm } from '#/components/form/app-form.ts'
 import { describedBy, fieldErrorMessage } from '#/components/form/field-messages.ts'
 import { FieldError } from '#/components/form/fields.tsx'
-import { loadOnInteraction, submitForm } from '#/components/form/lazy-schema.ts'
+import { loadOnInteraction, useSchemaSubmit } from '#/components/form/lazy-schema.ts'
 import { Button } from '#/components/ui/button.tsx'
 import { Label } from '#/components/ui/label.tsx'
 import { Textarea } from '#/components/ui/textarea.tsx'
@@ -119,6 +119,7 @@ function EditPostForm(props: { post: Post; onClose: () => void; onUpdated: (() =
   }, [])
 
   const fieldId = `edit-post-${post.id}`
+  const { submit, schemaError } = useSchemaSubmit(form, postDraftSchema)
   const serverIssue = fieldIssue(update.error, 'body')
   const formError = update.isError && serverIssue === undefined ? update.error : null
   return (
@@ -130,7 +131,7 @@ function EditPostForm(props: { post: Post; onClose: () => void; onUpdated: (() =
         onSubmit={(event) => {
           event.preventDefault()
           if (update.isPending) return
-          void submitForm(event.currentTarget, form, postDraftSchema)
+          submit(event.currentTarget)
         }}
         {...loadOnInteraction(postDraftSchema)}
       >
@@ -157,6 +158,7 @@ function EditPostForm(props: { post: Post; onClose: () => void; onUpdated: (() =
                     `${fieldId}-count`,
                     error && `${fieldId}-error`,
                     formError && `${fieldId}-alert`,
+                    schemaError && `${fieldId}-schema-error`,
                   )}
                   aria-invalid={isTooLong(draft) || Boolean(error) || undefined}
                   required
@@ -182,6 +184,7 @@ function EditPostForm(props: { post: Post; onClose: () => void; onUpdated: (() =
           }}
         </form.AppField>
         {formError ? <ApiErrorAlert id={`${fieldId}-alert`} error={formError} action="save the post" /> : null}
+        <FieldError id={`${fieldId}-schema-error`} message={schemaError} />
       </form>
     </PostCard>
   )
