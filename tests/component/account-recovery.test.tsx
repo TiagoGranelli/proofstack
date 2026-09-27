@@ -43,12 +43,29 @@ describe('SignUpForm', () => {
     await expect.element(formOf('Create account')).toHaveAttribute('method', 'post')
   })
 
-  it('does not send a password shorter than 12 characters', async () => {
+  it('does not send a password shorter than 12 characters: says why next to it and moves focus there', async () => {
     const calls = authCalls('signUp')
     worker.use(calls.handler)
     await renderInApp(<SignUpForm />, { url: '/sign-up' })
     await signUp('too short')
     await expect.element(password()).toBeInvalid()
+    await expect.element(password()).toHaveFocus()
+    await expect.element(password()).toHaveAccessibleDescription('At least 12 characters. Use at least 12 characters.')
+    // Checked again as the password is fixed.
+    await password().fill('a long enough password')
+    await expect.element(password()).not.toHaveAttribute('aria-invalid')
+    expect(calls.data).toEqual([])
+  })
+
+  it('flags every empty field at once, and focuses the first', async () => {
+    const calls = authCalls('signUp')
+    worker.use(calls.handler)
+    await renderInApp(<SignUpForm />, { url: '/sign-up' })
+    await button('Create account').click()
+    await expect.element(page.getByLabelText('Name')).toHaveFocus()
+    await expect.element(page.getByLabelText('Name')).toHaveAccessibleDescription('Enter your name.')
+    await expect.element(email()).toHaveAccessibleDescription('Enter your email address.')
+    await expect.element(password()).toHaveAccessibleDescription('At least 12 characters. Use at least 12 characters.')
     expect(calls.data).toEqual([])
   })
 

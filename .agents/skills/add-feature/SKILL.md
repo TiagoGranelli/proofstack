@@ -10,8 +10,12 @@ A new feature usually touches every layer, in this order. Each step names the sk
 1. **Schema** in `src/server/db/schema/`, then `pnpm db:generate --name <slug>` and `pnpm db:migrate`
    (skill `database-change`).
 2. **Contract** in `src/contract/`: schemas, endpoints, tagged errors. Constants the UI also needs (limits,
-   lengths) go in `src/contract/limits.ts`, which stays free of Effect (skill `api-change`).
+   lengths) go in `src/contract/limits.ts`, which stays free of Effect (skill `api-change`). An input schema a
+   form also validates goes in a module without HttpApi code (`src/contract/post-input.ts`), so the browser
+   loads Schema only.
 3. **Repository** (for example `src/server/posts/repo.ts`) and **handler** in `src/server/api/handlers.ts`.
+   A repository takes its client per statement from `Database.client`; a write of several statements runs in
+   `Database.transaction(effect)` (`src/server/db/client.ts`, proven in `tests/db/transaction.test.ts`).
    Keep the in-memory repository in `tests/api/harness.ts` in step with the real one.
 4. `pnpm codegen`.
 5. **Errors:** map every new error tag to a message in `src/lib/api-error.ts`. `pnpm typecheck` fails until

@@ -1,9 +1,9 @@
-import { useMutation, type UseMutationOptions } from '@tanstack/react-query'
-import type { AuthFailure, AuthOutcome } from '#/lib/auth.functions.ts'
+import { type MutationMeta, useMutation, type UseMutationOptions } from '@tanstack/react-query'
+import type { AuthFailure, AuthFailureCode, AuthOutcome } from '#/lib/auth.functions.ts'
 
 /** A failed account action, thrown so TanStack Query reports it as the mutation's (or query's) error. */
 export class AuthActionError extends Error {
-  readonly code: string
+  readonly code: AuthFailureCode
   readonly retryAfter: number | undefined
 
   constructor(failure: AuthFailure) {
@@ -29,22 +29,17 @@ export type AuthMutationConfig<TInput, TOutput = null> = Omit<
 > & { onSuccess?: (data: TOutput, input: TInput) => unknown }
 
 /**
- * A mutation over an account server function. `before` runs first on success (for example, clearing the cache
- * of the previous user), then the caller's `onSuccess` (navigate, announce), then `after` (invalidation).
+ * A mutation over an account server function. `effects` declares what it does to the cache (src/lib/query-client.ts
+ * performs it): `clearsCache` before the caller's `onSuccess` (navigate, announce), `invalidates` after it.
  */
 export function useAuthMutation<TInput, TOutput>(
   action: (input: TInput) => Promise<AuthOutcome<TOutput>>,
   config: AuthMutationConfig<TInput, TOutput> | undefined,
-  hooks: { before?: () => unknown; after?: () => Promise<unknown> } = {},
+  effects: MutationMeta = {},
 ) {
-  const { onSuccess, ...rest } = config ?? {}
   return useMutation({
-    ...rest,
+    ...config,
     mutationFn: async (input: TInput) => unwrap(await action(input)),
-    onSuccess: async (data, input) => {
-      await hooks.before?.()
-      await onSuccess?.(data, input)
-      await hooks.after?.()
-    },
+    meta: effects,
   })
 }

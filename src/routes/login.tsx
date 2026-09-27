@@ -1,15 +1,25 @@
 import { Link, createFileRoute, redirect } from '@tanstack/react-router'
 import { LoginForm } from '#/features/auth/components/login-form.tsx'
+import { failureFromSearch } from '#/features/auth/utils/describe-auth-failure.ts'
 import { safeRedirect } from '#/features/auth/utils/safe-redirect.ts'
-import { getSignUpPolicy } from '#/lib/auth.functions.ts'
+import { type AuthFailureCode, getSignUpPolicy } from '#/lib/auth.functions.ts'
 import { getSession } from '#/lib/session.functions.ts'
 
 const link = 'underline underline-offset-4'
 
+interface LoginSearch {
+  /** Set by the _authed guard. Anything that is not a same-origin path becomes /dashboard. */
+  redirect?: string
+  /** A failed post without JavaScript (signInFromForm): a known failure code, and the wait it may carry. */
+  error?: AuthFailureCode
+  retryAfter?: number
+}
+
 export const Route = createFileRoute('/login')({
-  // `redirect` is set by the _authed guard. Anything that is not a same-origin path becomes /dashboard.
-  validateSearch: (search: Record<string, unknown>): { redirect?: string } =>
-    typeof search.redirect === 'string' ? { redirect: safeRedirect(search.redirect) } : {},
+  validateSearch: (search: Record<string, unknown>): LoginSearch => ({
+    ...(typeof search.redirect === 'string' ? { redirect: safeRedirect(search.redirect) } : {}),
+    ...failureFromSearch(search),
+  }),
   // Asks the server, not client state: a signed-in visitor goes straight to where they were headed.
   beforeLoad: async ({ search }) => {
     if (await getSession()) throw redirect({ href: safeRedirect(search.redirect) })
@@ -21,12 +31,12 @@ export const Route = createFileRoute('/login')({
 })
 
 function Login() {
-  const { redirect: target } = Route.useSearch()
+  const { redirect: target, error, retryAfter } = Route.useSearch()
   const signUp = Route.useLoaderData()
   return (
     <main className="mx-auto grid max-w-sm gap-4 p-4">
       <h1 className="text-2xl font-semibold">Sign in</h1>
-      <LoginForm redirectTo={target} />
+      <LoginForm redirectTo={target} failure={error ? { code: error, retryAfter } : undefined} />
       <p className="text-sm text-muted-foreground">
         <Link to="/forgot-password" className={link}>
           Forgot your password?

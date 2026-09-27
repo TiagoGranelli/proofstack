@@ -1,9 +1,20 @@
+import { redirect } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 import { setResponseHeader } from '@tanstack/react-start/server'
 import { Schema } from 'effect'
-import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '#/contract/limits.ts'
+import {
+  ChangePasswordInput,
+  DeleteAccountInput,
+  EmailInput,
+  ResetPasswordInput,
+  SessionInput,
+  SignInFormPost,
+  SignInInput,
+  SignUpInput,
+  TokenInput,
+} from '#/lib/account-input.ts'
 import { env } from '#/server/env.ts'
-import { type AuthEndpointResult, callAuthEndpoint } from '#/server/http/auth-handler.ts'
+import { type AuthEndpointResult, type AuthErrorCode, callAuthEndpoint } from '#/server/http/auth-handler.ts'
 import { displayClientAddress } from '#/server/http/client-address.ts'
 
 // Every account action the UI offers, as server functions: the browser bundle carries no Better Auth client.
@@ -11,9 +22,15 @@ import { displayClientAddress } from '#/server/http/client-address.ts'
 // (callAuthEndpoint), so rate limiting, the endpoint allowlist and the origin check apply exactly as they do on
 // /api/auth/*, and Better Auth's cookies reach the browser on this response.
 
-/** Why an action failed. `code` is Better Auth's error code, or RATE_LIMITED, NOT_FOUND or UNEXPECTED. */
+/**
+ * Why an action failed: a Better Auth error code the exposed endpoints answer with, RATE_LIMITED (429), NOT_FOUND
+ * (an endpoint that is off, such as sign-up when closed) or UNEXPECTED (anything else). A closed union: the UI's
+ * describeAuthFailure stops compiling until it handles a new code.
+ */
+export type AuthFailureCode = AuthErrorCode | 'RATE_LIMITED' | 'NOT_FOUND' | 'UNEXPECTED'
+
 export interface AuthFailure {
-  readonly code: string
+  readonly code: AuthFailureCode
   /** Seconds until a rate-limited client may retry. */
   readonly retryAfter?: number
 }
@@ -34,14 +51,6 @@ const failure = (result: Extract<AuthEndpointResult, { ok: false }>): AuthOutcom
 
 const done = (result: AuthEndpointResult): AuthOutcome => (result.ok ? { ok: true, value: null } : failure(result))
 
-const Email = Schema.String.pipe(Schema.check(Schema.isMaxLength(254), Schema.isPattern(/^[^\s@]+@[^\s@]+$/)))
-/** A password the account already has: only bounded, because older rules may have allowed other lengths. */
-const CurrentPassword = Schema.String.pipe(Schema.check(Schema.isMinLength(1), Schema.isMaxLength(PASSWORD_MAX_LENGTH)))
-const NewPassword = Schema.String.pipe(
-  Schema.check(Schema.isMinLength(PASSWORD_MIN_LENGTH), Schema.isMaxLength(PASSWORD_MAX_LENGTH)),
-)
-const Token = Schema.String.pipe(Schema.check(Schema.isMinLength(1), Schema.isMaxLength(2048)))
-
 // Nothing here may be cached: the answers depend on the session cookie.
 const noStore = () => setResponseHeader('cache-control', 'private, no-store')
 
@@ -51,9 +60,35 @@ export const getSignUpPolicy = createServerFn({ method: 'GET' }).handler(() => {
   return { open: env.authSignUp === 'open' }
 })
 
+/**
+ * Where a sign-in posted by the form itself goes: back to /login, whose guard sends a signed-in visitor on to
+ * `redirect` (validated there, as for every visitor), and which shows a failure's code otherwise.
+ */
+const loginPageAfter = (outcome: AuthOutcome, redirectTo: string) => {
+  const search = new URLSearchParams()
+  if (redirectTo) search.set('redirect', redirectTo)
+  if (!outcome.ok) search.set('error', outcome.failure.code)
+  if (!outcome.ok && outcome.failure.retryAfter !== undefined)
+    search.set('retryAfter', String(outcome.failure.retryAfter))
+  return search.size > 0 ? `/login?${search}` : '/login'
+}
+
 export const signIn = createServerFn({ method: 'POST' })
-  .validator(Schema.toStandardSchemaV1(Schema.Struct({ email: Email, password: CurrentPassword })))
+  .validator(Schema.toStandardSchemaV1(SignInInput))
   .handler(async ({ data }) => done(await callAuthEndpoint('POST', '/sign-in/email', { body: data })))
+
+/**
+ * The login form posted by the browser itself, before hydration or without JavaScript (its `action`; the script
+ * calls signIn instead). Answers a 303 to the next page, with the session cookie on it:
+ * docs/decisions/0015-login-without-javascript.md.
+ */
+export const signInFromForm = createServerFn({ method: 'POST' })
+  .validator(Schema.toStandardSchemaV1(SignInFormPost))
+  .handler(async ({ data }) => {
+    const { email, password } = data
+    const outcome = done(await callAuthEndpoint('POST', '/sign-in/email', { body: { email, password } }))
+    throw redirect({ href: loginPageAfter(outcome, data.redirect), statusCode: 303 })
+  })
 
 export const signOut = createServerFn({ method: 'POST' }).handler(async () =>
   done(await callAuthEndpoint('POST', '/sign-out', { body: {} })),
@@ -61,39 +96,31 @@ export const signOut = createServerFn({ method: 'POST' }).handler(async () =>
 
 /** Answers the same whether or not the email already has an account; the owner of an existing one gets a mail. */
 export const signUp = createServerFn({ method: 'POST' })
-  .validator(
-    Schema.toStandardSchemaV1(
-      Schema.Struct({
-        name: Schema.String.pipe(Schema.check(Schema.isTrimmed(), Schema.isMinLength(1), Schema.isMaxLength(100))),
-        email: Email,
-        password: NewPassword,
-      }),
-    ),
-  )
+  .validator(Schema.toStandardSchemaV1(SignUpInput))
   .handler(async ({ data }) => done(await callAuthEndpoint('POST', '/sign-up/email', { body: data })))
 
 /** Sends a new verification link if the address has an unverified account; answers the same otherwise. */
 export const resendVerification = createServerFn({ method: 'POST' })
-  .validator(Schema.toStandardSchemaV1(Schema.Struct({ email: Email })))
+  .validator(Schema.toStandardSchemaV1(EmailInput))
   .handler(async ({ data }) => done(await callAuthEndpoint('POST', '/send-verification-email', { body: data })))
 
 export const verifyEmail = createServerFn({ method: 'POST' })
-  .validator(Schema.toStandardSchemaV1(Schema.Struct({ token: Token })))
+  .validator(Schema.toStandardSchemaV1(TokenInput))
   .handler(async ({ data }) => done(await callAuthEndpoint('GET', '/verify-email', { query: { token: data.token } })))
 
 /** Mails a reset link if the address has an account; answers the same otherwise. */
 export const requestPasswordReset = createServerFn({ method: 'POST' })
-  .validator(Schema.toStandardSchemaV1(Schema.Struct({ email: Email })))
+  .validator(Schema.toStandardSchemaV1(EmailInput))
   .handler(async ({ data }) => done(await callAuthEndpoint('POST', '/request-password-reset', { body: data })))
 
 /** Sets the new password and signs out every session of the account (revokeSessionsOnPasswordReset). */
 export const resetPassword = createServerFn({ method: 'POST' })
-  .validator(Schema.toStandardSchemaV1(Schema.Struct({ token: Token, newPassword: NewPassword })))
+  .validator(Schema.toStandardSchemaV1(ResetPasswordInput))
   .handler(async ({ data }) => done(await callAuthEndpoint('POST', '/reset-password', { body: data })))
 
 /** Always ends the account's other sessions; this one continues with a new token. */
 export const changePassword = createServerFn({ method: 'POST' })
-  .validator(Schema.toStandardSchemaV1(Schema.Struct({ currentPassword: CurrentPassword, newPassword: NewPassword })))
+  .validator(Schema.toStandardSchemaV1(ChangePasswordInput))
   .handler(async ({ data }) =>
     done(await callAuthEndpoint('POST', '/change-password', { body: { ...data, revokeOtherSessions: true } })),
   )
@@ -151,7 +178,7 @@ export const listSessions = createServerFn({ method: 'GET' }).handler(
 
 /** Ends one session of the account, by id; Better Auth addresses sessions by token, which stays here. */
 export const revokeSession = createServerFn({ method: 'POST' })
-  .validator(Schema.toStandardSchemaV1(Schema.Struct({ id: Token })))
+  .validator(Schema.toStandardSchemaV1(SessionInput))
   .handler(async ({ data }): Promise<AuthOutcome> => {
     const listed = await listRaw()
     if (!listed.ok) return failure(listed)
@@ -174,5 +201,5 @@ export const signOutEverywhere = createServerFn({ method: 'POST' }).handler(asyn
 
 /** Deletes the account and its posts after checking the password. */
 export const deleteAccount = createServerFn({ method: 'POST' })
-  .validator(Schema.toStandardSchemaV1(Schema.Struct({ password: CurrentPassword })))
+  .validator(Schema.toStandardSchemaV1(DeleteAccountInput))
   .handler(async ({ data }) => done(await callAuthEndpoint('POST', '/delete-user', { body: data })))

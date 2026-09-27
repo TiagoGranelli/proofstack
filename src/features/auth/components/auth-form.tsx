@@ -1,38 +1,50 @@
 import { useHydrated } from '@tanstack/react-router'
-import type { ComponentProps, ReactNode } from 'react'
+import type { ReactNode } from 'react'
+import { focusFirstInvalid } from '#/components/form/field-messages.ts'
 import { Button } from '#/components/ui/button.tsx'
-import { Input } from '#/components/ui/input.tsx'
-import { Label } from '#/components/ui/label.tsx'
 import { describeAuthFailure } from '#/features/auth/utils/describe-auth-failure.ts'
 
 /**
- * A form for an account action. Its button stays disabled until hydration: a native submit before that would
- * post the fields (passwords included) to the page itself. While the action is pending the button is only
- * `aria-disabled` and further submits are ignored: a disabled button loses focus, so a keyboard user who
- * pressed it would be dropped to <body> when the attempt fails. A failure is shown in an alert under the button.
+ * The shell of an account form made with useAppForm: its fields are the children, validated in the browser with
+ * the action's Effect Schema (src/lib/account-input.ts); a failed submit moves focus to the first invalid field.
+ * Without an `action` the button stays disabled until hydration: a native submit before that would post the fields
+ * (passwords included) to the page itself. While the action is pending the button is only `aria-disabled` and further submits
+ * are ignored: a disabled button loses focus, so a keyboard user who pressed it would be dropped to <body> when the
+ * attempt fails. A failure the server reports is shown in an alert under the button.
  */
 export function AuthForm(props: {
   /** Prefix for the ids this form gives its alert. */
   id: string
   submitLabel: string
   submitVariant?: 'default' | 'destructive'
+  /** The form from useAppForm; its onSubmit starts the action. */
+  form: { handleSubmit: () => Promise<void> }
+  /**
+   * Where the browser posts the form itself before hydration (a server function's `url` that takes FormData).
+   * With it the button works from the first paint; without it, it waits for hydration.
+   */
+  action?: string
   pending: boolean
-  /** The mutation's error, if the last attempt failed. */
+  /** The action's error, if the last attempt failed. */
   error: Error | null
-  onSubmit: (form: FormData) => void
-  children: ReactNode
+  children?: ReactNode
 }) {
   const hydrated = useHydrated()
   const errorId = `${props.id}-error`
   return (
     <form
       method="post"
+      action={props.action}
+      // Once hydrated the fields show the schema's messages; before that, only the browser's own checks run.
+      noValidate={hydrated}
       className="grid gap-3"
       aria-busy={props.pending}
       aria-describedby={props.error ? errorId : undefined}
       onSubmit={(event) => {
         event.preventDefault()
-        if (!props.pending) props.onSubmit(new FormData(event.currentTarget))
+        if (props.pending) return
+        const element = event.currentTarget
+        void props.form.handleSubmit().then(() => focusFirstInvalid(element))
       }}
     >
       {props.children}
@@ -40,7 +52,7 @@ export function AuthForm(props: {
         <Button
           type="submit"
           variant={props.submitVariant}
-          disabled={!hydrated}
+          disabled={!hydrated && props.action === undefined}
           aria-disabled={props.pending || undefined}
         >
           {props.submitLabel}
@@ -52,25 +64,5 @@ export function AuthForm(props: {
         </p>
       ) : null}
     </form>
-  )
-}
-
-/** A labelled input; `hint` is read out with the field. */
-export function AuthField({
-  label,
-  hint,
-  ...input
-}: ComponentProps<'input'> & { id: string; label: string; hint?: string }) {
-  const hintId = hint ? `${input.id}-hint` : undefined
-  return (
-    <div className="grid gap-1.5">
-      <Label htmlFor={input.id}>{label}</Label>
-      <Input {...input} aria-describedby={hintId} />
-      {hint ? (
-        <p id={hintId} className="text-xs text-muted-foreground">
-          {hint}
-        </p>
-      ) : null}
-    </div>
   )
 }

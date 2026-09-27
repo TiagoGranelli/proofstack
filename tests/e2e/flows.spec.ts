@@ -78,11 +78,18 @@ test('dashboard hydrates from SSR without refetching my posts', async ({ page, a
   expect(errors).toEqual([])
 })
 
-test('login form never submits credentials before hydration', async ({ page }) => {
+test('before hydration, a form never posts credentials to the page itself', async ({ page }) => {
   await page.route('**/assets/**', (route) => route.abort())
+  // The login form posts to its server function (ADR 0015), never to /login.
   await page.goto('/login')
-  await expect(page.locator('form')).toHaveAttribute('method', 'post')
-  await expect(page.getByRole('button', { name: 'Sign in' })).toBeDisabled()
+  const login = page.locator('form')
+  await expect(login).toHaveAttribute('method', 'post')
+  await expect(login).toHaveAttribute('action', /^\/_serverFn\/[0-9a-f]+$/)
+  await expect(page.getByRole('button', { name: 'Sign in' })).toBeEnabled()
+  // A form without an action keeps its button disabled until the scripts run.
+  await page.goto('/forgot-password')
+  await expect(page.locator('form')).not.toHaveAttribute('action')
+  await expect(page.getByRole('button', { name: 'Send reset link' })).toBeDisabled()
 })
 
 test('private routes redirect anonymous visitors to login and back after sign-in', async ({ page, author }) => {
@@ -174,11 +181,11 @@ test('a rejected save shows the error in the post and keeps the draft', async ({
   const body = `e2e rejected edit ${Date.now()}`
   await publish(page, body)
   await myPost(page, body).getByRole('button', { name: /^Edit/ }).click()
-  // Over the 280-character limit: the server answers 400 and the form stays open with the draft.
+  // Over the 280-character limit: the form refuses it with the API's own rule and stays open with the draft.
   const draft = 'x'.repeat(281)
   await page.getByLabel('Edit post').fill(draft)
   await page.getByRole('button', { name: 'Save' }).click()
-  await expect(editing(page).getByRole('alert')).toContainText('Could not save the post')
+  await expect(editing(page).getByRole('alert')).toContainText('Use at most 280 characters')
   await expect(page.getByLabel('Edit post')).toHaveValue(draft)
 
   await page.getByRole('button', { name: 'Cancel' }).click()

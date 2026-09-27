@@ -12,10 +12,16 @@ shutdown (`lifecycle.ts`). Read this before you change anything here. The root `
   `createServerOnlyFn`) and `src/lib/server-function-errors.ts`, the global function middleware (Fallow zone
   `server-adapters`).
 - SSR loaders call the same SDK as the browser. On the server it dispatches in-process to the Effect handler
-  (`api/in-process-client.ts`), so every business operation goes through the contract.
+  (`api/in-process-client.ts`), so every business operation goes through the contract. It sends GET only:
+  writes come from the browser, through the CSRF check. The session is looked up once per request and shared
+  by the route guard and the API middleware (`http/request-session.ts`). Which surface an operation belongs
+  on (HttpApi, server function, Better Auth HTTP):
+  [ADR 0013](../../docs/decisions/0013-three-request-surfaces.md).
 - Authorization happens in the Effect `Authentication` middleware (`api/middleware.ts`). The `_authed` route
   guard is only a UX redirect. Ownership is part of each repository query's `WHERE`, so another author's id
   behaves like a missing one.
+- A repository takes its client per statement from `Database.client`; a write of several statements runs in
+  `Database.transaction(effect)` (`db/client.ts`, proven in `tests/db/transaction.test.ts`).
 - A repository method sends a fixed number of statements, whatever the page size: every new one gets a query
   budget in `tests/db/query-budget.test.ts` (see `tests/AGENTS.md`).
 - Read settings through `env.ts`, which validates them at import. A new setting goes there, in `.env.example`,

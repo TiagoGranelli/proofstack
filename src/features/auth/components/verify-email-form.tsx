@@ -1,4 +1,5 @@
 import { Link } from '@tanstack/react-router'
+import { useAppForm } from '#/components/form/app-form.ts'
 import { useVerifyEmail } from '#/features/auth/api/verify-email.ts'
 import { AuthForm } from '#/features/auth/components/auth-form.tsx'
 import { AuthStatus } from '#/features/auth/components/auth-status.tsx'
@@ -10,6 +11,8 @@ import { ResendVerificationForm } from '#/features/auth/components/resend-verifi
  */
 export function VerifyEmailForm(props: { token: string }) {
   const verify = useVerifyEmail()
+  // No fields: the token comes from the link.
+  const form = useAppForm({ defaultValues: {}, onSubmit: () => verify.mutate({ token: props.token }) })
   if (verify.isSuccess)
     return (
       <AuthStatus title="Email confirmed">
@@ -25,9 +28,9 @@ export function VerifyEmailForm(props: { token: string }) {
       <AuthForm
         id="verify-email"
         submitLabel="Confirm email"
+        form={form}
         pending={verify.isPending}
         error={verify.error}
-        onSubmit={() => verify.mutate({ token: props.token })}
       >
         <p>Confirm that this address is yours to finish setting up your account.</p>
       </AuthForm>

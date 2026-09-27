@@ -508,11 +508,15 @@ requests per 10 seconds per IP; `/request-password-reset` and `/send-verificatio
 other auth endpoints 100 per minute. `/get-session` is not limited. A limited request gets 429 with
 `X-Retry-After` (the UI says how many seconds to wait). Server functions go through the same limits.
 
-The counters live in the `rate_limit` table, so every instance shares them and restarts keep them. Each
-request is one atomic `INSERT ... ON CONFLICT DO UPDATE` (`src/server/auth-rate-limit.ts`): Better Auth's
-own database storage lets concurrent requests past the limit on Postgres (Drizzle adapter 1.7.6), so it is
-replaced through `rateLimit.customStorage`. Rows idle for 10 minutes are deleted in the background.
-Requests for endpoints outside the allowlist are not counted and write nothing.
+The counters live in the `rate_limit` table, so every instance shares them. Each request is one atomic
+`INSERT ... ON CONFLICT DO UPDATE` on its `key` (`src/server/auth-rate-limit.ts`): Better Auth's own database
+storage lets concurrent requests past the limit on Postgres (Drizzle adapter 1.7.6), so it is replaced through
+`rateLimit.customStorage`. Rows idle for 10 minutes are deleted in the background. Requests for endpoints
+outside the allowlist are not counted and write nothing.
+
+The table is `UNLOGGED`: its writes (one per rate-limited request) skip the WAL, and it is not replicated to
+standbys. A clean Postgres restart keeps it; a crash or a failover empties it, which only lets every client
+start a fresh window. Counters that last at most ten minutes are not worth the WAL traffic of durability.
 
 The business API limits writes per user, not per IP, because with open sign-up anyone can hold a session:
 creating, editing and deleting posts (`POST`, `PATCH` and `DELETE /api/me/posts`) count together against

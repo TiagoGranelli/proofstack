@@ -2,12 +2,10 @@ import '@tanstack/react-start/server-only'
 import { and, desc, eq, sql, type SQL } from 'drizzle-orm'
 import { Context, Data, Effect, Layer } from 'effect'
 import type { PageCursor, Post, PostPage } from '#/contract/posts.ts'
-import { Database } from '../db/client.ts'
+import { Database, type Db } from '../db/client.ts'
 import { post, user } from '../db/schema/index.ts'
 
 class DbError extends Data.TaggedError('DbError')<{ readonly cause: unknown }> {}
-
-const query = <A>(run: () => Promise<A>) => Effect.tryPromise({ try: run, catch: (cause) => new DbError({ cause }) })
 
 const toPost = (row: { id: string; body: string; createdAt: Date; updatedAt: Date }, authorName: string): Post => ({
   id: row.id,
@@ -79,10 +77,15 @@ export class PostsRepo extends Context.Service<
   static readonly layer = Layer.effect(
     PostsRepo,
     Effect.gen(function* () {
-      const db = yield* Database
+      const own = yield* Database
+      // Each statement goes through the current transaction, if the caller runs in one (Database.transaction).
+      const query = <A>(run: (db: Db) => Promise<A>) =>
+        Effect.flatMap(Database.client(own), (db) =>
+          Effect.tryPromise({ try: () => run(db), catch: (cause) => new DbError({ cause }) }),
+        )
       return {
         listPublic: Effect.fn('PostsRepo.listPublic')(function* (page) {
-          const rows = yield* query(() =>
+          const rows = yield* query((db) =>
             db
               .select({ ...pageColumns, authorName: user.name })
               .from(post)
@@ -94,7 +97,7 @@ export class PostsRepo extends Context.Service<
           return toPage(rows, page.limit, (row) => row.authorName)
         }),
         listByAuthor: Effect.fn('PostsRepo.listByAuthor')(function* (author, page) {
-          const rows = yield* query(() =>
+          const rows = yield* query((db) =>
             db
               .select(pageColumns)
               .from(post)
@@ -105,7 +108,7 @@ export class PostsRepo extends Context.Service<
           return toPage(rows, page.limit, () => author.name)
         }),
         create: Effect.fn('PostsRepo.create')(function* (author, body) {
-          const [row] = yield* query(() => db.insert(post).values({ authorId: author.id, body }).returning())
+          const [row] = yield* query((db) => db.insert(post).values({ authorId: author.id, body }).returning())
           // INSERT … RETURNING yields the inserted row; none at all is a driver defect, not an outcome to handle.
           if (!row) return yield* Effect.die(new Error('INSERT … RETURNING returned no row'))
           return toPost(row, author.name)
@@ -113,7 +116,7 @@ export class PostsRepo extends Context.Service<
         // Ownership is part of the WHERE clause, so another author's id behaves exactly like a missing id.
         update: Effect.fn('PostsRepo.update')(function* (author, id, body) {
           if (!UUID.test(id)) return undefined
-          const [row] = yield* query(() =>
+          const [row] = yield* query((db) =>
             db
               .update(post)
               .set({ body })
@@ -124,7 +127,7 @@ export class PostsRepo extends Context.Service<
         }),
         remove: Effect.fn('PostsRepo.remove')(function* (author, id) {
           if (!UUID.test(id)) return false
-          const rows = yield* query(() =>
+          const rows = yield* query((db) =>
             db
               .delete(post)
               .where(and(eq(post.id, id), eq(post.authorId, author.id)))
@@ -132,7 +135,7 @@ export class PostsRepo extends Context.Service<
           )
           return rows.length > 0
         }),
-        ping: query(() => db.execute(sql`select 1`)).pipe(Effect.asVoid),
+        ping: query((db) => db.execute(sql`select 1`)).pipe(Effect.asVoid),
       }
     }),
   )

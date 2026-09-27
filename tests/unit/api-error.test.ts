@@ -1,7 +1,7 @@
 // describeApiError turns whatever the SDK threw into the sentence the UI shows. It must never show raw
 // server output, and every contract error tag has its own message. Pure function: no app needed.
 import { describe, expect, it } from 'vitest'
-import { apiErrorTag, describeApiError } from '#/lib/api-error.ts'
+import { apiErrorTag, describeApiError, fieldIssue } from '#/lib/api-error.ts'
 
 const ACTION = 'save the post'
 
@@ -99,4 +99,30 @@ describe('apiErrorTag', () => {
       expect(apiErrorTag(error)).toBeUndefined()
     },
   )
+})
+
+describe('fieldIssue', () => {
+  const invalid = {
+    _tag: 'ValidationError',
+    message: 'Invalid request payload',
+    issues: [
+      { path: [], message: 'Missing body.' },
+      { path: ['body'], message: 'Use at most 280 characters.' },
+      { path: ['body', 'nested'], message: 'A later issue for the same field.' },
+    ],
+  }
+
+  it('finds the first issue that names the field', () => {
+    expect(fieldIssue(invalid, 'body')).toBe('Use at most 280 characters.')
+  })
+
+  it.each<[string, unknown]>([
+    ['another field', invalid],
+    ['a ValidationError without issues', { ...invalid, issues: [] }],
+    ['another tagged error', { _tag: 'Unauthorized', message: 'Authentication required' }],
+    ['a network failure', new TypeError('Failed to fetch')],
+    ['nothing', null],
+  ])('has nothing for %s', (name, error) => {
+    expect(fieldIssue(error, name === 'another field' ? 'title' : 'body')).toBeUndefined()
+  })
 })

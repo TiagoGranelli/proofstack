@@ -5,7 +5,7 @@ import { sessionsQueryKey } from '#/features/auth/api/get-sessions.ts'
 import { ChangePasswordForm } from '#/features/auth/components/change-password-form.tsx'
 import { DeleteAccountForm } from '#/features/auth/components/delete-account-form.tsx'
 import { SessionList } from '#/features/auth/components/session-list.tsx'
-import type { AuthOutcome, SessionView } from '#/lib/auth.functions.ts'
+import type { AuthFailure, AuthOutcome, SessionView } from '#/lib/auth.functions.ts'
 import { authCalls, authFunction, held, worker } from './api-mocks.ts'
 import { expectFocusedStatus, pressAndKeepFocus, renderInApp, statusText, testQueryClient } from './test-utils.tsx'
 
@@ -74,6 +74,12 @@ describe('ChangePasswordForm', () => {
     await renderInApp(<ChangePasswordForm />, { url: '/account' })
     await change('too short')
     await expect.element(newPassword()).toBeInvalid()
+    await expect.element(newPassword()).toHaveFocus()
+    await expect
+      .element(newPassword())
+      .toHaveAccessibleDescription(
+        'At least 12 characters. Your other sessions will be signed out. Use at least 12 characters.',
+      )
     await expect.element(formOf(changeButton())).toHaveAttribute('aria-busy', 'false')
     expect(calls.data).toEqual([])
   })
@@ -110,7 +116,7 @@ describe('ChangePasswordForm', () => {
     await expect.element(page.getByRole('button', { name: otherName })).not.toBeInTheDocument()
   })
 
-  it.each([
+  it.each<[string, AuthFailure, string]>([
     ['a wrong current password', { code: 'INVALID_PASSWORD' }, 'That password is not correct.'],
     ['a new password the server finds too short', { code: 'PASSWORD_TOO_SHORT' }, 'Use at least 12 characters.'],
     ['a new password the server finds too long', { code: 'PASSWORD_TOO_LONG' }, 'Use at most 128 characters.'],
@@ -310,11 +316,16 @@ describe('DeleteAccountForm', () => {
     await deletePassword().fill('my password')
     await deleteButton().click()
     await expect.element(deleteConfirm()).toBeInvalid()
+    await expect.element(deleteConfirm()).toHaveFocus()
+    await expect.element(deleteConfirm()).toHaveAccessibleDescription('Confirm that you want to delete the account.')
 
     await deletePassword().clear()
     await deleteConfirm().click()
     await deleteButton().click()
     await expect.element(deletePassword()).toBeInvalid()
+    await expect.element(deletePassword()).toHaveFocus()
+    await expect.element(deletePassword()).toHaveAccessibleDescription('Enter your password.')
+    await expect.element(deleteConfirm()).not.toHaveAttribute('aria-invalid')
     expect(calls.data).toEqual([])
   })
 

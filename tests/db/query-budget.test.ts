@@ -69,6 +69,8 @@ describe('PostsRepo', () => {
 
   it('creates, edits and deletes in one statement each, and edits move updatedAt', async () => {
     const created = await withBudget('create', 1, (repo) => repo.create(few, 'budgeted'))
+    // Postgres generated a time-ordered id (the column default, uuidv7()).
+    expect(created.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
     const updated = await withBudget('update', 1, (repo) => repo.update(few, created.id, 'budgeted, edited'))
     expect(updated?.createdAt).toBe(created.createdAt)
     expect(Date.parse(updated!.updatedAt)).toBeGreaterThan(Date.parse(created.updatedAt))

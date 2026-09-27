@@ -20,8 +20,9 @@ description: Add or change a page (route) in this repo's UI, with its accessibil
    reads its suspense query inside the boundary (`MyPostList`).
 4. **Static page:** add its path to `nitro({ prerender: { routes } })` in `vite.config.ts`
    ([ADR 0004](../../../docs/decisions/0004-prerender-via-nitro.md)).
-5. **Forms:** every control has a visible label. A button whose action is pending sets `aria-disabled` and
-   ignores presses, so it keeps focus (a `disabled` button loses it).
+5. **Forms:** `useAppForm` validating with the input's Effect Schema (see "Forms" in `src/features/AGENTS.md`).
+   Every control has a visible label. A button whose action is pending sets `aria-disabled` and ignores
+   presses, so it keeps focus (a `disabled` button loses it).
 6. **Accessibility tests** (the `routes` gate of `pnpm check` fails without all three):
    - an entry in `STATES` in `tests/e2e/a11y.spec.ts` for the page and each new UI state (axe, WCAG 2.2 AA);
    - a landmark snapshot in its `landmarks` block;

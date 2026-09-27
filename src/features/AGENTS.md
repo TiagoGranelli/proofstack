@@ -8,13 +8,18 @@ Read this before you add or change a feature. The root `AGENTS.md` still applies
   a page that needs two features composes them in its route.
 - Data access goes in `api/<verb>-<noun>.ts`. Queries export `get<Noun>QueryOptions()` bound to
   `client: apiClient()` over `#/sdk/@tanstack/react-query.gen.ts`. Mutations export a
-  `use<Verb><Noun>({ mutationConfig })` hook that owns cache updates and invalidation and runs the caller's
-  `onSuccess` before invalidating (`useCreatePost`, `useSignIn`, `useSignOut`). Where the user goes afterwards
-  is the caller's `onSuccess`, not the hook's. Cache helpers shared by a feature's hooks go in
+  `use<Verb><Noun>({ mutationConfig })` hook that owns cache updates and declares its invalidation in `meta`
+  (`invalidates`, `clearsCache`), never by hand: the `MutationCache` in `src/lib/query-client.ts` clears before
+  the caller's `onSuccess` and refetches after it (`useCreatePost`, `useSignIn`, `useSignOut`). Where the user
+  goes afterwards is the caller's `onSuccess`, not the hook's. Cache helpers shared by a feature's hooks go in
   `api/<noun>-cache.ts`. Account actions use `useAuthMutation` (`auth/api/auth-action.ts`).
 - Components call these hooks, never a generated `*Mutation()` directly, and component files export only
   components.
 - Forms, buttons with behavior and lists live in `components/`; pure helpers in `utils/`.
+- Forms use `useAppForm` (`src/components/form/app-form.ts`) with the input's Effect Schema as Standard Schema
+  in `validators.onDynamic` and `validationLogic: revalidateLogic()`: the same schema the server validates
+  with (`src/contract/post-input.ts`, `src/lib/account-input.ts`). A `ValidationError` issue goes next to the
+  field its path names (`fieldIssue` in `src/lib/api-error.ts`); any other failure under the form.
 - Every error the UI shows goes through `describeApiError` (`src/lib/api-error.ts`) or
   `describeAuthFailure` (`auth/utils/describe-auth-failure.ts`), so raw server output never reaches the page.
 - A button whose action is pending is `aria-disabled` and ignores presses, so it keeps focus.

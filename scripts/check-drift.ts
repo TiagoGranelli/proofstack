@@ -161,6 +161,9 @@ const fingerprint = async (url: string) => {
          where connamespace = 'public'::regnamespace order by 1, 2`,
       `select tablename, indexname, indexdef from pg_indexes where schemaname = 'public' order by 1, 2`,
       `select t.typname, e.enumlabel from pg_enum e join pg_type t on t.oid = e.enumtypid order by 1, e.enumsortorder`,
+      // Drizzle cannot declare UNLOGGED (rate_limit, drizzle/0006): a push that re-creates the table would lose it.
+      `select relname, relpersistence from pg_class where relnamespace = 'public'::regnamespace and relkind = 'r'
+         order by 1`,
     ]
     const results = []
     for (const query of queries) results.push((await client.query({ text: query, rowMode: 'array' })).rows)
