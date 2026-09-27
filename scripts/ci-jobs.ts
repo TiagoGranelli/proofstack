@@ -12,8 +12,8 @@
 //   lighthouse  the Lighthouse gate through the edge, 5 runs (DATABASE_URL, the build, Docker or caddy)
 //   docker      the Docker image end to end (scripts/docker-smoke.ts; Docker)
 import { spawnSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
 import { relative, resolve } from 'node:path'
+import { pinProblems } from './image-pins.ts'
 import { IMAGES } from './images.ts'
 
 const run = (command: string, args: string[], env: NodeJS.ProcessEnv = {}) => {
@@ -89,23 +89,11 @@ const secrets = (args: string[]) => {
   )
 }
 
-/** Every reference to an image from scripts/images.ts in these files must be the same pinned reference. */
-const PINNED_COPIES = ['compose.yaml', '.github/workflows/ci.yml', 'Dockerfile']
+/** Every reference to an image from scripts/images.ts in compose.yaml, ci.yml and the Dockerfile is the same pin. */
 const imagePins = () => {
-  const problems: string[] = []
-  for (const file of PINNED_COPIES) {
-    const text = readFileSync(file, 'utf8')
-    for (const ref of Object.values(IMAGES)) {
-      const name = ref.slice(0, ref.lastIndexOf(':', ref.indexOf('@')))
-      const pattern = new RegExp(
-        `(?<![\\w./-])${name.replaceAll(/[.*+?^${}()|[\]\\/]/g, '\\$&')}:[\\w.-]+(@sha256:[0-9a-f]{64})?`,
-        'g',
-      )
-      for (const match of text.matchAll(pattern))
-        if (match[0] !== ref) problems.push(`${file}: ${match[0]} (scripts/images.ts has ${ref})`)
-    }
-  }
+  const problems = pinProblems()
   for (const problem of problems) console.error(problem)
+  if (problems.length) console.error('Run `pnpm images:sync` to copy the pins from scripts/images.ts.')
   return problems.length ? 1 : 0
 }
 

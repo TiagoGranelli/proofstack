@@ -47,6 +47,8 @@
     "check:drift": "node scripts/check-drift.ts",
     "check:migrations": "node scripts/check-migrations.ts",
     "deps:check": "node scripts/deps-check.ts",
+    "images:check": "node scripts/images-check.ts",
+    "images:sync": "node scripts/images-check.ts --sync",
     "audit:check": "node scripts/audit.ts",
     "licenses:check": "node scripts/licenses.ts",
     "lighthouse": "node scripts/lighthouse.ts",

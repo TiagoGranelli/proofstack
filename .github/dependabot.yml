@@ -1,4 +1,14 @@
 version: 2
+# Not covered here:
+# - Container images. scripts/images.ts is their single source; compose.yaml, ci.yml and the Dockerfile hold
+#   copies that `pnpm ci:workflows` checks. The docker and docker-compose ecosystems would update only the
+#   Dockerfile and compose.yaml copies, never scripts/images.ts or ci.yml, so every such PR would fail that
+#   check. `pnpm images:check` reports newer tags and rebuilt digests instead, `pnpm images:sync` rewrites the
+#   copies after a pin moves, and the grype scan in `pnpm ci:docker` fails when a base image has a fixable
+#   high or critical vulnerability.
+# - Security alerts. GitHub's dependency graph parses pnpm 12 lockfiles as empty (dependabot-core#15904), so
+#   Dependabot never raises an alert or a security update for npm packages. `pnpm audit:check` in CI's
+#   supply-chain job is the vulnerability gate.
 updates:
   # Workflow and composite-action pins (full commit SHAs with a version comment, which Dependabot keeps).
   - package-ecosystem: github-actions

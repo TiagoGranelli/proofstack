@@ -1,7 +1,9 @@
 // Container images the CI scripts run, pinned by digest (tag kept for humans). compose.yaml,
 // .github/workflows/ci.yml and the Dockerfile repeat some of them; `pnpm ci:workflows` fails when a copy
-// differs from this file.
-// Update a pin: `docker buildx imagetools inspect <name>:<tag>` prints the index digest.
+// differs from this file (scripts/image-pins.ts).
+// `pnpm images:check` reports newer tags and rebuilt digests. Update a pin here
+// (`docker buildx imagetools inspect <name>:<tag>` prints the index digest), then `pnpm images:sync` rewrites
+// the copies.
 export const IMAGES = {
   /** Same version as @playwright/test in package.json (browsers match the installed library). */
   playwright:
