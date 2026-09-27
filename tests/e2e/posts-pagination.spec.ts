@@ -1,4 +1,5 @@
-import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
+import type { APIRequestContext, Page } from '@playwright/test'
+import { expect, test } from './fixtures.ts'
 
 // Acts as the second test author, whose dashboard no other E2E file uses, so the list sizes below are ours to
 // assert. Their posts also appear on `/`: they are published once, before the tests, so they are older than
