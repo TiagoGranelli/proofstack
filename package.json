@@ -49,7 +49,8 @@
     "ci:build": "node scripts/ci-jobs.ts build",
     "ci:verify": "node scripts/ci-jobs.ts verify",
     "ci:lighthouse": "node scripts/ci-jobs.ts lighthouse",
-    "ci:docker": "node scripts/ci-jobs.ts docker"
+    "ci:docker": "node scripts/ci-jobs.ts docker",
+    "ci:local": "node scripts/ci-local.ts"
   },
   "dependencies": {
     "@better-auth/drizzle-adapter": "1.7.6",
