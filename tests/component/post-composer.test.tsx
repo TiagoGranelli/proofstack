@@ -92,6 +92,17 @@ describe('PostComposer', () => {
     expect(onPublished).not.toHaveBeenCalled()
   })
 
+  it('flags a pasted NUL character on Publish without sending it, with the API message', async () => {
+    // No handler: a request would fail the test (setup.ts). Postgres cannot store U+0000 (src/contract/stored-text.ts).
+    await renderInApp(<PostComposer />)
+    await field().fill('before\u0000after')
+    await publish().click()
+    await expect
+      .element(page.getByRole('alert'))
+      .toHaveTextContent('Remove the invisible NUL character (U+0000) from the text.')
+    await expect.element(field()).toHaveFocus()
+  })
+
   const failures = [
     {
       name: 'a ValidationError, next to the field it names',

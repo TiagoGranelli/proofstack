@@ -1,5 +1,6 @@
 import { Schema, type SchemaAST, SchemaTransformation } from 'effect'
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '#/contract/limits.ts'
+import { isFreeOfNul } from '#/contract/stored-text.ts'
 
 // The input of every account action, in one place: the server functions (./auth.functions.ts) validate with these
 // schemas, and the account forms validate the same ones in the browser through Standard Schema before they send.
@@ -11,6 +12,7 @@ const trimmed = (...checks: [SchemaAST.Check<string>, ...Array<SchemaAST.Check<s
 
 const INVALID_EMAIL = 'Enter a valid email address.'
 const Email = trimmed(
+  isFreeOfNul,
   Schema.isMinLength(1, { message: 'Enter your email address.' }),
   Schema.isMaxLength(254, { message: INVALID_EMAIL }),
   Schema.isPattern(/^[^\s@]+@[^\s@]+$/, { message: INVALID_EMAIL }),
@@ -28,12 +30,13 @@ const NewPassword = Schema.String.check(
 )
 
 const Name = trimmed(
+  isFreeOfNul,
   Schema.isMinLength(1, { message: 'Enter your name.' }),
   Schema.isMaxLength(100, { message: 'Use at most 100 characters.' }),
 )
 
 /** Tokens from links and session ids: never typed by the user, so no message of their own. */
-const Token = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(2048))
+const Token = Schema.String.check(isFreeOfNul, Schema.isMinLength(1), Schema.isMaxLength(2048))
 
 export const SignInInput = Schema.Struct({ email: Email, password: CurrentPassword })
 

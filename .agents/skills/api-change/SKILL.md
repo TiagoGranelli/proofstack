@@ -12,7 +12,9 @@ together and must agree; the running API and the tests must agree with all three
 
 1. Edit the contract in `src/contract/`: schemas, endpoints, tagged errors (`Schema.TaggedError` with
    `httpApiStatus`). Constants the UI also needs (limits, lengths) go in `src/contract/limits.ts`, which stays
-   free of Effect so client bundles do not pull in the schema runtime.
+   free of Effect so client bundles do not pull in the schema runtime. A user-supplied string that is stored
+   or looked up in Postgres starts its checks with `isFreeOfNul` (`src/contract/stored-text.ts`): Postgres text
+   cannot hold U+0000, and without the check a NUL answers 500 instead of 400.
 2. Put a new endpoint that needs a session in a group behind the `Authentication` middleware (as `MyPosts` in
    `src/contract/posts.ts`). A public endpoint is a deliberate edit to `PUBLIC_OPERATIONS` in
    `scripts/check.ts` (the `openapi-security` guard). Add endpoints to the contract, never as raw Start server

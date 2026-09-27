@@ -51,7 +51,7 @@ export type UnauthorizedEncoded = {
 };
 
 export type PostInput = {
-  body: string;
+  body: unknown;
 };
 
 export type RateLimitedEncoded = {

@@ -1,5 +1,6 @@
 import { Schema } from 'effect'
 import { POST_MAX_LENGTH } from './limits.ts'
+import { isFreeOfNul } from './stored-text.ts'
 
 /**
  * A post's body as the API takes it. Apart from the endpoints in ./posts.ts so the post forms can validate with
@@ -7,6 +8,7 @@ import { POST_MAX_LENGTH } from './limits.ts'
  * send, and in a ValidationError's issues when another client sends a body that breaks them.
  */
 export const PostBody = Schema.String.check(
+  isFreeOfNul,
   Schema.isTrimmed({ message: 'Remove the spaces before and after the text.' }),
   Schema.isMinLength(1, { message: 'Write something to post.' }),
   Schema.isMaxLength(POST_MAX_LENGTH, { message: `Use at most ${POST_MAX_LENGTH} characters.` }),

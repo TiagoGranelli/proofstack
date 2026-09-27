@@ -14,6 +14,7 @@ import { RequestValidationLive } from '#/server/api/middleware.ts'
 import { webHandler } from './harness.ts'
 
 const APP = 'http://localhost:3000'
+const NUL_MESSAGE = 'Remove the invisible NUL character (U+0000) from the text.'
 
 const send = async (method: string, path: string, body?: string) => {
   const { handler, dispose } = webHandler()
@@ -38,6 +39,8 @@ describe('payload validation', () => {
       JSON.stringify({ body: 'x'.repeat(POST_MAX_LENGTH + 1) }),
       `Use at most ${POST_MAX_LENGTH} characters.`,
     ],
+    // Postgres text cannot store U+0000; unchecked, the real repository answers 500 (src/contract/stored-text.ts).
+    ['NUL-carrying', JSON.stringify({ body: 'before\u0000after' }), NUL_MESSAGE],
     ['not a string', JSON.stringify({ body: 42 }), 'Expected string'],
     ['missing', JSON.stringify({}), 'Missing key'],
   ]

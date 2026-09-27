@@ -14,7 +14,8 @@ The browser reaches Better Auth only through server functions; which surface an 
 
 1. A server function in `src/lib/auth.functions.ts` that validates its input with Effect Schema
    (`.validator(Schema.toStandardSchemaV1(...))`, the `server-fn-validator` guard) and calls
-   `callAuthEndpoint`.
+   `callAuthEndpoint`. Its schema lives in `src/lib/account-input.ts`, where the forms reuse it; a string that
+   reaches Postgres (a name, an email, a token) starts its checks with `isFreeOfNul`.
 2. Its `METHOD /path` in `EXPOSED` in `src/server/http/auth-endpoints.ts`. Not in `HTTP_ENDPOINTS`, which
    `/api/auth/*` answers from outside.
 3. A hook in `src/features/auth/api/` built on `useAuthMutation` (`auth-action.ts`), as `change-password.ts`.

@@ -136,10 +136,11 @@ describe('posts', () => {
   })
 
   it('returns documented validation errors', async () => {
-    for (const body of ['', '   ', 'x'.repeat(281)]) {
+    // A NUL reaches Postgres as a 500 unless the contract refuses it (src/contract/stored-text.ts).
+    for (const body of ['', '   ', 'x'.repeat(281), 'before\u0000after']) {
       const invalid = await myPostsCreate({ client: author, body: { body } })
-      expect(invalid.response?.status).toBe(400)
-      expect(invalid.error).toMatchObject({ _tag: 'ValidationError' })
+      expect(invalid.response?.status, JSON.stringify(body)).toBe(400)
+      expect(invalid.error).toMatchObject({ _tag: 'ValidationError', issues: [{ path: ['body'] }] })
     }
   })
 
