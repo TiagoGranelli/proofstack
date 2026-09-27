@@ -16,7 +16,7 @@ import { defineConfig } from 'vitest/config'
 // - `db`: server modules against a real, freshly migrated Postgres (no build, no app): the rate-limit storage and
 //   query budgets. `pnpm test:db`; also run by `pnpm verify:app`.
 // - `integration`: the built app over HTTP; its global setup starts the servers (`pnpm test`).
-// `pnpm check` runs unit, api and component (the `tests` job in lefthook.yml); `pnpm verify:app` runs db and
+// `pnpm check` runs unit, api and component (the `tests` job in .config/lefthook.yml); `pnpm verify:app` runs db and
 // integration.
 
 /**

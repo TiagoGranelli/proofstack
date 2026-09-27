@@ -1,6 +1,7 @@
 // What the Lighthouse gate (scripts/lighthouse.ts) reports: lighthouse-report/summary.{json,md}, the GitHub step
 // summary, the console, and the exit code (0 pass, 1 fail, 2 inconclusive).
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs'
+import { availableParallelism } from 'node:os'
 import { join } from 'node:path'
 import {
   type Category,
@@ -11,7 +12,7 @@ import {
   REPORTED,
   type Verdict,
 } from './lighthouse-policy.ts'
-import type { RunsSummary, ScoreRange } from './lighthouse-runs.ts'
+import { LANTERN_TASK_THRESHOLD_MS, type RunsSummary, type ScoreRange } from './lighthouse-runs.ts'
 
 /** One page and form factor, as summary.json lists it. */
 export type PageOutcome = {
@@ -36,7 +37,8 @@ export const progressLine = (outcome: PageOutcome): string => {
   const scores = REPORTED.map((category) => `${category}=${outcome.scores[category]?.median ?? '-'}`).join(' ')
   const performance = outcome.perRun.map((run) => run.scores.performance).join(',')
   const indexes = outcome.perRun.map((run) => run.benchmarkIndex).join(',')
-  return `${outcome.verdict.toUpperCase().padEnd(12)} ${outcome.page} ${outcome.formFactor} ${scores} perf runs ${performance} benchmarkIndex ${indexes}`
+  const preload = outcome.perRun.map((run) => run.preloadTaskMs ?? '-').join(',')
+  return `${outcome.verdict.toUpperCase().padEnd(12)} ${outcome.page} ${outcome.formFactor} ${scores} perf runs ${performance} benchmarkIndex ${indexes} preload task ms ${preload}`
 }
 
 /** `median (min–max)`, with `*` for a category the page reports but does not gate. */
@@ -55,14 +57,34 @@ const tableRow = (outcome: PageOutcome): string => {
   return `| ${outcome.path} | ${outcome.formFactor} | ${cells.join(' | ')} | ${timings} | ${Math.round(bytes / 1024)} KiB | ${outcome.verdict}${problems} |`
 }
 
+/**
+ * A line on the host when a mobile run's preload task reached Lantern's threshold: from there the simulated FCP and
+ * LCP include four times that task, so they measure the host's CPU contention as much as the page (ADR 0011).
+ * Desktop runs are left out: their CPU slowdown is 1, so the task adds only its own length.
+ */
+const contendedHostNote = (outcomes: PageOutcome[]): string => {
+  const tasks = outcomes
+    .filter((outcome) => outcome.formFactor === 'mobile')
+    .flatMap((outcome) => outcome.perRun.map((run) => run.preloadTaskMs ?? 0))
+  const longest = Math.max(0, ...tasks)
+  if (longest < LANTERN_TASK_THRESHOLD_MS) return ''
+  const counted = tasks.filter((ms) => ms >= LANTERN_TASK_THRESHOLD_MS).length
+  return (
+    ` Preload task >= ${LANTERN_TASK_THRESHOLD_MS} ms in ${counted} of ${tasks.length} mobile runs (up to ${longest} ms): ` +
+    'Lantern adds four times it before every preloaded script, so FCP and LCP grow with the CPU contention of ' +
+    'this host (ADR 0011).'
+  )
+}
+
 const tableIntro = (outcomes: PageOutcome[], setup: Setup): string => {
   const { version } = JSON.parse(readFileSync('node_modules/lighthouse/package.json', 'utf8')) as { version: string }
   const indexes = outcomes.flatMap((outcome) => outcome.perRun.map((run) => run.benchmarkIndex))
   const through = setup.edge === false ? 'Node server without the edge' : `through the Caddy edge (${setup.edge})`
   return (
     `Lighthouse ${version}, median of ${setup.runs} runs, ${through}. ` +
-    `benchmarkIndex ${Math.min(...indexes)}–${Math.max(...indexes)}. ` +
-    '* = reported, not gated. Diagnose with `<page>-<form factor>-median.report.html` (Lighthouse median run).'
+    `benchmarkIndex ${Math.min(...indexes)}–${Math.max(...indexes)}, ${availableParallelism()} CPUs.` +
+    contendedHostNote(outcomes) +
+    ' * = reported, not gated. Diagnose with `<page>-<form factor>-median.report.html` (Lighthouse median run).'
   )
 }
 
@@ -79,9 +101,15 @@ const summaryTable = (outcomes: PageOutcome[], setup: Setup): string =>
 /** Writes summary.json and summary.md to `outputDir`, the GitHub step summary, and the table to the console. */
 export const writeReport = (outcomes: PageOutcome[], setup: Setup & { outputDir: string }): void => {
   const table = summaryTable(outcomes, setup)
-  // `results` is summary.json's key for the pages, which people and CI artifacts read; the rule is about names in code.
-  // oxlint-disable-next-line eslint/id-denylist
-  const summary = { policy: POLICY, edge: setup.edge, shmBytes: setup.shmBytes, results: outcomes }
+  const summary = {
+    policy: POLICY,
+    edge: setup.edge,
+    shmBytes: setup.shmBytes,
+    cpus: availableParallelism(),
+    // `results` is summary.json's key for the pages, which people and CI artifacts read; the rule is about names in code.
+    // oxlint-disable-next-line eslint/id-denylist
+    results: outcomes,
+  }
   writeFileSync(join(setup.outputDir, 'summary.json'), `${JSON.stringify(summary, null, 2)}\n`)
   writeFileSync(join(setup.outputDir, 'summary.md'), `${table}\n`)
   if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `## Lighthouse\n\n${table}\n`)

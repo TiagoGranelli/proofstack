@@ -4,7 +4,8 @@
 // (scripts/lighthouse-policy.ts, with PAGES). Writes lighthouse-report/summary.{json,md} plus every raw report
 // (scripts/lighthouse-report.ts).
 // Usage: pnpm build && pnpm lighthouse [--runs=3] [--page=home] [--form-factor=mobile] [--direct]
-//                                      [--edge-protocol=h2|h1|http]
+//                                      [--edge-protocol=h2|h1|http] [--bar=target|ci]
+//   --bar: the performance bar (POLICY.performance in scripts/lighthouse-policy.ts); `ci` is what CI applies.
 //   --direct: measure the Node server without the edge (to tell app regressions from edge ones).
 //   --edge-protocol: h2 (default, production), or HTTP/1.1 over HTTPS (h1) or plain HTTP (http) to compare.
 // Exit codes: 0 pass, 1 fail, 2 inconclusive (the machine measured as too slow for the performance score).
@@ -19,7 +20,7 @@ import { drizzle } from 'drizzle-orm/node-postgres'
 import { Pool } from 'pg'
 import { post, user } from '#/server/db/schema/index.ts'
 import { type RunningApp, startApp } from './app-server.ts'
-import { type FormFactor, judge, type Page, PAGES } from './lighthouse-policy.ts'
+import { type FormFactor, judge, type Page, PAGES, type PerformanceBar } from './lighthouse-policy.ts'
 import { exitCodeOf, type PageOutcome, progressLine, writeReport } from './lighthouse-report.ts'
 import {
   type Chrome,
@@ -57,6 +58,7 @@ const pageNames = oneOf(
 )
 const pages = PAGES.filter((page) => pageNames.includes(page.name))
 const direct = process.argv.includes('--direct')
+const [performanceBar = 'target'] = oneOf<PerformanceBar>('bar', ['target', 'ci'], ['target'])
 /**
  * How Chrome reaches the edge. h2 (default) is production: HTTPS, where Chrome negotiates HTTP/2 and
  * shares one connection for the page. h1 forces HTTP/1.1 over the same HTTPS edge, http is plain HTTP/1.1;
@@ -123,7 +125,7 @@ const measureRuns = (target: Target, page: Page, formFactor: FormFactor): Lhr[] 
 const measurePage = (target: Target, page: Page, formFactor: FormFactor): PageOutcome => {
   const lhrs = measureRuns(target, page, formFactor)
   const { scores, metrics, perRun } = summarizeRuns(lhrs)
-  const { verdict, problems } = judge(page, formFactor, { metrics, perRun })
+  const { verdict, problems } = judge(page, { formFactor, performanceBar }, { metrics, perRun })
   const { medianLhr, medianRun } = keepMedianReport(lhrs, join(OUT, `${page.name}-${formFactor}`))
   return {
     page: page.name,

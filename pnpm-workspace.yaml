@@ -10,14 +10,17 @@ allowBuilds:
   # component tests serve the worker straight from node_modules (vitest.config.ts).
   msw: false
 engineStrict: true
+# Scripts run in pnpm's own shell on every platform, so `${VAR:-default}` and globs in package.json behave the
+# same on Windows (cmd.exe expands neither) as on Linux and macOS.
+shellEmulator: true
 # `pnpm add` writes exact versions (package.json pins every dependency; tests/unit/repo-policy.test.ts checks).
 savePrefix: ''
 
 # Release quarantine: no version younger than one day is resolved. Set explicitly, which makes it strict: a
 # release inside the window fails the install (or prompts) instead of being appended silently to
 # minimumReleaseAgeExclude, as pnpm's implicit default does. Renovate waits 7 days before proposing a direct
-# dependency (renovate.json); this day is the floor for everything else: transitive versions, updates by hand
-# and Renovate's security PRs, which skip its wait. `pnpm install --frozen-lockfile` checks every lockfile entry
+# dependency (.github/renovate.json); this day is the floor for everything else: transitive versions, updates by
+# hand and Renovate's security PRs, which skip its wait. `pnpm install --frozen-lockfile` checks every lockfile entry
 # against this and trustPolicy (about 5 s; needs the registry).
 minimumReleaseAge: 1440
 minimumReleaseAgeStrict: true

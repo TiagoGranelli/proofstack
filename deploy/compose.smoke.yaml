@@ -1,0 +1,65 @@
+# Override for deploy/compose.production.yaml in the Docker smoke test (scripts/docker-smoke.ts, `pnpm ci:docker`),
+# so CI tests the adopters' recipe itself. Relative paths resolve from the first file's directory, this one.
+# What changes, and why:
+# - A connection pooler in transaction mode between the app and Postgres, as Neon and Supabase put there
+#   (docs/operations.md, "Connection poolers"): the migrations and the app go through it.
+# - The image is built here, and the edge serves plain HTTP on an ephemeral loopback port, so parallel runs
+#   (several worktrees) never collide; the script asks `docker compose port edge 8080`.
+# - Docker picks the network's subnet (a fixed one collides with another run), so the app trusts X-Forwarded-For
+#   from the private ranges instead of the edge's fixed address.
+# Image pins are checked against scripts/images.ts by `pnpm ci:workflows`.
+services:
+  pooler:
+    image: edoburu/pgbouncer:v1.25.2-p0@sha256:7d7a27d9e90985cab5cf42256f5c13a3120baa4b055b69df37beb272b89b2340
+    environment:
+      DB_HOST: db
+      DB_USER: app
+      DB_PASSWORD: ${APP_DB_PASSWORD}
+      DB_NAME: app
+      AUTH_TYPE: scram-sha-256
+      POOL_MODE: transaction
+      # Two server connections for every client: migration runs and requests share them, as on a managed pooler.
+      DEFAULT_POOL_SIZE: 2
+    healthcheck:
+      # -h forces TCP through PgBouncer itself.
+      test: [CMD, pg_isready, -h, 127.0.0.1, -p, '5432', -U, app, -d, app]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [internal]
+    mem_limit: 64m
+
+  migrate:
+    build: ..
+    environment:
+      DATABASE_URL: postgres://app:${APP_DB_PASSWORD}@pooler:5432/app
+    depends_on:
+      pooler:
+        condition: service_healthy
+
+  app:
+    # Built by `migrate` (the same image); never pulled.
+    pull_policy: never
+    environment:
+      DATABASE_URL: postgres://app:${APP_DB_PASSWORD}@pooler:5432/app
+      DATABASE_URL_POOLED: 'true'
+      # The origin the checks send; they connect to whichever loopback port Docker published.
+      APP_URL: http://localhost:8080
+      TRUSTED_PROXIES: 10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
+    depends_on:
+      pooler:
+        condition: service_healthy
+
+  edge:
+    environment:
+      EDGE_ADDRESS: ':8080'
+    ports: !override
+      - 127.0.0.1::8080
+    networks: !override [internal]
+
+networks:
+  internal:
+    ipam: !reset {}

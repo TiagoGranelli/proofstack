@@ -116,13 +116,13 @@ Lighthouse policy and the less common commands (`audit:check`, `sbom:release`) a
 A misconfigured lint once reached 17 GB and crashed the maintainer's laptop.
 
 - To check a few files, pass explicit paths: `pnpm lint src/x.ts`, `pnpm exec oxfmt --check src/x.ts`.
-- Keep `node_modules/**`, `.output/**`, and `repos/**` out of every tool's scope. `.oxlintrc.json` and
+- Keep `node_modules/**`, `.output/**`, and `.repos/**` out of every tool's scope. `.oxlintrc.json` and
   `.oxfmtrc.json` list all three in `ignorePatterns`, `tsconfig.json` includes only `src`, `scripts`,
-  `tests`, and `*.config.ts` (and excludes `node_modules`, `.output`, and `repos`), and `.fallowrc.json`
+  `tests`, and `*.config.ts` (and excludes `node_modules`, `.output`, and `.repos`), and `.fallowrc.json`
   lists all three in `ignorePatterns`. A new tool or config needs the same exclusions.
 - Run heavy commands one at a time (`pnpm build`, type-aware lint, `verify:app`, `lighthouse`); on Linux
   under a memory cap, see [docs/operations.md](docs/operations.md#linux-memory-caps).
-- Read upstream code with `gh api` or a sparse clone of the listed paths into `repos/`
+- Read upstream code with `gh api` or a sparse clone of the listed paths into `.repos/`
   ([dependency-sources.md](docs/agents/dependency-sources.md)), never a full clone.
 
 ## Generated and vendored files
@@ -136,7 +136,7 @@ a refused edit means change the source and run the command.
   `tests/unit/repo-policy.test.ts` rejects edits to migrations already in the journal)
 - `.agents/skills/shadcn/**` and `skills-lock.json`: the `skills` CLI ([docs/agents/skills.md](docs/agents/skills.md)).
   The other skills in `.agents/skills/` are this repo's own and are edited by hand.
-- `repos/**`: the sparse clones in [dependency-sources.md](docs/agents/dependency-sources.md)
+- `.repos/**`: the sparse clones in [dependency-sources.md](docs/agents/dependency-sources.md)
 
 ## Version policy
 
@@ -175,7 +175,7 @@ policy; load it before changing `package.json` or `pnpm-workspace.yaml`.
   `pnpm exec shadcn …` wherever the skill says `npx shadcn@latest`.
 - **Better Auth, Fallow, and Playwright traces:** see [docs/agents/skills.md](docs/agents/skills.md).
 - **Upstream docs or source not in `node_modules`:** see [docs/agents/dependency-sources.md](docs/agents/dependency-sources.md).
-  Snapshots in `repos/` are read-only reference material.
+  Snapshots in `.repos/` are read-only reference material.
 
 ## Decisions
 

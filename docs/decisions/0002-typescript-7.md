@@ -15,8 +15,8 @@ yet in a stable release.
 - `typescript` is `7.0.2`: one TypeScript in the project, used by `tsc` (`pnpm typecheck`).
 - `@hey-api/openapi-ts` is pinned exactly to `0.0.0-next-20260824173136` (the `next` dist-tag), which has no
   `typescript` dependency or peer.
-- Renovate follows the `next` dist-tag for `@hey-api/openapi-ts` (`renovate.json`): it would otherwise propose
-  `0.99.0`, which sorts higher but crashes on TS 7. It does not report a stable release either;
+- Renovate follows the `next` dist-tag for `@hey-api/openapi-ts` (`.github/renovate.json`): it would otherwise
+  propose `0.99.0`, which sorts higher but crashes on TS 7. It does not report a stable release either;
   `npm view @hey-api/openapi-ts dist-tags` shows one.
 
 ## Evidence (2026-09-27)
@@ -40,4 +40,4 @@ through Node's type stripping, so they use erasable syntax only (`erasableSyntax
 ## Revisit when
 
 Hey API publishes a stable release that includes the TypeScript-free printer: switch to it (expect an
-indentation-only diff in `src/sdk`) and drop the `followTag` rule in `renovate.json`.
+indentation-only diff in `src/sdk`) and drop the `followTag` rule in `.github/renovate.json`.

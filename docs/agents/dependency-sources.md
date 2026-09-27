@@ -1,7 +1,7 @@
 # Dependency sources for agents
 
-Recommendation (2026-09-27): **commit no vendored sources for now.** `repos/` is ignored through
-`repos/.gitignore`. When upstream code or docs would help, fetch a filtered snapshot on demand with a partial,
+Recommendation (2026-09-27): **commit no vendored sources for now.** `.repos/` is ignored through
+`.repos/.gitignore`. When upstream code or docs would help, fetch a filtered snapshot on demand with a partial,
 sparse git clone (below).
 
 ## What agents already have
@@ -21,13 +21,13 @@ tarball of the whole tree:
 ```sh
 name=better-auth repo=better-auth/better-auth
 tag=v$(node -p "require('./node_modules/better-auth/package.json').version")   # the installed version
-git clone --filter=blob:none --no-checkout --depth 1 --branch "$tag" "https://github.com/$repo" "repos/$name"
-git -C "repos/$name" sparse-checkout set --no-cone /docs/content/docs/ /LICENSE.md
-git -C "repos/$name" checkout
-git -C "repos/$name" rev-parse HEAD   # provenance: the commit the snapshot shows
+git clone --filter=blob:none --no-checkout --depth 1 --branch "$tag" "https://github.com/$repo" ".repos/$name"
+git -C ".repos/$name" sparse-checkout set --no-cone /docs/content/docs/ /LICENSE.md
+git -C ".repos/$name" checkout
+git -C ".repos/$name" rev-parse HEAD   # provenance: the commit the snapshot shows
 ```
 
-To refresh after a dependency bump, delete `repos/<name>` and clone again. The presets, measured on 2026-09-27
+To refresh after a dependency bump, delete `.repos/<name>` and clone again. The presets, measured on 2026-09-27
 at the installed versions (snapshot: files and size of the checked-out tree; transfer: size of `.git`):
 
 | Name | Repo (license) | Tag (`<v>`: the installed version) | Sparse paths | Commit | Snapshot | Transfer | Adds beyond `node_modules` |
@@ -41,7 +41,7 @@ Check the license of any other repository first (`gh api repos/<owner>/<repo>/li
 repo without one stays local and is never committed.
 
 Snapshots are reference material. Read them, and fetch them again instead of editing. Nothing imports, lints,
-formats, or typechecks `repos/**`.
+formats, or typechecks `.repos/**`.
 
 ## Why nothing is committed
 
@@ -58,7 +58,7 @@ Revisit this if agents need sources in sandboxes without network access, or if a
 
 ## Subtree or sparse clone
 
-The Effect blog post ("the one weird git trick") recommends `git subtree add --squash` into `repos/`, with an
+The Effect blog post ("the one weird git trick") recommends `git subtree add --squash` into `.repos/`, with an
 AGENTS.md section that marks it read-only and excluded from tooling. This repo keeps that layout and those
 rules, but uses sparse clones: a subtree fetches the upstream ref and its objects (GitHub repo sizes: Effect
 135 MB, TanStack Router 112 MB, Better Auth 158 MB, Hey API 107 MB) and checks out the whole tree (42–77 MB),
@@ -66,10 +66,10 @@ because it cannot filter subpaths. Its updates are merge commits.
 
 To keep a source in git anyway:
 
-1. **Recommended, committed snapshot:** add `!<name>/` and `!<name>/**` to `repos/.gitignore`, fetch it as
-   above, delete `repos/<name>/.git` (git would otherwise record a nested repository), and commit
-   `repos/<name>` with the repo, tag and commit in the message. Refresh it in each PR that bumps the
+1. **Recommended, committed snapshot:** add `!<name>/` and `!<name>/**` to `.repos/.gitignore`, fetch it as
+   above, delete `.repos/<name>/.git` (git would otherwise record a nested repository), and commit
+   `.repos/<name>` with the repo, tag and commit in the message. Refresh it in each PR that bumps the
    dependency.
 2. **Subtree, only if you want git-native updates for a whole repo:**
-   `git subtree add --prefix=repos/effect https://github.com/Effect-TS/effect effect@4.0.0-rc.117 --squash`.
-   Run it under a memory cap, and add `!effect/` and `!effect/**` to `repos/.gitignore` first.
+   `git subtree add --prefix=.repos/effect https://github.com/Effect-TS/effect effect@4.0.0-rc.117 --squash`.
+   Run it under a memory cap, and add `!effect/` and `!effect/**` to `.repos/.gitignore` first.

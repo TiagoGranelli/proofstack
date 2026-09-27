@@ -16,7 +16,7 @@
 /playwright.config.ts @TiagoGranelli
 
 # The gate list and pre-commit hook, the repository rules, the public operations, the drift checks.
-/lefthook.yml                        @TiagoGranelli
+/.config/lefthook.yml                @TiagoGranelli
 /tests/unit/repo-policy.test.ts      @TiagoGranelli
 /tests/api/public-operations.test.ts @TiagoGranelli
 /scripts/check-drift.ts              @TiagoGranelli
@@ -26,13 +26,12 @@
 # license exceptions, secret-scan and migration-lint exceptions.
 /package.json                 @TiagoGranelli
 /pnpm-workspace.yaml          @TiagoGranelli
-/.grype.yaml                  @TiagoGranelli
+/.config/grype.yaml           @TiagoGranelli
 /scripts/licenses.ts          @TiagoGranelli
 /scripts/images.ts            @TiagoGranelli
-/.gitleaks.toml               @TiagoGranelli
-/.gitleaksignore              @TiagoGranelli
-/.squawk.toml                 @TiagoGranelli
+/.config/gitleaks.toml        @TiagoGranelli
+/.config/gitleaksignore       @TiagoGranelli
+/.config/squawk.toml          @TiagoGranelli
 
-# CI workflows, actions, Renovate and this file.
+# CI workflows, actions, Renovate (renovate.json), the community files and this file.
 /.github/            @TiagoGranelli
-/renovate.json       @TiagoGranelli

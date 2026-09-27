@@ -3,7 +3,7 @@
 `minimal` is `main` without the posts example: the same foundation (auth, the account pages, `GET /api/me`,
 every gate), a plain home page, and a dashboard that reads `GET /api/me`. Adopters who start without the
 example take it ([adopting.md](adopting.md#day-1)); maintainers keep it in sync by merging `main` into it
-([CONTRIBUTING.md](../CONTRIBUTING.md#the-minimal-branch)).
+([CONTRIBUTING.md](../.github/CONTRIBUTING.md#the-minimal-branch)).
 
 This page is the exact recipe, for building the branch once and for checking a merge. The same list is what
 an adopter removes to drop the example from a `main`-based app later. Every step keeps `pnpm check`,
