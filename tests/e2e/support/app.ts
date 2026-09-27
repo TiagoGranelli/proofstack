@@ -98,6 +98,9 @@ export const followLink = async (page: Page, name: string, url: RegExp) => {
   await page.getByRole('main').getByRole('link', { name }).click()
   await expect(page).toHaveURL(url)
   await expect(page.locator('body[data-hydrated="true"]')).toBeAttached()
+  // The URL changes before the new page renders; its heading takes focus once it has (RouteAnnouncer). Filling a
+  // field before that could fill the old page's field of the same name.
+  await expect(page.getByRole('heading', { level: 1 })).toBeFocused()
 }
 
 /** Signs a browser context (through its page) or an API context in, without touching the UI. */
