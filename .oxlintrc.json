@@ -99,9 +99,6 @@
     // pedantic, turned off. Style preferences that would rewrite correct code, or rules that fight a library's shape.
     "typescript/prefer-readonly-parameter-types": "off",
     "eslint/require-unicode-regexp": "off",
-    // Size limits: complexity and max-lines-per-function below measure what matters.
-    "eslint/max-lines": "off",
-    "eslint/max-depth": "off",
     "eslint/max-classes-per-file": "off",
     "import/max-dependencies": "off",
     "typescript/strict-void-return": "off",
@@ -201,7 +198,38 @@
     "react/rule-suppression": "error",
     "jsx-a11y/anchor-ambiguous-text": "error",
     "eslint/complexity": ["error", { "max": 20 }],
-    "eslint/max-lines-per-function": ["error", { "max": 130, "skipBlankLines": true, "skipComments": true }],
+
+    // Clean code for agents (AGENTS.md, "Code style"): a file and a function fit one read, nesting stays shallow,
+    // names grep. Comments are not counted, so nobody deletes a "why" to pass. Measured in docs/clean-code-audit.md.
+    "eslint/max-lines": ["error", { "max": 300, "skipBlankLines": true, "skipComments": true }],
+    "eslint/max-lines-per-function": ["error", { "max": 20, "skipBlankLines": true, "skipComments": true }],
+    "eslint/max-depth": ["error", { "max": 2 }],
+    // Effect's idiom is three deep: `Effect.fn` > `.handle(...)` > `CurrentUser.use(...)`.
+    "eslint/max-nested-callbacks": ["error", { "max": 3 }],
+    "eslint/max-params": ["error", { "max": 3 }],
+    "eslint/no-nested-ternary": "error",
+    "react/jsx-max-depth": ["error", { "max": 4 }],
+    "unicorn/error-message": "error",
+    // Names that say nothing and grep everywhere. `data` and `handler(s)` are keys TanStack Start, TanStack Query and
+    // Effect impose (`signIn({ data })`, `server: { handlers }`), so AGENTS.md covers them instead.
+    "eslint/id-denylist": [
+      "error",
+      "result",
+      "results",
+      "info",
+      "item",
+      "obj",
+      "tmp",
+      "temp",
+      "val",
+      "foo",
+      "bar",
+      "manager",
+      "helper",
+      "helpers",
+      "util",
+      "utils"
+    ],
 
     // TanStack Query and Router (ESLint plugins run by oxlint).
     "@tanstack/query/exhaustive-deps": "error",
@@ -242,6 +270,51 @@
       "rules": {
         "shadcn/no-restyle": "off",
         "shadcn/no-arbitrary-values": "off"
+      }
+    },
+    {
+      // A component's markup is part of its body: 20 lines of logic plus room for its JSX at printWidth 120 (80, the
+      // owner's choice over the audit's 40: docs/critique-2026-09-27.md). It must stay before the tests/** override,
+      // which turns the rule off (a later override wins).
+      "files": ["**/*.tsx"],
+      "rules": {
+        "eslint/max-lines-per-function": ["error", { "max": 80, "skipBlankLines": true, "skipComments": true }]
+      }
+    },
+    {
+      // Server and plumbing modules declare what they return. UI code is exempt: components return JSX and hooks
+      // return TanStack generics that would restate the generated SDK's types.
+      "files": ["src/server/**", "src/lib/**", "src/contract/**", "scripts/**"],
+      "rules": {
+        "typescript/explicit-module-boundary-types": "error"
+      }
+    },
+    {
+      // The Effect API takes its dependencies from Layers (Database, PostsRepo, RateLimitStore, SessionLookup), so
+      // tests/api can provide fakes. Module singletons and drivers stay out of it. No later override may set
+      // no-restricted-imports on these paths: it would replace this list.
+      "files": ["src/server/api/**", "src/server/posts/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              { "name": "pg", "message": "Use the Database service (src/server/db/client.ts)." },
+              { "name": "nodemailer", "message": "Use authMail (src/server/mail/)." }
+            ],
+            "patterns": [
+              {
+                "regex": "(^|/)server/auth\\.ts$|^\\.\\./auth\\.ts$",
+                "message": "The Effect API reads Better Auth through a service provided by a Layer, not the module singleton."
+              },
+              {
+                "regex": "(^|/)db/client\\.ts$",
+                "importNames": ["db", "pool"],
+                "message": "Use the Database service, provided by a Layer."
+              }
+            ]
+          }
+        ]
       }
     },
     {
@@ -310,8 +383,12 @@
       "plugins": ["vitest"],
       "rules": {
         "typescript/no-non-null-assertion": "off",
-        // A `describe` callback is a list of tests, not a function to keep short.
+        // A `describe` callback is a list of tests, not a function to keep short. Test bodies are held to 15
+        // statements instead (a `describe` holds far fewer statements than lines), and files to max-lines.
         "eslint/max-lines-per-function": "off",
+        "eslint/max-statements": ["error", { "max": 15 }],
+        // describe > it.effect > Effect.gen > callback.
+        "eslint/max-nested-callbacks": ["error", { "max": 4 }],
         // `.only` runs one test alone; `.skip` and `.todo` ship a test that checks nothing. A skip that depends on
         // the platform takes a condition (`it.skipIf(...)`).
         "vitest/no-focused-tests": "error",
