@@ -117,8 +117,8 @@ describe('security', () => {
     const home = await fetch(appUrl)
     expect(home.headers.get('x-content-type-options')).toBe('nosniff')
     expect(home.headers.get('x-frame-options')).toBe('DENY')
-    // Public but rendered per request: revalidate every time, never stored by shared caches.
-    expect(home.headers.get('cache-control')).toBe('private, no-cache')
+    // Public, but rendered per request with a nonce and a header that names whoever is signed in: never stored.
+    expect(home.headers.get('cache-control')).toBe('private, no-store')
     const dashboard = await fetch(`${appUrl}/dashboard`, { headers: { cookie: authorCookie } })
     expect(dashboard.status).toBe(200)
     expect(dashboard.headers.get('cache-control')).toContain('no-store')

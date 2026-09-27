@@ -152,8 +152,9 @@ import { APP_NAME } from '#/config/app.ts'
 
 export const Route = createFileRoute('/')({
   head: () => ({ meta: [{ title: APP_NAME }] }),
-  // The HTML carries a per-request CSP nonce, so shared caches must not store it; browsers revalidate.
-  headers: () => ({ 'cache-control': 'private, no-cache' }),
+  // The HTML carries a per-request CSP nonce and the header names whoever is signed in: no cache may keep it (the
+  // session read, src/lib/session.functions.ts, says the same).
+  headers: () => ({ 'cache-control': 'private, no-store' }),
   component: Home,
 })
 

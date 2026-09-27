@@ -752,8 +752,8 @@ rejections are logged and the process continues.
 - **Caching:** each response sets its own `Cache-Control`; the root route and the Nitro plugin never set
   or override it.
   - `/api/*` and `/api/auth/*` default to `no-store`.
-  - SSR pages carry a per-request CSP nonce, so a shared cache must never reuse one: `/` sends
-    `private, no-cache`, and `/login` and the `_authed` routes `private, no-store`.
+  - SSR pages carry a per-request CSP nonce, and their header names whoever is signed in, so no cache may keep
+    one: they send `private, no-store`.
   - Prerendered pages (`/about`) and `/assets/*` are static files served by Nitro. Hashed assets get
     `public, max-age=31536000, immutable`.
   The router, and with it the TanStack Query cache, is created per request, so SSR never shares cached

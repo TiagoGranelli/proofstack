@@ -11,8 +11,9 @@ export const Route = createFileRoute('/')({
   // before they finish (postListsChanged), so a revisit never shows posts older than the last write.
   loader: ({ context }) => context.queryClient.infiniteQuery({ ...getPublicPostsQueryOptions(), staleTime: 'static' }),
   head: () => ({ meta: [{ title: pageTitle('Latest posts') }] }),
-  // The HTML carries a per-request CSP nonce, so shared caches must not store it; browsers revalidate.
-  headers: () => ({ 'cache-control': 'private, no-cache' }),
+  // The HTML carries a per-request CSP nonce and the header names whoever is signed in: no cache may keep it (the
+  // session read, src/lib/session.functions.ts, says the same).
+  headers: () => ({ 'cache-control': 'private, no-store' }),
   component: Home,
 })
 
