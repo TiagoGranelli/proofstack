@@ -16,8 +16,8 @@ Test each behavior in the cheapest layer that can observe it:
 Every new function is reached by a test in the cheapest layer that can observe it, and every bug fix adds a test
 that fails without the fix. Fakes are named and defined once: a Layer in `tests/api/harness.ts`, a handler factory
 in `tests/component/api-mocks.ts`, a module in `tests/component/stubs/`, a helper like `captureLog`
-(`tests/unit/process-fakes.ts`); a test body does not stub a project module itself. A test body holds at most 15 statements (Oxlint `max-statements`; a `describe` has no length
-limit) and four nested callbacks.
+(`tests/unit/process-fakes.ts`); a test body does not stub a project module itself. A test body holds at most 15
+statements (Oxlint `max-statements`; a `describe` has no length limit) and four nested callbacks.
 
 ## Running
 

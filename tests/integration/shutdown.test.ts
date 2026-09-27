@@ -73,6 +73,9 @@ const databaseUrl = testDatabaseUrl('shutdown')
 
 beforeAll(async () => {
   app = await startApp({ databaseUrl, logFile: LOG_FILE, trustedProxies: LOOPBACK })
+  // A rendered form page once left TanStack Form's devtools connect loop running, which held the process for 5 s
+  // after SIGTERM (src/lib/no-devtools-event-client.ts): the shutdown below must not wait for it.
+  expect((await fetch(new URL('/login', app.directUrl))).status).toBe(200)
 }, 60_000)
 
 afterAll(async () => {

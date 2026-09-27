@@ -40,16 +40,23 @@ export type AuthOutcome<T = null> =
   | { readonly ok: true; readonly value: T }
   | { readonly ok: false; readonly failure: AuthFailure }
 
-const failure = (result: Extract<AuthEndpointResult, { ok: false }>): AuthOutcome<never> => ({
+type EndpointFailure = Extract<AuthEndpointResult, { ok: false }>
+
+const failureCode = (refused: EndpointFailure): AuthFailureCode => {
+  if (refused.status === 429) return 'RATE_LIMITED'
+  if (refused.code !== undefined) return refused.code
+  return refused.status === 404 ? 'NOT_FOUND' : 'UNEXPECTED'
+}
+
+const failure = (refused: EndpointFailure): AuthOutcome<never> => ({
   ok: false,
   failure: {
-    code:
-      result.status === 429 ? 'RATE_LIMITED' : (result.code ?? (result.status === 404 ? 'NOT_FOUND' : 'UNEXPECTED')),
-    ...(result.retryAfter === undefined ? {} : { retryAfter: result.retryAfter }),
+    code: failureCode(refused),
+    ...(refused.retryAfter === undefined ? {} : { retryAfter: refused.retryAfter }),
   },
 })
 
-const done = (result: AuthEndpointResult): AuthOutcome => (result.ok ? { ok: true, value: null } : failure(result))
+const done = (answer: AuthEndpointResult): AuthOutcome => (answer.ok ? { ok: true, value: null } : failure(answer))
 
 // Nothing here may be cached: the answers depend on the session cookie.
 const noStore = () => setResponseHeader('cache-control', 'private, no-store')
@@ -73,6 +80,12 @@ const loginPageAfter = (outcome: AuthOutcome, redirectTo: string) => {
   return search.size > 0 ? `/login?${search}` : '/login'
 }
 
+/**
+ * Signs in with email and password; the session cookie comes back on this response. A wrong password is a
+ * failure value (`INVALID_EMAIL_OR_PASSWORD`), not an exception.
+ *
+ * @example const outcome = await signIn({ data: { email, password } })
+ */
 export const signIn = createServerFn({ method: 'POST' })
   .validator(Schema.toStandardSchemaV1(SignInInput))
   .handler(async ({ data }) => done(await callAuthEndpoint('POST', '/sign-in/email', { body: data })))
@@ -90,6 +103,7 @@ export const signInFromForm = createServerFn({ method: 'POST' })
     throw redirect({ href: loginPageAfter(outcome, data.redirect), statusCode: 303 })
   })
 
+/** Ends this browser's session and clears its cookie; the account's other sessions go on. */
 export const signOut = createServerFn({ method: 'POST' }).handler(async () =>
   done(await callAuthEndpoint('POST', '/sign-out', { body: {} })),
 )
@@ -104,6 +118,7 @@ export const resendVerification = createServerFn({ method: 'POST' })
   .validator(Schema.toStandardSchemaV1(EmailInput))
   .handler(async ({ data }) => done(await callAuthEndpoint('POST', '/send-verification-email', { body: data })))
 
+/** Confirms the email address of the link's token (/verify-email); an expired or used token is a failure value. */
 export const verifyEmail = createServerFn({ method: 'POST' })
   .validator(Schema.toStandardSchemaV1(TokenInput))
   .handler(async ({ data }) => done(await callAuthEndpoint('GET', '/verify-email', { query: { token: data.token } })))
@@ -188,6 +203,7 @@ export const revokeSession = createServerFn({ method: 'POST' })
     return done(await callAuthEndpoint('POST', '/revoke-session', { body: { token: session.token } }))
   })
 
+/** Ends every session of the account except this one. */
 export const revokeOtherSessions = createServerFn({ method: 'POST' }).handler(async () =>
   done(await callAuthEndpoint('POST', '/revoke-other-sessions', { body: {} })),
 )
