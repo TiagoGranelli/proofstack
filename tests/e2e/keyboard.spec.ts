@@ -60,7 +60,7 @@ test.describe('tab order', () => {
       'account',
       // A new account, so this browser holds its only session and the list has no Sign out buttons.
       async (page) => {
-        await signIn(page, await createAccount(page.request))
+        await signIn(page, await createAccount())
         await visit(page, '/account')
       },
       [

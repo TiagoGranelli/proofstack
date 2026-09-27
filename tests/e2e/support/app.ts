@@ -32,7 +32,7 @@ const CREATE_USER = fileURLToPath(new URL('../../../scripts/create-user.ts', imp
  * A new account, created through scripts/create-user.ts. The script writes to the app's database, so it
  * needs the environment the app runs with (DATABASE_URL and the rest); verify:app passes it to Playwright.
  */
-const createAuthor = async (name: string): Promise<Author> => {
+export const createAuthor = async (name: string): Promise<Author> => {
   if (!process.env.DATABASE_URL)
     throw new Error(
       'E2E tests create their authors with scripts/create-user.ts, which needs the DATABASE_URL of the app under ' +

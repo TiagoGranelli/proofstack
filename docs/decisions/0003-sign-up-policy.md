@@ -35,12 +35,14 @@ accounts are created.
   whether an account exists; shutdown drains pending sends.
 - The UI calls these endpoints through server functions (`src/lib/auth.functions.ts`) that dispatch into
   Better Auth's router in-process, so the endpoint allowlist, the rate limits and the origin check apply to
-  them exactly as to `/api/auth/*`. The browser bundle has no Better Auth client.
+  them. `/api/auth/*` itself only signs in and out and reads the session. The browser bundle has no Better
+  Auth client.
 
 ## Evidence
 
-- `tests/integration/auth-sign-up.test.ts`: with `closed`, `POST /api/auth/sign-up/email` and `/sign-up`
-  answer 404 and `/login` has no sign-up link; with `open`, an unverified account gets 403
+- `tests/integration/auth-sign-up.test.ts`: `POST /api/auth/sign-up/email` answers 404 in both modes; with
+  `closed`, the sign-up server function answers `NOT_FOUND`, `/sign-up` answers 404 and `/login` has no
+  sign-up link; with `open`, an unverified account gets 403
   `EMAIL_NOT_VERIFIED`, and an existing address gets the same answer as a new one.
 - `tests/e2e/auth-lifecycle.spec.ts` (links read from Mailpit) and `tests/e2e/auth-closed.spec.ts`.
 - `pnpm verify:app` runs a server in each mode on one database. `scripts/app-server.ts` creates the two test

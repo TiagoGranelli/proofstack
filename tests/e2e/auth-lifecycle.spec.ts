@@ -33,9 +33,8 @@ test('signs up, confirms the address from the mail, then signs in', async ({ pag
 test('resets a forgotten password from the mailed link, which ends every session', async ({
   browser,
   page,
-  request,
 }, testInfo) => {
-  const account = await createAccount(request)
+  const account = await createAccount()
   // Signed in elsewhere before the reset.
   const elsewhere = await newClient(browser, testInfo)
   await signIn(elsewhere.request, account)
@@ -70,12 +69,8 @@ test('resets a forgotten password from the mailed link, which ends every session
   await elsewhere.close()
 })
 
-test('changing the password signs out the other sessions and keeps this one', async ({
-  browser,
-  page,
-  request,
-}, testInfo) => {
-  const account = await createAccount(request)
+test('changing the password signs out the other sessions and keeps this one', async ({ browser, page }, testInfo) => {
+  const account = await createAccount()
   const elsewhere = await newClient(browser, testInfo)
   await Promise.all([signIn(page, account), signIn(elsewhere.request, account)])
 
@@ -93,8 +88,8 @@ test('changing the password signs out the other sessions and keeps this one', as
   await elsewhere.close()
 })
 
-test('lists the sessions and signs out another one', async ({ browser, page, request }, testInfo) => {
-  const account = await createAccount(request)
+test('lists the sessions and signs out another one', async ({ browser, page }, testInfo) => {
+  const account = await createAccount()
   const elsewhere = await newClient(browser, testInfo)
   await Promise.all([signIn(page, account), signIn(elsewhere.request, account)])
 
@@ -118,8 +113,8 @@ test('lists the sessions and signs out another one', async ({ browser, page, req
   await elsewhere.close()
 })
 
-test('deletes the account after the password and an explicit confirmation', async ({ page, request }) => {
-  const account = await createAccount(request)
+test('deletes the account after the password and an explicit confirmation', async ({ page }) => {
+  const account = await createAccount()
   await signIn(page, account)
   await visit(page, '/account')
 

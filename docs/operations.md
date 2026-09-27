@@ -322,16 +322,21 @@ rejections are logged and the process continues.
   Without it, the `Origin` header (or, if that is missing, the origin of `Referer`) must equal
   `APP_URL`. Anything else, including a request with none of these headers, gets 403 before
   authentication runs.
-- **Auth endpoints:** Better Auth answers only the endpoints the app uses (the plugin in
-  `src/server/http/auth-endpoints.ts`): `GET /get-session`, `POST /sign-in/email`, `POST /sign-out`,
-  `POST /sign-up/email` (with `AUTH_SIGN_UP=open` only), `POST /send-verification-email`,
-  `GET /verify-email`, `POST /request-password-reset`, `POST /reset-password`, `POST /change-password`,
-  `GET /list-sessions`, `POST /revoke-session`, `POST /revoke-other-sessions`, `POST /revoke-sessions` and
-  `POST /delete-user`. Every other Better Auth endpoint returns 404. The UI reaches them through server
-  functions (`src/lib/auth.functions.ts`) that run Better Auth's router in-process, so the allowlist,
-  rate limits and origin check apply to both paths; the browser gets no session tokens (sessions are
-  revoked by id). Signing in again does not revoke a session the browser already held; changing the
-  password ends every other session, and resetting it ends all of them.
+- **Auth endpoints:** `/api/auth/*` answers only `GET /get-session`, `POST /sign-in/email` and
+  `POST /sign-out`: what a client without the UI needs to get, check and end the session cookie that the
+  business API authenticates with. Session tokens are removed from their JSON bodies (the cookie carries
+  the session). Every other path returns 404 before Better Auth runs. The account actions of the UI are
+  server functions (`src/lib/auth.functions.ts`) that run Better Auth's router in-process, where the plugin
+  in `src/server/http/auth-endpoints.ts` additionally allows `POST /sign-up/email` (with
+  `AUTH_SIGN_UP=open` only), `POST /send-verification-email`, `GET /verify-email`,
+  `POST /request-password-reset`, `POST /reset-password`, `POST /change-password`, `GET /list-sessions`,
+  `POST /revoke-session`, `POST /revoke-other-sessions`, `POST /revoke-sessions` and `POST /delete-user`.
+  Rate limits and the origin check apply on both paths. The server functions accept a narrower input than
+  Better Auth: over raw HTTP, `/delete-user` would delete a fresh session's account without the password
+  and `/list-sessions` would hand every session token to page scripts. A `hooks.before` in
+  `src/server/auth.ts` also refuses `/delete-user` without a password, whoever calls it. The browser gets no
+  session tokens (sessions are revoked by id). Signing in again does not revoke a session the browser
+  already held; changing the password ends every other session, and resetting it ends all of them.
 - **Server functions:** an error inside a server function reaches the browser only as
   `Error('Internal error')` (see [Logs](#logs)); expected account failures (wrong password, rate limit)
   are returned as values, not thrown. A request to `/_serverFn/<id>` with an unknown id gets Nitro's bare
