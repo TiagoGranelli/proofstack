@@ -10,8 +10,8 @@ export const IMAGES = {
   playwright:
     'mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27',
   /**
-   * Same version as .node-version; its Node replaces the Playwright image's in the ci:local runner. Also the base
-   * of the Dockerfile.
+   * Same version as devEngines.runtime in package.json (Renovate's `node` group moves both); its Node replaces the
+   * Playwright image's in the ci:local runner. Also the base of the Dockerfile.
    */
   node: 'node:26.10.0-slim@sha256:ec7758ee051e457b468b32bde57b0879010b325bb9862718e9615225ce4aaae1',
   postgres: 'postgres:18.6@sha256:5a5a84b19854a9ffaa54082c166ff4ec27473a361e496e5ea167f298f2da9722',

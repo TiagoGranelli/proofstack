@@ -10,6 +10,13 @@
     "node": ">=26.0.0 <27",
     "pnpm": ">=12.6.0 <13"
   },
+  "devEngines": {
+    "runtime": {
+      "name": "node",
+      "version": "26.10.0",
+      "onFail": "download"
+    }
+  },
   "imports": {
     "#/*": "./src/*"
   },

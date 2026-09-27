@@ -777,7 +777,7 @@ browsers, Postgres and (for `verify`) Mailpit, and moves artifacts. The logic li
 `pnpm ci:local [job ...]` is the faithful local equivalent (default: every job, in CI order). It runs the
 container jobs (`static`, `supply-chain`, `drift`, `build`, `verify`, `lighthouse`) in the official Playwright image
 for `@playwright/test` 1.63.0 (Ubuntu 24.04, all browsers including WebKit), with Node from
-`.node-version`, pnpm from `packageManager` and the pinned Caddy binary added, next to Postgres 18.6 and
+the `node` image (the version in `devEngines`), pnpm from `packageManager` and the pinned Caddy binary added, next to Postgres 18.6 and
 Mailpit (`MAILPIT_HOST=mailpit` for `verify:app`) on a private Docker network. The host jobs (`workflows`, `secrets`, `docker`) drive Docker and run on the host.
 
 - The repository is mounted read-only. The container copies what a CI checkout would contain (tracked
