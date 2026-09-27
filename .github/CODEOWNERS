@@ -20,9 +20,18 @@
 /scripts/ci-jobs.ts     @proofstack/maintainers
 /.githooks/             @proofstack/maintainers
 
-# Supply chain: exact versions, build-script and release-age exceptions.
-/package.json        @proofstack/maintainers
-/pnpm-workspace.yaml @proofstack/maintainers
+# Supply chain: exact versions, build-script, release-age and trust exceptions, overrides, vulnerability and
+# license allowlists, secret-scan and migration-lint exceptions.
+/package.json                 @proofstack/maintainers
+/pnpm-workspace.yaml          @proofstack/maintainers
+/security/                    @proofstack/maintainers
+/scripts/licenses.ts          @proofstack/maintainers
+/scripts/audit.ts             @proofstack/maintainers
+/scripts/allowlist.ts         @proofstack/maintainers
+/scripts/check-migrations.ts  @proofstack/maintainers
+/scripts/images.ts            @proofstack/maintainers
+/.gitleaks.toml               @proofstack/maintainers
+/.squawk.toml                 @proofstack/maintainers
 
 # CI workflows, actions, Dependabot and this file.
 /.github/            @proofstack/maintainers
