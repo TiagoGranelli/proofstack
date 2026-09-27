@@ -22,12 +22,8 @@ test.skip(({ isMobile }) => isMobile, 'keyboard navigation is a desktop concern'
 
 const NAV = [`link "${APP_NAME}"`, 'link "About"', 'link "Dashboard"']
 
-/**
- * WebKit leaves links out of the Tab order by default (Safari's "Press Tab to highlight each item" setting),
- * so its expected stops are the same minus the links.
- */
-const tabbable = (browserName: string, stops: string[]) =>
-  browserName === 'webkit' ? stops.filter((stop) => !stop.startsWith('link ')) : stops
+// Links are Tab stops in every engine here. Safari leaves them out by default ("Press Tab to highlight each item"),
+// but Playwright's WebKit 1.63 includes them, as `pnpm ci:local verify` showed.
 
 test.describe('tab order', () => {
   const pages: Array<[string, (page: Page, author: Author) => Promise<unknown>, string[]]> = [
@@ -115,25 +111,19 @@ test.describe('tab order', () => {
   ]
 
   for (const [name, reach, expected] of pages) {
-    test(`${name}: every control, in order, with visible focus, then past the last one`, async ({
-      page,
-      author,
-      browserName,
-    }) => {
+    test(`${name}: every control, in order, with visible focus, then past the last one`, async ({ page, author }) => {
       await reach(page, author)
       const stops = await tabOrder(page)
-      expect(stops.map((stop) => stop.name)).toEqual(tabbable(browserName, expected))
+      expect(stops.map((stop) => stop.name)).toEqual(expected)
       expect(stops.filter((stop) => !stop.visibleFocus).map((stop) => stop.name)).toEqual([])
     })
   }
 
-  test('Shift+Tab walks the same stops backwards and past the first one', async ({ page, browserName }) => {
+  test('Shift+Tab walks the same stops backwards and past the first one', async ({ page }) => {
     await visit(page, '/login')
     await page.getByRole('button', { name: 'Sign in' }).focus()
     const stops = await tabThrough(page, { backwards: true })
-    expect(stops.map((stop) => stop.name)).toEqual(
-      tabbable(browserName, ['textbox "Password"', 'textbox "Email"', ...NAV.toReversed()]),
-    )
+    expect(stops.map((stop) => stop.name)).toEqual(['textbox "Password"', 'textbox "Email"', ...NAV.toReversed()])
   })
 })
 
