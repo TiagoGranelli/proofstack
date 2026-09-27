@@ -17,4 +17,4 @@ later decision supersedes it.
 | [0009](0009-unknown-server-function-id.md) | An unknown server function id gets Start's own answer until TanStack/router#8246 makes it a 404 | Accepted |
 | [0010](0010-content-security-policy.md) | Content-Security-Policy without 'unsafe-inline' (nonce for SSR, hashes for prerendered pages); Trusted Types deferred | Accepted |
 | [0011](0011-lighthouse-over-https-http2.md) | Lighthouse measures the edge over HTTPS and HTTP/2; stock head tags and preload priority | Accepted |
-| [0013](0013-uuidv7-ids-keyset-on-created-at.md) | Post ids from Postgres 18 `uuidv7()`; lists keep the `(created_at, id)` keyset | Accepted |
+| [0013](0013-uuidv7-ids-keyset-on-created-at.md) | Post ids from Postgres 18 `uuidv7()`; lists keep the `(created_at, id)` keyset, on ascending indexes | Accepted |

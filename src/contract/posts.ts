@@ -18,7 +18,7 @@ const Post = Schema.Struct({
 }).annotate({ identifier: 'Post' })
 export type Post = typeof Post.Type
 
-const PostInput = Schema.Struct({
+export const PostInput = Schema.Struct({
   body: Schema.String.pipe(
     Schema.check(Schema.isTrimmed(), Schema.isMinLength(1), Schema.isMaxLength(POST_MAX_LENGTH)),
   ),

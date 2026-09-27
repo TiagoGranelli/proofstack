@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm'
-import { index, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
+import { check, index, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
+import { POST_MAX_LENGTH } from '../../../contract/limits.ts'
 import { user } from './auth.ts'
 
 export const post = pgTable(
@@ -16,19 +17,29 @@ export const post = pgTable(
       .references(() => user.id, { onDelete: 'cascade' }),
     body: text('body').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    // The database's clock, like created_at: an app server's clock could put an edit before its creation.
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .defaultNow()
       .notNull()
-      .$onUpdate(() => new Date()),
+      .$onUpdate(() => sql`now()`),
   },
   (t) => [
     // Lists are read newest first in keyset pages: ORDER BY created_at DESC, id DESC (the id breaks ties) and
-    // WHERE (created_at, id) < cursor. Both indexes answer the order and the cursor condition, so a page reads
-    // only its own rows. NULLS FIRST is what `DESC` means in an ORDER BY; drizzle-kit's default for `.desc()`
-    // in an index is NULLS LAST, which Postgres cannot use for that order even on NOT NULL columns.
+    // WHERE (created_at, id) < cursor, which Postgres answers by scanning these indexes backward, so a page reads
+    // only its own rows. Ascending, because posts arrive in increasing time: new entries fill the rightmost leaf
+    // (about 90% dense), where a descending index splits its leftmost leaf in half on every page of inserts.
     // Public feed (PostsRepo.listPublic).
-    index('post_created_id_idx').on(t.createdAt.desc().nullsFirst(), t.id.desc().nullsFirst()),
+    index('post_keyset_idx').on(t.createdAt, t.id),
     // An author's posts (PostsRepo.listByAuthor); also serves the author_id foreign key.
-    index('post_author_created_id_idx').on(t.authorId, t.createdAt.desc().nullsFirst(), t.id.desc().nullsFirst()),
+    index('post_author_keyset_idx').on(t.authorId, t.createdAt, t.id),
+    // The contract's PostInput rule, as a backstop for writes that bypass the API. Never stricter than the API:
+    // char_length counts code points, JavaScript's length UTF-16 units (an emoji is 1 here, 2 there), and btrim
+    // strips spaces only, where the API rejects any leading or trailing whitespace.
+    check(
+      'post_body_check',
+      // A constant from the contract, inlined because DDL takes no parameters.
+      // fallow-ignore-next-line security-sink
+      sql`char_length(${t.body}) between 1 and ${sql.raw(String(POST_MAX_LENGTH))} and ${t.body} = btrim(${t.body})`,
+    ),
   ],
 )

@@ -16,14 +16,19 @@ index fewer, because the primary key read backwards serves the public feed.
 
 - `post.id` defaults to `uuidv7()` (migration `0006_post_id_uuidv7.sql`). Only the default changes; rows from
   before keep their v4 ids.
-- Better Auth's tables keep their text ids from Better Auth's own generator: switching them means
-  `advanced.database.generateId` and adapter behavior we do not control, for no measured gain.
-- The lists keep the `(created_at, id)` keyset and its two indexes.
+- Better Auth's tables keep their text ids from Better Auth's own generator. Its adapter accepts a caller's UUID
+  only for versions 1 to 5 (`forceAllowId` in `@better-auth/core`'s `get-id-field.mjs`), so v7 ids would be
+  replaced or refused on paths such as `reserveVerificationValue`.
+- The lists keep the `(created_at, id)` keyset. Its two indexes are ascending since 0007 (Postgres scans them
+  backward): posts arrive in increasing time, and a descending index splits its leftmost leaf in half on every
+  page of inserts (measured 14 MB at 50% density against 7.9 MB at 90%).
 
 ## Evidence
 
-200,000 posts over 1,000 authors (ids from `uuidv7()` at each `created_at`), a page of 21 half-way down the list,
-`EXPLAIN (ANALYZE, BUFFERS)` on Postgres 18.6:
+Primary key of 200,000 posts: 8.4 MB at 66% leaf density with v4 ids, 6.2 MB at 90% with v7.
+
+The same posts over 1,000 authors (ids from `uuidv7()` at each `created_at`), a page of 21 half-way down the
+list, `EXPLAIN (ANALYZE, BUFFERS)` on Postgres 18.6, with the descending indexes of the time:
 
 | Query | Current `(created_at, id)` | `id` alone |
 | --- | --- | --- |
@@ -32,11 +37,12 @@ index fewer, because the primary key read backwards serves the public feed.
 | Index size | `post_created_id_idx` 7.9 MB, author index 13 MB | none extra (the 11 MB primary key), author index 8.0 MB |
 
 Both read only the page's rows. `tests/db/query-budget.test.ts` checks that a created post has a v7 id and that
-every list is still one statement.
+every list is still one statement; `tests/db/post-schema.test.ts` checks on 10,000 posts that each list reads its
+ascending index backward, without a Sort.
 
 ## Consequences
 
-Paging on `id` would save one index and about 40% of the author index, and nothing per read. It would tie the
+Paging on `id` would save one index (and 8 bytes per entry of the author index), and nothing per read. It would tie the
 order users see to how ids were generated: `created_at` is the transaction start and `uuidv7()` is evaluated
 later, so concurrent inserts can disagree at millisecond precision (the integration tests assert newest first by
 `created_at`); rows from before 0006, and any id written by an import or a client, would sort randomly. That is
