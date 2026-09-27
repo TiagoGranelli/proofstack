@@ -49,6 +49,7 @@
     "deps:check": "node scripts/deps-check.ts",
     "images:check": "node scripts/images-check.ts",
     "images:sync": "node scripts/images-check.ts --sync",
+    "sbom:release": "node scripts/sbom.ts",
     "audit:check": "node scripts/audit.ts",
     "licenses:check": "node scripts/licenses.ts",
     "lighthouse": "node scripts/lighthouse.ts",
