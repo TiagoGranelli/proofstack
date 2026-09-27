@@ -134,7 +134,7 @@ of it.
 ### Gates and escape hatches
 
 Fix what a gate reports; every failure message says how. `pnpm install` activates the pre-commit hook
-(`prepare` sets `core.hooksPath`); `git commit --no-verify` skips it, and CI runs the same gates anyway. An
+(`prepare` sets `core.hooksPath` unless the clone already has one); `git commit --no-verify` skips it, and CI runs the same gates anyway. An
 exception is always a visible edit next to its reason, and `.github/CODEOWNERS` routes the gate files to review:
 
 - **Lint:** a rule that is wrong for one line takes `// oxlint-disable-next-line <rule>` under a comment line
