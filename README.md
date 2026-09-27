@@ -54,7 +54,7 @@ Starting your own app from the template (rename it, remove the example, deploy, 
 - The public example targets 100 in all four Lighthouse categories on mobile and desktop. The authenticated route is measured where each category applies. CI checks metrics and stability while allowing an isolated 99 caused by measurement variance.
 - Dependency sources and official agent skills are pinned with provenance when they are useful for maintaining the stack.
 
-These checks reduce the chance of unnoticed mistakes; they cannot guarantee that generated code is correct. The thresholds live next to the scripts that enforce them (`scripts/lighthouse.ts`, `scripts/check-drift.ts`).
+These checks reduce the chance of unnoticed mistakes; they cannot guarantee that generated code is correct. The thresholds live next to the scripts that enforce them (`scripts/lighthouse-policy.ts`, `scripts/check-drift.ts`).
 
 ## Contributing
 
