@@ -5,7 +5,9 @@
 // (closed sign-up, the test process not a trusted proxy). Mail goes to Mailpit, which must be running
 // (`pnpm mail:up`). Server output goes to test-results/app-server*.log and is printed only on failure.
 // Usage: pnpm build && pnpm verify:app [--no-e2e] [--no-integration] [--edge] [filter ...]
-//   filter: file name filters passed to both runners, e.g. `pnpm verify:app security flows`
+//   filter: file name filters passed to both runners, e.g. `pnpm verify:app security flows`. A filter that
+//           matches no test in any selected runner is an error (a typo must not pass as a green run); a runner
+//           that none of the filters match is skipped. Without filters every selected runner must find tests.
 //   --edge: run both suites through the reference edge (Caddy, deploy/Caddyfile) as in production; its log
 //           is test-results/edge.log. Playwright projects: PW_PROJECTS (see playwright.config.ts).
 // Env: TEST_DATABASE_URL overrides the database (default: proofstack_verify_<pid>_test next to DATABASE_URL,
@@ -34,6 +36,40 @@ if (unknown.length) {
 const integration = !flags.has('--no-integration')
 const e2e = !flags.has('--no-e2e')
 const edge = flags.has('--edge')
+
+const listed = (command: string[], line: RegExp) => {
+  const { status, stdout, stderr } = spawnSync('pnpm', ['exec', ...command], { encoding: 'utf8' })
+  // Vitest lists nothing and exits 0 when nothing matches, Playwright exits 1 with "No tests found"; any other
+  // failure is a broken config or test file.
+  if (status !== 0 && !/^Error: No tests found\./m.test(`${stdout}${stderr}`)) {
+    console.error(`${command.join(' ')} failed:\n${stdout}${stderr}`)
+    process.exit(2)
+  }
+  return stdout.split('\n').filter((l) => line.test(l)).length
+}
+/** How many test files (integration) or tests outside the seed project (e2e) each runner would run for `filter`. */
+const RUNNERS = {
+  integration: (filter: string) =>
+    listed(['vitest', 'list', '--project', 'integration', '--filesOnly', filter], /^\[integration\] /),
+  e2e: (filter: string) => listed(['playwright', 'test', '--list', filter], /^\s+\[(?!seed\])[^\]]+\] › /),
+}
+const selectedRunners = (Object.keys(RUNNERS) as Array<keyof typeof RUNNERS>).filter((runner) =>
+  runner === 'integration' ? integration : e2e,
+)
+/** Which runners have work: every selected one without filters, otherwise those that some filter matches. */
+const runs = new Set(selectedRunners)
+if (filters.length) {
+  const matched = filters.map((filter) => ({
+    filter,
+    runners: selectedRunners.filter((runner) => RUNNERS[runner](filter) > 0),
+  }))
+  const unmatched = matched.filter((m) => m.runners.length === 0).map((m) => m.filter)
+  if (unmatched.length) {
+    console.error(`filter(s) matching no test in ${selectedRunners.join(' or ')}: ${unmatched.join(', ')}`)
+    process.exit(2)
+  }
+  for (const runner of selectedRunners) if (!matched.some((m) => m.runners.includes(runner))) runs.delete(runner)
+}
 
 type Result = { name: string; ok: boolean; detail: string }
 const results: Result[] = []
@@ -104,15 +140,12 @@ try {
       CLOSED_APP_URL: closed.url,
       MAILPIT_URL: mailpit.api,
     }
-    if (integration)
-      timed(
-        'integration (vitest)',
-        'pnpm',
-        ['exec', 'vitest', 'run', '--project', 'integration', '--passWithNoTests', ...filters],
-        testEnv,
-      )
-    if (e2e)
-      timed('e2e (playwright)', 'pnpm', ['exec', 'playwright', 'test', '--pass-with-no-tests', ...filters], testEnv)
+    // Neither runner may pass with no tests: every runner started here has matching tests (see `runs`).
+    if (runs.has('integration'))
+      timed('integration (vitest)', 'pnpm', ['exec', 'vitest', 'run', '--project', 'integration', ...filters], testEnv)
+    else if (integration) results.push({ name: 'integration (vitest)', ok: true, detail: 'skipped: no file matches' })
+    if (runs.has('e2e')) timed('e2e (playwright)', 'pnpm', ['exec', 'playwright', 'test', ...filters], testEnv)
+    else if (e2e) results.push({ name: 'e2e (playwright)', ok: true, detail: 'skipped: no test matches' })
   } finally {
     const [stopped] = await Promise.all([app.stop(), closed.stop()])
     // The process exited, so its sockets are gone; Postgres may take a moment to reap the backends.
