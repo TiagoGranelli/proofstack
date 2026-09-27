@@ -18,6 +18,8 @@ export type RunningApp = {
   url: string
   /** The Node server itself, bypassing the edge. */
   directUrl: string
+  /** With `edge.tls`: the SPKI hash of the edge's certificate, for Chrome (see scripts/edge.ts). */
+  edgeCertificateSpki?: string
   env: NodeJS.ProcessEnv
   databaseUrl: string
   user: User
@@ -113,13 +115,18 @@ export const startApp = async (options: {
    * runners send their own X-Forwarded-For per suite, so they pass `private_ranges`. The edge replaces
    * X-Forwarded-For with the client IP it resolved, and the server trusts only the edge (loopback).
    */
-  edge?: { trustedProxies?: string; logFile: string }
+  edge?: {
+    trustedProxies?: string
+    logFile: string
+    /** HTTPS with HTTP/2 and HTTP/3, as in production (Caddy's internal CA; see scripts/edge.ts). */
+    tls?: boolean
+  }
 }): Promise<RunningApp> => {
   assertFreshBuild()
   const appPort = options.port ?? (await freePort())
   const directUrl = `http://localhost:${appPort}`
   const edgePort = options.edge ? await freePort() : undefined
-  const url = edgePort ? `http://localhost:${edgePort}` : directUrl
+  const url = edgePort ? `${options.edge?.tls ? 'https' : 'http'}://localhost:${edgePort}` : directUrl
   const { databaseUrl } = options
   const user = options.alongside?.user ?? { email: 'author@example.test', name: 'Test Author', password: password() }
   const otherUser = options.alongside?.otherUser ?? {
@@ -159,6 +166,7 @@ export const startApp = async (options: {
     server.once('exit', (code, signal) => resolve({ code, signal })),
   )
   let stopEdge: () => Promise<void> = noop
+  let edgeCertificateSpki: string | undefined
   const stop = async () => {
     await stopEdge()
     const started = performance.now()
@@ -189,15 +197,17 @@ export const startApp = async (options: {
         port: edgePort,
         upstreamPort: appPort,
         trustedProxies: options.edge.trustedProxies,
+        ...(options.edge.tls ? { tls: { httpPort: await freePort() } } : {}),
         logFile: options.edge.logFile,
       })
       stopEdge = edge.stop
+      edgeCertificateSpki = edge.certificateSpki
     }
   } catch (error) {
     await stop()
     throw error
   }
-  return { url, directUrl, env, databaseUrl, user, otherUser, logFile: options.logFile, stop }
+  return { url, directUrl, edgeCertificateSpki, env, databaseUrl, user, otherUser, logFile: options.logFile, stop }
 }
 
 /** Playwright's Chromium, or a clear instruction to install it. */
