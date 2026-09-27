@@ -41,6 +41,21 @@ const MESSAGES: Record<Exclude<AuthFailureCode, 'RATE_LIMITED'>, string> = {
   UNEXPECTED: GENERIC,
 }
 
+/** Whether `value` is a failure code this client knows (a code from the URL, for example). */
+export const isAuthFailureCode = (value: string): value is AuthFailureCode =>
+  value === 'RATE_LIMITED' || Object.hasOwn(MESSAGES, value)
+
+/**
+ * The failure a sign-in posted without JavaScript reports in the URL (`/login?error=…&retryAfter=…`, see
+ * signInFromForm), when its code is one of ours; anything else in the URL is ignored.
+ */
+export function failureFromSearch(search: Record<string, unknown>): { error?: AuthFailureCode; retryAfter?: number } {
+  const { error, retryAfter } = search
+  if (typeof error !== 'string' || !isAuthFailureCode(error)) return {}
+  const wait = typeof retryAfter === 'number' && Number.isInteger(retryAfter) && retryAfter > 0
+  return wait ? { error, retryAfter } : { error }
+}
+
 const retryIn = (seconds: number | undefined) =>
   seconds !== undefined && seconds > 0
     ? `Too many attempts. Try again in ${seconds} second${seconds === 1 ? '' : 's'}.`

@@ -19,3 +19,4 @@ later decision supersedes it.
 | [0011](0011-lighthouse-over-https-http2.md) | Lighthouse measures the edge over HTTPS and HTTP/2; stock head tags and preload priority | Accepted |
 | [0012](0012-three-request-surfaces.md) | Three request surfaces: business operations in the Effect HttpApi, account actions and guards as server functions, Better Auth HTTP only for get-session and sign-in/out | Accepted |
 | [0013](0013-uuidv7-ids-keyset-on-created-at.md) | Post ids from Postgres 18 `uuidv7()`; lists keep the `(created_at, id)` keyset, on ascending indexes | Accepted |
+| [0014](0014-login-without-javascript.md) | The login form posts itself to a FormData server function before hydration and without JavaScript | Accepted |

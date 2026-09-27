@@ -2,7 +2,11 @@
 // server output (a thrown message, an unknown Better Auth code), and each known code has its own message.
 import { describe, expect, it } from 'vitest'
 import { AuthActionError } from '#/features/auth/api/auth-action.ts'
-import { describeAuthFailure } from '#/features/auth/utils/describe-auth-failure.ts'
+import {
+  describeAuthFailure,
+  failureFromSearch,
+  isAuthFailureCode,
+} from '#/features/auth/utils/describe-auth-failure.ts'
 import type { AuthFailureCode } from '#/lib/auth.functions.ts'
 
 const failure = (code: AuthFailureCode, retryAfter?: number) => new AuthActionError({ code, retryAfter })
@@ -69,5 +73,42 @@ describe('describeAuthFailure', () => {
     const fromNewerServer = new AuthActionError({ code: 'UNEXPECTED' })
     Object.defineProperty(fromNewerServer, 'code', { value: 'relation "session" does not exist' })
     expect(describeAuthFailure(fromNewerServer)).toBe('Something went wrong. Try again.')
+  })
+})
+
+describe('isAuthFailureCode', () => {
+  it.each(['INVALID_EMAIL_OR_PASSWORD', 'RATE_LIMITED', 'UNEXPECTED', 'SESSION_NOT_FRESH'])('knows %s', (code) => {
+    expect(isAuthFailureCode(code)).toBe(true)
+  })
+
+  // A code read from the URL (/login?error=...) is only shown when it is one of ours.
+  it.each(['', 'invalid_email_or_password', 'toString', '__proto__', 'constructor', '<script>'])(
+    'refuses %j',
+    (code) => {
+      expect(isAuthFailureCode(code)).toBe(false)
+    },
+  )
+})
+
+describe('failureFromSearch', () => {
+  it.each<[string, Record<string, unknown>, ReturnType<typeof failureFromSearch>]>([
+    ['a known code', { error: 'INVALID_EMAIL_OR_PASSWORD' }, { error: 'INVALID_EMAIL_OR_PASSWORD' }],
+    [
+      'a rate limit with its wait',
+      { error: 'RATE_LIMITED', retryAfter: 30 },
+      { error: 'RATE_LIMITED', retryAfter: 30 },
+    ],
+    [
+      'a wait that is not a whole positive number',
+      { error: 'RATE_LIMITED', retryAfter: 1.5 },
+      { error: 'RATE_LIMITED' },
+    ],
+    ['a wait of zero', { error: 'RATE_LIMITED', retryAfter: 0 }, { error: 'RATE_LIMITED' }],
+    ['a wait as text', { error: 'RATE_LIMITED', retryAfter: '30' }, { error: 'RATE_LIMITED' }],
+    ['an unknown code', { error: 'DROP TABLE', retryAfter: 30 }, {}],
+    ['a code that is not text', { error: ['INVALID_PASSWORD'] }, {}],
+    ['nothing', { redirect: '/dashboard' }, {}],
+  ])('reads %s', (_, search, expected) => {
+    expect(failureFromSearch(search)).toEqual(expected)
   })
 })

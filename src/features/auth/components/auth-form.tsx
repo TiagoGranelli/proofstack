@@ -7,8 +7,8 @@ import { describeAuthFailure } from '#/features/auth/utils/describe-auth-failure
 /**
  * The shell of an account form made with useAppForm: its fields are the children, validated in the browser with
  * the action's Effect Schema (src/lib/account-input.ts); a failed submit moves focus to the first invalid field.
- * The button stays disabled until hydration: a native submit before that would post the fields (passwords
- * included) to the page itself. While the action is pending the button is only `aria-disabled` and further submits
+ * Without an `action` the button stays disabled until hydration: a native submit before that would post the fields
+ * (passwords included) to the page itself. While the action is pending the button is only `aria-disabled` and further submits
  * are ignored: a disabled button loses focus, so a keyboard user who pressed it would be dropped to <body> when the
  * attempt fails. A failure the server reports is shown in an alert under the button.
  */
@@ -19,6 +19,11 @@ export function AuthForm(props: {
   submitVariant?: 'default' | 'destructive'
   /** The form from useAppForm; its onSubmit starts the action. */
   form: { handleSubmit: () => Promise<void> }
+  /**
+   * Where the browser posts the form itself before hydration (a server function's `url` that takes FormData).
+   * With it the button works from the first paint; without it, it waits for hydration.
+   */
+  action?: string
   pending: boolean
   /** The action's error, if the last attempt failed. */
   error: Error | null
@@ -29,8 +34,9 @@ export function AuthForm(props: {
   return (
     <form
       method="post"
-      // The fields show the schema's messages; the browser's own bubbles would show different ones first.
-      noValidate
+      action={props.action}
+      // Once hydrated the fields show the schema's messages; before that, only the browser's own checks run.
+      noValidate={hydrated}
       className="grid gap-3"
       aria-busy={props.pending}
       aria-describedby={props.error ? errorId : undefined}
@@ -46,7 +52,7 @@ export function AuthForm(props: {
         <Button
           type="submit"
           variant={props.submitVariant}
-          disabled={!hydrated}
+          disabled={!hydrated && props.action === undefined}
           aria-disabled={props.pending || undefined}
         >
           {props.submitLabel}

@@ -8,6 +8,7 @@ import { page, userEvent } from 'vitest/browser'
 import { useSignOut } from '#/features/auth/api/sign-out.ts'
 import { LoginForm } from '#/features/auth/components/login-form.tsx'
 import { SignOutAlert, SignOutButton } from '#/features/auth/components/sign-out-button.tsx'
+import { SignUpForm } from '#/features/auth/components/sign-up-form.tsx'
 import type { AuthFailure } from '#/lib/auth.functions.ts'
 import { auth, authCalls, authFunction, held, worker } from './api-mocks.ts'
 import { pressAndKeepFocus, renderInApp } from './test-utils.tsx'
@@ -21,6 +22,26 @@ const signIn = async () => {
   await email().fill('author@example.test')
   await password().fill('a long enough password')
   await signInButton().click()
+}
+
+/** Renders `tree` to HTML as the server does, mounts it, and hydrates it when asked. */
+const serverRendered = async (ui: React.ReactNode) => {
+  const { router, queryClient, unmount } = await renderInApp(null, { url: '/login' })
+  await unmount()
+  const tree = (
+    <RouterContextProvider router={router}>
+      <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>
+    </RouterContextProvider>
+  )
+  const container = document.createElement('div')
+  container.innerHTML = renderToString(tree)
+  document.body.append(container)
+  onTestFinished(() => container.remove())
+  const hydrate = () => {
+    const root = hydrateRoot(container, tree)
+    onTestFinished(() => root.unmount())
+  }
+  return { screen: page.elementLocator(container), form: () => container.querySelector('form')!, hydrate }
 }
 
 describe('LoginForm', () => {
@@ -152,26 +173,36 @@ describe('LoginForm', () => {
     expect(document.body.textContent).not.toMatch(/Internal Server Error|500/)
   })
 
-  it('keeps its button disabled until hydration, so a native submit cannot post the password', async () => {
-    const { router, queryClient, unmount } = await renderInApp(null, { url: '/login' })
-    await unmount()
-    const tree = (
-      <RouterContextProvider router={router}>
-        <QueryClientProvider client={queryClient}>
-          <LoginForm />
-        </QueryClientProvider>
-      </RouterContextProvider>
-    )
-    const container = document.createElement('div')
-    container.innerHTML = renderToString(tree)
-    document.body.append(container)
-    onTestFinished(() => container.remove())
-    const button = page.elementLocator(container).getByRole('button', { name: 'Sign in' })
-    await expect.element(button).toBeDisabled()
+  it('before hydration, posts itself to signInFromForm with the browser checking the fields', async () => {
+    const { screen, form, hydrate } = await serverRendered(<LoginForm redirectTo="/about" />)
+    await expect.element(screen.getByRole('button', { name: 'Sign in' })).toBeEnabled()
+    expect(form().getAttribute('action')).toBe('/_serverFn/auth/signInFromForm')
+    expect(form().getAttribute('method')).toBe('post')
+    expect(form().noValidate).toBe(false)
+    expect(Object.fromEntries(new FormData(form()))).toEqual({ redirect: '/about', email: '', password: '' })
 
-    const root = hydrateRoot(container, tree)
-    onTestFinished(() => root.unmount())
+    hydrate()
+    // Once hydrated the script submits it (signIn) and the schema's messages replace the browser's.
+    await expect.poll(() => form().noValidate).toBe(true)
+  })
+
+  it('keeps the button of a form without an action disabled until hydration', async () => {
+    const { screen, hydrate } = await serverRendered(<SignUpForm />)
+    const button = screen.getByRole('button', { name: 'Create account' })
+    await expect.element(button).toBeDisabled()
+    hydrate()
     await expect.element(button).toBeEnabled()
+  })
+
+  it('shows a failure that came back in the URL until the next attempt starts', async () => {
+    const calls = authCalls('signIn')
+    worker.use(calls.handler, auth.signIn(held()))
+    await renderInApp(<LoginForm failure={{ code: 'RATE_LIMITED', retryAfter: 7 }} />, { url: '/login' })
+    await expect.element(page.getByRole('alert')).toHaveTextContent('Too many attempts. Try again in 7 seconds.')
+    await expect.element(formOf()).toHaveAccessibleDescription('Too many attempts. Try again in 7 seconds.')
+    await signIn()
+    await expect.element(page.getByRole('alert')).not.toBeInTheDocument()
+    await expect.poll(() => calls.data.length).toBe(1)
   })
 
   it.each([

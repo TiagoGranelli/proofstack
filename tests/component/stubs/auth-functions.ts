@@ -11,20 +11,24 @@ export type AuthFunctionName = keyof typeof AuthFunctions
 /** The URL the stub of server function `name` posts to. */
 export const authFunctionPath = (name: AuthFunctionName) => `/_serverFn/auth/${name}`
 
-const serverFunction =
-  (name: AuthFunctionName) =>
-  async (options?: { data?: unknown }): Promise<unknown> => {
-    const res = await fetch(authFunctionPath(name), {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(options?.data ?? null),
-    })
-    if (!res.ok) throw new Error(`server function ${name} failed with ${res.status}`)
-    return res.json()
-  }
+/** Like the compiled client: a function that posts, with the `url` a form can post to. */
+const serverFunction = (name: AuthFunctionName) =>
+  Object.assign(
+    async (options?: { data?: unknown }): Promise<unknown> => {
+      const res = await fetch(authFunctionPath(name), {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(options?.data ?? null),
+      })
+      if (!res.ok) throw new Error(`server function ${name} failed with ${res.status}`)
+      return res.json()
+    },
+    { url: authFunctionPath(name) },
+  )
 
 export const getSignUpPolicy = serverFunction('getSignUpPolicy')
 export const signIn = serverFunction('signIn')
+export const signInFromForm = serverFunction('signInFromForm')
 export const signOut = serverFunction('signOut')
 export const signUp = serverFunction('signUp')
 export const resendVerification = serverFunction('resendVerification')

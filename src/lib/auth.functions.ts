@@ -1,3 +1,4 @@
+import { redirect } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 import { setResponseHeader } from '@tanstack/react-start/server'
 import { Schema } from 'effect'
@@ -7,6 +8,7 @@ import {
   EmailInput,
   ResetPasswordInput,
   SessionInput,
+  SignInFormPost,
   SignInInput,
   SignUpInput,
   TokenInput,
@@ -58,9 +60,35 @@ export const getSignUpPolicy = createServerFn({ method: 'GET' }).handler(() => {
   return { open: env.authSignUp === 'open' }
 })
 
+/**
+ * Where a sign-in posted by the form itself goes: back to /login, whose guard sends a signed-in visitor on to
+ * `redirect` (validated there, as for every visitor), and which shows a failure's code otherwise.
+ */
+const loginPageAfter = (outcome: AuthOutcome, redirectTo: string) => {
+  const search = new URLSearchParams()
+  if (redirectTo) search.set('redirect', redirectTo)
+  if (!outcome.ok) search.set('error', outcome.failure.code)
+  if (!outcome.ok && outcome.failure.retryAfter !== undefined)
+    search.set('retryAfter', String(outcome.failure.retryAfter))
+  return search.size > 0 ? `/login?${search}` : '/login'
+}
+
 export const signIn = createServerFn({ method: 'POST' })
   .validator(Schema.toStandardSchemaV1(SignInInput))
   .handler(async ({ data }) => done(await callAuthEndpoint('POST', '/sign-in/email', { body: data })))
+
+/**
+ * The login form posted by the browser itself, before hydration or without JavaScript (its `action`; the script
+ * calls signIn instead). Answers a 303 to the next page, with the session cookie on it:
+ * docs/decisions/0014-login-without-javascript.md.
+ */
+export const signInFromForm = createServerFn({ method: 'POST' })
+  .validator(Schema.toStandardSchemaV1(SignInFormPost))
+  .handler(async ({ data }) => {
+    const { email, password } = data
+    const outcome = done(await callAuthEndpoint('POST', '/sign-in/email', { body: { email, password } }))
+    throw redirect({ href: loginPageAfter(outcome, data.redirect), statusCode: 303 })
+  })
 
 export const signOut = createServerFn({ method: 'POST' }).handler(async () =>
   done(await callAuthEndpoint('POST', '/sign-out', { body: {} })),

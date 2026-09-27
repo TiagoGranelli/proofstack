@@ -36,6 +36,34 @@ const Name = trimmed(
 const Token = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(2048))
 
 export const SignInInput = Schema.Struct({ email: Email, password: CurrentPassword })
+
+const textOf = (form: FormData, name: string) => {
+  const value = form.get(name)
+  return typeof value === 'string' ? value : ''
+}
+
+/**
+ * The login form posted by the browser itself, before hydration or without JavaScript: FormData with the same
+ * fields plus `redirect`, where to go afterwards (checked again by /login). The browser's own validation of the
+ * form (`required`, `type="email"`) runs first in that case.
+ */
+export const SignInFormPost = Schema.instanceOf(FormData).pipe(
+  Schema.decodeTo(
+    Schema.Struct({ email: Email, password: CurrentPassword, redirect: Schema.String }),
+    SchemaTransformation.transform({
+      decode: (form: FormData) => ({
+        email: textOf(form, 'email'),
+        password: textOf(form, 'password'),
+        redirect: textOf(form, 'redirect'),
+      }),
+      encode: (fields) => {
+        const form = new FormData()
+        for (const [name, value] of Object.entries(fields)) form.set(name, value)
+        return form
+      },
+    }),
+  ),
+)
 export const SignUpInput = Schema.Struct({ name: Name, email: Email, password: NewPassword })
 /** Resending a confirmation link, or asking for a reset link. */
 export const EmailInput = Schema.Struct({ email: Email })
