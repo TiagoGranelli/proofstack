@@ -32,7 +32,7 @@ export default definePlugin((nitroApp) => {
     trustedProxies: env.trustedProxies,
     databasePoolMax: env.databasePoolMax,
     databaseUrlPooled: env.databaseUrlPooled,
-    // Whether Node's permission model restricts the process (the image's CMD, scripts/app-server.ts).
+    // Whether Node's permission model restricts the process (the image's CMD, scripts/server-process.ts).
     permissionModel: process.execArgv.includes('--permission'),
   })
 
