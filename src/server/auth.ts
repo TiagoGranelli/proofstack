@@ -2,11 +2,14 @@ import '@tanstack/react-start/server-only'
 import { drizzleAdapter } from '@better-auth/drizzle-adapter'
 import { betterAuth } from 'better-auth'
 import { tanstackStartCookies } from 'better-auth/tanstack-start'
+import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '#/contract/limits.ts'
+import { runInBackground } from './background-tasks.ts'
 import { db } from './db/client.ts'
 import * as schema from './db/schema/index.ts'
 import { env } from './env.ts'
 import { AUTH_BASE_PATH, endpointAllowlist, isExposedEndpoint } from './http/auth-endpoints.ts'
 import { log } from './log.ts'
+import { authMail } from './mail/auth-mail.ts'
 
 export const auth = betterAuth({
   appName: 'ProofStack',
@@ -14,7 +17,30 @@ export const auth = betterAuth({
   basePath: AUTH_BASE_PATH,
   secret: env.authSecret,
   database: drizzleAdapter(db, { provider: 'pg', schema }),
-  emailAndPassword: { enabled: true, autoSignIn: false, minPasswordLength: 12, maxPasswordLength: 128 },
+  emailAndPassword: {
+    enabled: true,
+    minPasswordLength: PASSWORD_MIN_LENGTH,
+    maxPasswordLength: PASSWORD_MAX_LENGTH,
+    // No session before the address is verified. `pnpm user:create` marks its accounts verified: the operator
+    // vouches for the address. Sign-up then answers the same for new and existing emails (no enumeration),
+    // and the owner of an existing one gets a heads-up instead.
+    requireEmailVerification: true,
+    autoSignIn: false,
+    onExistingUserSignUp: authMail.existingAccount,
+    sendResetPassword: authMail.resetPassword,
+    // A reset proves control of the mailbox, not of the sessions: end them all.
+    revokeSessionsOnPasswordReset: true,
+  },
+  emailVerification: {
+    sendVerificationEmail: authMail.verifyEmail,
+    sendOnSignUp: true,
+    // A sign-in with the right password but an unverified address sends a fresh link.
+    sendOnSignIn: true,
+    // Following the link verifies the address; signing in stays a separate, rate-limited step.
+    autoSignInAfterVerification: false,
+  },
+  // Deletion needs the password (the UI always sends it); posts go with the user (foreign key cascade).
+  user: { deleteUser: { enabled: true } },
   // Public sign-up is closed over HTTP. Accounts are created with `pnpm user:create`,
   // which calls the server API directly (disabledPaths only affects the HTTP router).
   // The HTTP router is further restricted to the endpoint allowlist in ./http/auth-endpoints.ts.
@@ -32,6 +58,9 @@ export const auth = betterAuth({
     customRules: { '/get-session': false, '/**': (request, rule) => (isExposedEndpoint(request) ? rule : false) },
   },
   advanced: {
+    // Better Auth's own deferred work and the mail senders (./mail/auth-mail.ts) run after the response;
+    // shutdown waits for them.
+    backgroundTasks: { handler: runInBackground },
     // Every request reaches Better Auth with the TCP peer as the last X-Forwarded-For hop
     // (./http/forwarded-for.ts). Hops inside TRUSTED_PROXIES are skipped from the right; the first address
     // outside them is the client. With no trusted proxies the header holds only the peer.

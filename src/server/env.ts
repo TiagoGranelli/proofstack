@@ -63,6 +63,31 @@ const readDatabaseUrl = (name: string): string => {
   return value
 }
 
+const readChoice = <const T extends string>(name: string, choices: readonly [T, ...T[]]): T => {
+  const value = process.env[name]?.trim() || choices[0]
+  const choice = choices.find((candidate) => candidate === value)
+  if (!choice) throw new Error(`${name} must be one of ${choices.join(', ')} (got "${value}")`)
+  return choice
+}
+
+/** SMTP_URL and MAIL_FROM, both or neither. Credentials go in the URL (percent-encoded). */
+const readSmtp = (): { url: string; from: string } | undefined => {
+  const url = process.env.SMTP_URL?.trim()
+  if (!url) return undefined
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    throw new Error('SMTP_URL must be a URL such as smtps://user:password@smtp.example.com:465')
+  }
+  if (!['smtp:', 'smtps:'].includes(parsed.protocol) || !parsed.hostname)
+    throw new Error('SMTP_URL must use smtp:// (STARTTLS) or smtps:// (TLS) and name a host')
+  const from = read('MAIL_FROM')
+  if (!/@[^@\s>]+>?$/.test(from))
+    throw new Error('MAIL_FROM must be an address such as "ProofStack <no-reply@example.com>"')
+  return { url, from }
+}
+
 // Renamed variables fail loudly instead of being ignored.
 if (process.env.TRUSTED_IP_HEADER?.trim())
   throw new Error(
@@ -81,5 +106,15 @@ export const env = {
    * Empty = no proxy: the TCP peer address is the client IP and forwarded headers are ignored.
    */
   trustedProxies: readCidrList('TRUSTED_PROXIES'),
+  /** Outgoing mail. Unset: messages are only logged (./mail/log-mailer.ts), so nobody receives them. */
+  smtp: readSmtp(),
+  /**
+   * Who may create an account. `closed` (default): only `pnpm user:create`. `open`: anyone, through /sign-up,
+   * with a verified email address before the first sign-in, so it needs SMTP_URL.
+   */
+  authSignUp: readChoice('AUTH_SIGN_UP', ['closed', 'open']),
   isProduction: process.env.NODE_ENV === 'production',
 }
+
+if (env.authSignUp === 'open' && !env.smtp)
+  throw new Error('AUTH_SIGN_UP=open needs SMTP_URL and MAIL_FROM: new accounts must verify their email address')
