@@ -5,3 +5,4 @@ rules:
       # GitHub's `uses: $/...` form (July 2026) is not understood yet by actionlint 1.7.12 ("ref is
       # missing") or by act. Switch once both accept it.
       - ci.yml
+      - copilot-setup-steps.yml

@@ -1,5 +1,5 @@
 // Container images the CI scripts run, pinned by digest (tag kept for humans). compose.yaml,
-// .github/workflows/ci.yml and the Dockerfile repeat some of them; `pnpm ci:workflows` fails when a copy
+// the workflows in .github/workflows and the Dockerfile repeat some of them; `pnpm ci:workflows` fails when a copy
 // differs from this file (scripts/image-pins.ts).
 // `pnpm images:check` reports newer tags and rebuilt digests. Update a pin here
 // (`docker buildx imagetools inspect <name>:<tag>` prints the index digest), then `pnpm images:sync` rewrites
