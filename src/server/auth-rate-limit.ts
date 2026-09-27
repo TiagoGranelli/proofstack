@@ -3,7 +3,7 @@ import type { BetterAuthOptions } from 'better-auth'
 import { lt, sql } from 'drizzle-orm'
 import { runInBackground } from './background-tasks.ts'
 import { db } from './db/client.ts'
-import { rateLimit } from './db/schema/auth.ts'
+import { rateLimit } from './db/schema/rate-limit.ts'
 
 type RateLimitStorage = NonNullable<NonNullable<BetterAuthOptions['rateLimit']>['customStorage']>
 
@@ -21,7 +21,8 @@ let lastPrune = 0
  * Better Auth's `storage: 'database'` is not atomic on Postgres with the Drizzle adapter (1.7.6): its
  * `incrementOne` updates `WHERE id IN (SELECT id ... WHERE count < max)`, and Postgres does not re-evaluate that
  * subquery after waiting for the row lock, so 20 concurrent sign-ins passed a limit of 3 about 10 times in a
- * reproduction. Replace this with `storage: 'database'` alone once the adapter conditions the UPDATE itself.
+ * reproduction. Replacing this with `storage: 'database'` once the adapter conditions the UPDATE itself also means
+ * giving the table back Better Auth's `id` column.
  */
 export const postgresRateLimitStorage: RateLimitStorage = {
   async consume(key, rule) {
@@ -30,7 +31,7 @@ export const postgresRateLimitStorage: RateLimitStorage = {
     const expired = sql`${rateLimit.lastRequest} <= ${now - windowMs}`
     const [row] = await db
       .insert(rateLimit)
-      .values({ id: crypto.randomUUID(), key, count: 1, lastRequest: now })
+      .values({ key, count: 1, lastRequest: now })
       .onConflictDoUpdate({
         target: rateLimit.key,
         set: {

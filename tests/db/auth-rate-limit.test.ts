@@ -22,6 +22,15 @@ afterEach(() => {
 afterAll(() => pool.end())
 
 describe('postgresRateLimitStorage', () => {
+  it('counts in an UNLOGGED table keyed by `key` (a crash resets the windows; docs/operations.md)', async () => {
+    const { rows } = await pool.query<{ persistence: string; key: string }>(
+      `select c.relpersistence as persistence, pg_get_constraintdef(k.oid) as key
+         from pg_class c join pg_constraint k on k.conrelid = c.oid and k.contype = 'p'
+        where c.oid = 'rate_limit'::regclass`,
+    )
+    expect(rows).toEqual([{ persistence: 'u', key: 'PRIMARY KEY (key)' }])
+  })
+
   it('starts a window at the first request of a key', async () => {
     const key = newKey()
     const before = Date.now()
@@ -79,8 +88,8 @@ describe('postgresRateLimitStorage', () => {
     const now = Date.now()
     const [idle, recent, key] = [newKey(), newKey(), newKey()]
     await db.insert(rateLimit).values([
-      { id: crypto.randomUUID(), key: idle, count: 1, lastRequest: now - 11 * 60 * 1000 },
-      { id: crypto.randomUUID(), key: recent, count: 1, lastRequest: now - 9 * 60 * 1000 },
+      { key: idle, count: 1, lastRequest: now - 11 * 60 * 1000 },
+      { key: recent, count: 1, lastRequest: now - 9 * 60 * 1000 },
     ])
 
     const first = await statementsOf(async () => {

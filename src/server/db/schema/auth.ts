@@ -3,7 +3,7 @@
 // fails when a table, column, nullability or default it needs is missing. Timestamps are `timestamptz`, like
 // every other table; `auth generate` would emit `timestamp` without time zone (better-auth#9920).
 import { relations } from 'drizzle-orm'
-import { bigint, boolean, index, integer, pgTable, text, timestamp } from 'drizzle-orm/pg-core'
+import { boolean, index, pgTable, text, timestamp } from 'drizzle-orm/pg-core'
 
 const timestamptz = (name: string) => timestamp(name, { withTimezone: true })
 
@@ -78,14 +78,6 @@ export const verification = pgTable(
   },
   (table) => [index('verification_identifier_idx').on(table.identifier)],
 )
-
-// rateLimit.storage 'database' (../../auth.ts). `lastRequest` is epoch milliseconds, as Better Auth writes it.
-export const rateLimit = pgTable('rate_limit', {
-  id: text('id').primaryKey(),
-  key: text('key').notNull().unique(),
-  count: integer('count').notNull(),
-  lastRequest: bigint('last_request', { mode: 'number' }).notNull(),
-})
 
 export const userRelations = relations(user, ({ many }) => ({
   sessions: many(session),
