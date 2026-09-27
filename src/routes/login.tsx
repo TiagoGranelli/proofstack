@@ -4,8 +4,8 @@ import { useState } from 'react'
 import { Button } from '#/components/ui/button.tsx'
 import { Input } from '#/components/ui/input.tsx'
 import { Label } from '#/components/ui/label.tsx'
+import { safeRedirect } from '#/features/auth/utils/safe-redirect.ts'
 import { authClient } from '#/lib/auth-client.ts'
-import { safeRedirect } from '#/lib/redirect.ts'
 import { getSession } from '#/lib/session.functions.ts'
 
 export const Route = createFileRoute('/login')({

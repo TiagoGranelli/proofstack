@@ -1,6 +1,6 @@
 // safeRedirect decides where `?redirect=` may send a user after sign-in. Pure function: no app needed.
 import { describe, expect, it } from 'vitest'
-import { safeRedirect } from '#/lib/redirect.ts'
+import { safeRedirect } from '#/features/auth/utils/safe-redirect.ts'
 
 const DEFAULT = '/dashboard'
 

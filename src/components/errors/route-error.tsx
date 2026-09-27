@@ -1,7 +1,7 @@
 import { useQueryErrorResetBoundary } from '@tanstack/react-query'
 import { type ErrorComponentProps, Link, useRouter } from '@tanstack/react-router'
 import { useEffect } from 'react'
-import { ApiErrorAlert } from '#/components/api-error-alert.tsx'
+import { ApiErrorAlert } from '#/components/errors/api-error-alert.tsx'
 import { Button } from '#/components/ui/button.tsx'
 
 /** Router `defaultErrorComponent`: a loader, `beforeLoad` or suspense query failed (SSR or client). */

@@ -1,7 +1,7 @@
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
-import { PostList } from '#/features/posts/post-list.tsx'
-import { awaitPublicPostsAfterWrite, publicPostsQuery } from '#/features/posts/queries.ts'
+import { awaitPublicPostsAfterWrite, publicPostsQuery } from '#/features/posts/api/posts-cache.ts'
+import { PostList } from '#/features/posts/components/post-list.tsx'
 
 export const Route = createFileRoute('/')({
   head: () => ({ meta: [{ title: 'Latest posts · ProofStack' }] }),

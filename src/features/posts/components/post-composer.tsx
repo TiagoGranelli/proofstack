@@ -1,12 +1,12 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { ApiErrorAlert } from '#/components/api-error-alert.tsx'
+import { ApiErrorAlert } from '#/components/errors/api-error-alert.tsx'
 import { Button } from '#/components/ui/button.tsx'
 import { Label } from '#/components/ui/label.tsx'
 import { Textarea } from '#/components/ui/textarea.tsx'
+import { invalidatePosts } from '#/features/posts/api/posts-cache.ts'
+import { CharacterCount, isTooLong } from '#/features/posts/components/character-count.tsx'
 import { myPostsCreateMutation } from '#/sdk/@tanstack/react-query.gen.ts'
-import { CharacterCount, isTooLong } from './character-count.tsx'
-import { invalidatePosts } from './queries.ts'
 
 export function PostComposer(props: { onPublished?: () => void }) {
   const queryClient = useQueryClient()
