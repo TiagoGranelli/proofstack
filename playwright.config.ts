@@ -1,3 +1,4 @@
+import { availableParallelism } from 'node:os'
 import { defineConfig, devices } from '@playwright/test'
 
 // tests/e2e/global-setup.ts starts the app and sets APP_URL before the workers load this file again.
@@ -46,6 +47,9 @@ export default defineConfig({
   // next to it.
   outputDir: 'test-results/playwright',
   fullyParallel: false,
+  // Half the CPUs, as Playwright's default, but the CPUs this process may use: Playwright counts os.cpus(), every
+  // core of the host, so in a container limited to 4 (`pnpm ci:local`) it started 16 workers and tests timed out.
+  workers: Math.max(1, Math.floor(availableParallelism() / 2)),
   forbidOnly: !!process.env.CI,
   // A retry keeps one bad run from hiding the report of the others, but a test that only passes on retry is a
   // failure in CI: flakiness is fixed, not absorbed (the report names the flaky test).
