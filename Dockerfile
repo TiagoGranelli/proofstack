@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1
 # Production image: `docker build -t proofstack .`
-# Runtime needs only .output/ (server bundle, public assets, migrate.mjs) and drizzle/ (SQL migrations).
+# Runtime needs only .output/ (server bundle, public assets, the migrate.mjs and create-user.mjs commands) and
+# drizzle/ (SQL migrations).
 # See docs/operations.md for environment variables, migrations and the deploy sequence.
 
 # Pinned by digest; the same reference as `node` in scripts/images.ts (`pnpm ci:workflows` checks the copy).
@@ -27,7 +28,7 @@ RUN DATABASE_URL=postgres://build:build@127.0.0.1:1/build \
     NODE_OPTIONS=--max-old-space-size=3072 \
     pnpm build \
  && test -f .output/public/about/index.html \
- && node scripts/migrate-bundle.ts
+ && node scripts/bundle-cli.ts
 
 FROM ${NODE_IMAGE} AS runtime
 ENV NODE_ENV=production \

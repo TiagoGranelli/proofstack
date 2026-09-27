@@ -1,8 +1,9 @@
 // The production path end to end, with Docker only: builds the image (prerender included), scans it with grype
 // (a fixable high or critical vulnerability fails, see scanImage), runs the bundled migrator three times at once
 // through PgBouncer in transaction mode (exactly one run applies the migrations) and once more directly (it
-// must apply nothing), serves the app through the pooler and behind the reference edge (deploy/Caddyfile) on a
-// private network, checks it through the edge, and stops it gracefully. Everything it starts is removed
+// must apply nothing), creates the first account with the bundled create-user, serves the app through the
+// pooler and behind the reference edge (deploy/Caddyfile) on a private network, checks it through the edge
+// (pages, then signing in as that account), and stops it gracefully. Everything it starts is removed
 // afterwards, except grype's database volume. CI's `docker` job and `pnpm ci:docker`.
 // Usage: node scripts/docker-smoke.ts   (env: PROOFSTACK_DOCKER_PREFIX, KEEP_SMOKE_IMAGE=1)
 import { spawn, spawnSync } from 'node:child_process'
@@ -235,6 +236,20 @@ try {
   const port = await freePort()
   const origin = `http://localhost:${port}`
   const secret = randomBytes(32).toString('base64')
+  const account = { email: 'first@example.test', password: randomBytes(18).toString('base64url') }
+  await step('create the first account with the bundled create-user, password on stdin', () => {
+    const created = spawnSync(
+      'docker',
+      ['run', '--rm', '--interactive', '--network', NETWORK, '--memory', '256m']
+        .concat(['--env', `DATABASE_URL=${POOLED_URL}`, '--env', 'DATABASE_URL_POOLED=true'])
+        .concat(['--env', `APP_URL=${origin}`, '--env', `BETTER_AUTH_SECRET=${secret}`])
+        .concat([IMAGE, 'node', '.output/create-user.mjs', account.email, 'First User']),
+      { input: `${account.password}\n`, encoding: 'utf8' },
+    )
+    console.log(`  ${`${created.stdout}${created.stderr}`.trim()}`)
+    if (created.status !== 0) throw new Error(`create-user failed (exit ${created.status ?? created.signal})`)
+  })
+
   await step(`serve behind the edge at ${origin}`, async () => {
     const subnet = docker(['network', 'inspect', NETWORK, '--format', '{{range .IPAM.Config}}{{.Subnet}},{{end}}'], {
       quiet: true,
@@ -283,6 +298,23 @@ try {
     if (home.headers.get('cache-control') !== 'private, no-cache')
       problems.push(`/ Cache-Control changed on the way: ${home.headers.get('cache-control')}`)
     if (problems.length) throw new Error(problems.join('; '))
+  })
+
+  await step('sign in as the first account through the edge and read its posts', async () => {
+    const signIn = await fetch(`${origin}/api/auth/sign-in/email`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin },
+      body: JSON.stringify(account),
+    })
+    await signIn.arrayBuffer()
+    const cookie = signIn.headers
+      .getSetCookie()
+      .map((c) => c.split(';', 1)[0])
+      .join('; ')
+    if (!signIn.ok || !cookie) throw new Error(`sign-in answered ${signIn.status}`)
+    const posts = await fetch(`${origin}/api/me/posts`, { headers: { cookie } })
+    const body = (await posts.json()) as { items?: unknown[] }
+    if (!posts.ok || !Array.isArray(body.items)) throw new Error(`GET /api/me/posts answered ${posts.status}`)
   })
 
   await step('stop gracefully', () => {

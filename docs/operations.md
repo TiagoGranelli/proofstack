@@ -63,12 +63,13 @@ image with only `.output/` and `drizzle/`, running as the unprivileged `node` us
 docker build -t proofstack .
 ```
 
-`.output/` contains the server bundle, the public assets, and `migrate.mjs`, a self-contained bundle of
-`scripts/migrate.ts` (built by `scripts/migrate-bundle.ts`). No `node_modules` are needed at runtime.
+`.output/` contains the server bundle, the public assets, and two operator commands bundled with their
+dependencies by `scripts/bundle-cli.ts`: `migrate.mjs` (`scripts/migrate.ts`) and `create-user.mjs`
+(`scripts/create-user.ts`). No `node_modules` are needed at runtime.
 
 Deploy sequence:
 
-1. Build the image (or `pnpm build && node scripts/migrate-bundle.ts` outside Docker).
+1. Build the image (or `pnpm build && node scripts/bundle-cli.ts` outside Docker).
 2. Run the migrations once per deploy, before the new version receives traffic:
    ```sh
    docker run --rm -e DATABASE_URL=... proofstack node .output/migrate.mjs
@@ -146,11 +147,24 @@ and the migration only records it:
 Dropping an index works the same way with `DROP INDEX CONCURRENTLY IF EXISTS` and
 `require-concurrent-index-deletion`.
 
-Create the first account with `pnpm user:create <email> <name>` from a checkout of the repository with
-its dependencies installed. The script loads the server's auth configuration, so `src/server/env.ts`
-requires `DATABASE_URL`, `APP_URL` and `BETTER_AUTH_SECRET`; use the production values. It cannot run
-from the Docker image, which contains only `.output/` and `drizzle/`. Accounts it creates have a verified
-address and can sign in at once ([ADR 0003](decisions/0003-sign-up-policy.md)).
+### First account
+
+With the default `AUTH_SIGN_UP=closed`, accounts come from the operator. The image runs the bundled
+command with the app's own environment (`DATABASE_URL`, `APP_URL`, `BETTER_AUTH_SECRET`, and
+`DATABASE_URL_POOLED` behind a pooler). The password comes from `PROOFSTACK_USER_PASSWORD`, otherwise from
+stdin: a hidden prompt, asked twice, with a terminal (`-it`), or the whole input of a pipe (`-i`):
+
+```sh
+docker run --rm -it --env-file app.env proofstack node .output/create-user.mjs you@example.com "Your Name"
+printf %s "$PASSWORD" | docker run --rm -i --env-file app.env proofstack node .output/create-user.mjs you@example.com "Your Name"
+```
+
+In the deploy recipes below the same command runs as `docker compose run --rm -it app node
+.output/create-user.mjs ...`, `fly ssh console -C "node .output/create-user.mjs ..."` or `kubectl exec -it
+deploy/proofstack -- node .output/create-user.mjs ...`. From a checkout, `pnpm user:create <email> <name>`
+does the same. Accounts it creates have a verified address and can sign in at once
+([ADR 0003](decisions/0003-sign-up-policy.md)); `pnpm ci:docker` creates one from the image and signs in
+with it through the edge.
 
 ### Connection poolers
 
@@ -179,10 +193,10 @@ recommends a direct connection for schema migrations.
   set `MIGRATION_DATABASE_URL`. A migration that must run outside a transaction (`CREATE INDEX
   CONCURRENTLY`) is run by hand anyway ([Migration safety](#migration-safety)).
 - **`user:create`** loads the app's database client, so it follows `DATABASE_URL` and
-  `DATABASE_URL_POOLED` like the app.
+  `DATABASE_URL_POOLED` like the app, in the image too (`node .output/create-user.mjs`).
 
 `pnpm ci:docker` runs three migrators at once through PgBouncer 1.25 in transaction mode (two server
-connections, the timeouts on the role), then serves the app through it
+connections, the timeouts on the role), then creates the first account and serves the app through it
 with `DATABASE_URL_POOLED=true`.
 
 ## Reverse proxy

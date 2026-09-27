@@ -1,8 +1,10 @@
 // Creates an email/password account with a verified address: the operator vouches for it, so the account can
 // sign in at once and no confirmation mail is sent. Works whether public sign-up is open or closed.
 // Usage: pnpm user:create <email> <name>
+//        node .output/create-user.mjs <email> <name>   (the Docker image: a bundle, scripts/bundle-cli.ts)
 // The password comes from PROOFSTACK_USER_PASSWORD, else from stdin: typed at a hidden prompt (asked twice)
 // in a terminal, or read whole from a pipe (`printf %s "$pw" | pnpm user:create ...`).
+// Needs the server's DATABASE_URL, APP_URL and BETTER_AUTH_SECRET (src/server/env.ts validates them).
 import { stdin, stderr } from 'node:process'
 import { createInterface } from 'node:readline'
 import { Writable } from 'node:stream'
@@ -52,7 +54,10 @@ const [rawEmail, rawName] = process.argv.slice(2)
 const email = rawEmail?.trim().toLowerCase()
 const name = rawName?.trim()
 if (!email || !name) {
-  console.error('usage: pnpm user:create <email> <name>  (password via stdin or PROOFSTACK_USER_PASSWORD)')
+  console.error(
+    'usage: pnpm user:create <email> <name>, or in the image: node .output/create-user.mjs <email> <name>\n' +
+      '(password via stdin or PROOFSTACK_USER_PASSWORD)',
+  )
   process.exit(2)
 }
 
