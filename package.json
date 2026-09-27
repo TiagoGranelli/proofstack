@@ -45,6 +45,7 @@
     "test:e2e": "playwright test",
     "verify:app": "node scripts/verify-app.ts",
     "check:drift": "node scripts/check-drift.ts",
+    "check:migrations": "node scripts/check-migrations.ts",
     "deps:check": "node scripts/deps-check.ts",
     "audit:check": "node scripts/audit.ts",
     "licenses:check": "node scripts/licenses.ts",

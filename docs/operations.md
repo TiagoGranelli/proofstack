@@ -86,7 +86,45 @@ Deploy sequence:
 Migrations must stay backward compatible with the version still running during the rollout: add
 columns and tables first, and remove them in a later deploy. Drizzle runs them inside a transaction, so
 `CREATE INDEX` is not `CONCURRENTLY` and blocks writes to that table while the index builds; on a large
-table, create the index by hand with `CREATE INDEX CONCURRENTLY` before the deploy.
+table, create the index by hand with `CREATE INDEX CONCURRENTLY` before the deploy (see below).
+
+### Migration safety
+
+`pnpm check:migrations` (a gate of `pnpm check`, so of CI's `static` job) runs
+[squawk](https://squawkhq.com/docs/rules) 2.66.0 over `drizzle/*.sql` and fails on any finding: a
+non-concurrent index, a column type change that rewrites the table, a `NOT NULL` or constraint that scans
+it under an exclusive lock, and so on. The configuration is `.squawk.toml`: Postgres 18, every file assumed
+to run in a transaction (`scripts/migrate.ts`), and three rules off because `scripts/migrate.ts` already
+covers them (`prefer-robust-stmts`, `require-lock-timeout`, `require-statement-timeout`; the file says
+why). Migrations 0000 to 0004 were applied before the lint existed and are grandfathered in its
+`excluded_paths`; every later one is linted. squawk is the release binary for the platform, pinned by
+sha256 in `scripts/check-migrations.ts` and cached in `~/.cache/proofstack/` (the first run downloads it,
+later runs are offline). Each run first checks that squawk still flags a plain `CREATE INDEX`.
+
+When a finding is expected, waive that one statement with `-- squawk-ignore <rule>` directly under a
+comment that gives the reason; a waiver without one fails the check.
+
+An index on a large table (the usual case) is built by hand before the deploy, outside any transaction,
+and the migration only records it:
+
+1. In the migration (after `pnpm db:generate`, before it is applied anywhere), make the index statement
+   idempotent and waive it:
+   ```sql
+   -- Built by hand with CREATE INDEX CONCURRENTLY before the deploy (docs/operations.md, "Migration safety").
+   -- squawk-ignore require-concurrent-index-creation
+   CREATE INDEX IF NOT EXISTS "post_body_idx" ON "post" USING btree ("body");
+   ```
+   Development, CI and small databases build it in the migration as usual.
+2. Before the deploy, on production, run the same statement with `CONCURRENTLY` from `psql`:
+   `CREATE INDEX CONCURRENTLY IF NOT EXISTS "post_body_idx" ON "post" USING btree ("body");`. It waits for
+   running transactions and does not block writes.
+3. Check that it is valid: `select indisvalid from pg_index where indexrelid = 'post_body_idx'::regclass;`.
+   A failed concurrent build leaves an invalid index behind that `IF NOT EXISTS` would keep: drop it with
+   `DROP INDEX CONCURRENTLY "post_body_idx";` and repeat step 2.
+4. Deploy. The migration finds the index and does nothing.
+
+Dropping an index works the same way with `DROP INDEX CONCURRENTLY IF EXISTS` and
+`require-concurrent-index-deletion`.
 
 Create the first account with `pnpm user:create <email> <name>` from a checkout of the repository with
 its dependencies installed. The script loads the server's auth configuration, so `src/server/env.ts`
