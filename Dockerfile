@@ -33,8 +33,8 @@ COPY --from=build /app/.output ./.output
 COPY --from=build /app/drizzle ./drizzle
 USER node
 EXPOSE 3000
-# srvx (Nitro's server) drains in-flight requests on SIGTERM, then Nitro's close hook ends the
-# Postgres pool and the Effect runtime (src/server/lifecycle.ts). Graceful timeout: 5 s
+# srvx (Nitro's server) drains in-flight requests on SIGTERM, then Nitro's close hook runs the shutdown
+# steps, the Postgres pool last (src/server/lifecycle.ts). Graceful timeout: 5 s
 # (SERVER_SHUTDOWN_TIMEOUT), below Docker's default 10 s stop timeout.
 STOPSIGNAL SIGTERM
 # The probe runs inside the container and resolves the address the way Nitro's server does: NITRO_PORT or

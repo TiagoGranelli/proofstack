@@ -237,14 +237,15 @@ the address like the server does: `NITRO_PORT`, else `PORT`, else 3000; `NITRO_H
 
 On SIGTERM or SIGINT, srvx (Nitro's HTTP server) stops accepting connections, waits for in-flight
 requests up to `SERVER_SHUTDOWN_TIMEOUT` seconds (default 5) and then force-closes them. Nitro then runs
-its `close` hook, which ends the Postgres pool, disposes the Effect runtime, and waits for pending
-background tasks (mail sends, bounded by the SMTP timeouts of 5 s to connect and 15 s per socket
-operation) before closing the mail transport. Server code registers those cleanups with `onShutdown`
-(`src/server/lifecycle.ts`), which hooks `close` through Nitro's documented `useNitroHooks()` from
-`nitro/app`; the SSR bundle imports it from Nitro's own runtime chunk, so it is the same app instance that
-srvx closes. The log line `shutdown complete` lists the cleanups that ran, and `verify:app` fails when it
-is missing, when `postgres-pool` is not among them, or when a connection to the test database outlives the
-process.
+its `close` hook, where the startup plugin (`src/server/nitro/startup.ts`) runs the shutdown steps one
+after another, in this order: wait for pending background tasks (mail sends, bounded by the SMTP timeouts
+of 5 s to connect and 15 s per socket operation, and rate-limit pruning, which queries Postgres), close
+the mail transport, dispose the Effect runtime, end the Postgres pool. Server code registers each step
+with `onShutdown` (`src/server/lifecycle.ts`), which does not import Nitro, so CLI scripts can load the
+same modules. A failed step is logged (`shutdown cleanup failed`) and the next one still runs. The log
+line `shutdown complete` lists the steps in the order they ran (`cleanups`, with each one's duration in
+`steps`), and `verify:app` fails when it is missing, when `postgres-pool` is not among them, or when a
+connection to the test database outlives the process.
 
 Measured with the Docker image: `docker stop` returns in about 1.2 s with exit code 0, including an idle
 keep-alive connection. Keep the orchestrator's grace period above `SERVER_SHUTDOWN_TIMEOUT` (Docker's

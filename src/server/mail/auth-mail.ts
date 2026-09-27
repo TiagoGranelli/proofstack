@@ -1,5 +1,5 @@
 import '@tanstack/react-start/server-only'
-import { drainBackgroundTasks, runInBackground } from '../background-tasks.ts'
+import { runInBackground } from '../background-tasks.ts'
 import { env } from '../env.ts'
 import { onShutdown } from '../lifecycle.ts'
 import { authMessages } from './auth-messages.ts'
@@ -9,10 +9,8 @@ import { createSmtpMailer } from './smtp-mailer.ts'
 
 const mailer: Mailer = env.smtp ? createSmtpMailer(env.smtp) : createLogMailer({ withContent: !env.isProduction })
 
-onShutdown('mailer', async () => {
-  await drainBackgroundTasks()
-  mailer.close()
-})
+// Runs after the `background-tasks` step (../lifecycle.ts), so every pending send has settled.
+onShutdown('mailer', () => mailer.close())
 
 const messages = authMessages(env.appUrl)
 
