@@ -38,7 +38,10 @@ It fits less well when:
    On GitHub, choose **Use this template** and tick **Include all branches** to get both, then make the one
    you want your default branch. Without GitHub, copy one branch with
    `npx giget gh:TiagoGranelli/slopproof#minimal <dir>` (or `#main`).
-2. Install and start what the app needs (Node 26, pnpm 12 and Docker, see the README):
+
+   The `minimal` branch is not published yet. Until it is, start from `main` and remove the example with
+   [minimal-branch.md](minimal-branch.md).
+2. Install and start what the app needs (pnpm 12 and Docker; `pnpm install` downloads the pinned Node):
 
    ```sh
    pnpm install
@@ -168,7 +171,7 @@ template has no shared history with it, so take updates as patches:
 ```sh
 git remote add template https://github.com/TiagoGranelli/slopproof.git
 git fetch template --tags
-git log --oneline v0.1.0..v0.2.0            # what changed between two releases (tags from the template)
+git log --oneline v0.1.0..v0.2.0            # what changed between two releases (once tags are published)
 git cherry-pick <commit>                    # one change
 git diff v0.1.0 v0.2.0 -- scripts/ | git apply -3   # or a whole area, with three-way merge
 ```

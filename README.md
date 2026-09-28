@@ -25,7 +25,7 @@ on day one: tests, boundaries, accessibility, security and a deploy path already
 
 ## See it catch a mistake
 
-When we had an agent build a feature in this repository from `AGENTS.md` alone, the checks caught three of its
+We had an agent build a feature in this repository from `AGENTS.md` alone, and the checks caught three of its
 mistakes: UI code importing the server, a contract change without regenerating the client, and a schema change
 without a migration.
 
@@ -141,7 +141,7 @@ The code here is TypeScript, but the method works in any stack:
 1. Give the API one source of truth and generate the rest from it. A check regenerates the files and fails if
    anything changed.
 2. Write each rule the agent must follow as a lint rule or a test, and make its message say what to do instead.
-   A rule that only lives in a Markdown file is a suggestion.
+   An agent can skip a rule that only lives in a Markdown file.
 3. Put numbers on size and complexity. Agents write long functions unless something fails.
 4. Test what review tends to miss: queries per request, accessibility, CSP violations, page performance.
 5. Keep one fast command for all of it, run it on every commit, and have CI run the same thing.
@@ -155,7 +155,7 @@ Prosopite or Bullet for N+1 queries. In Go, golangci-lint with depguard. [AGENTS
 
 ## Status
 
-Early. A tagged release and a `minimal` branch without the example feature are coming. CI runs every job in
+The project is early. A tagged release and a `minimal` branch without the example feature are coming. CI runs every job in
 `pnpm check`, the drift checks against Postgres, the integration and end-to-end tests in five browser projects,
 contract coverage, Lighthouse, and the Docker image build and scan.
 
