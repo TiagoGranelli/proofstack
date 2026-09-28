@@ -95,7 +95,7 @@ statements (Oxlint `max-statements`; a `describe` has no length limit) and four 
   `/_serverFn/auth/<name>` (`tests/component/stubs/auth-functions.ts`).
 - **Accessibility.** `expectAccessible(page, '<state>')` (`tests/e2e/support/a11y.ts`) fails on any axe
   violation of WCAG 2.0/2.1/2.2 A and AA or best practices. A new page or UI state is one entry in `STATES`
-  in `tests/e2e/a11y.spec.ts`, a landmark snapshot in its `landmarks` block, and, if it has controls, a row
+  in `tests/e2e/a11y.spec.ts`, a landmark snapshot in `tests/e2e/landmarks.spec.ts`, and, if it has controls, a row
   in the tab-order table of `tests/e2e/keyboard.spec.ts` (`tests/unit/route-coverage.test.ts` fails for a page
   route without all three; it recognizes `visit(page, '/path')` and the helpers listed in
   `scripts/route-coverage.ts`). `tabOrder` records every Tab stop, its accessible name and visible focus, and

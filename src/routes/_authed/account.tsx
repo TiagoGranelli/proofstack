@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { RouteError } from '#/components/errors/route-error.tsx'
 import { SectionErrorBoundary } from '#/components/errors/section-error-boundary.tsx'
+import { Page } from '#/components/layouts/page.tsx'
 import { pageTitle } from '#/config/app.ts'
 import { getSessionsQueryOptions } from '#/features/auth/api/get-sessions.ts'
 import { ChangePasswordForm } from '#/features/auth/components/change-password-form.tsx'
@@ -17,19 +18,13 @@ export const Route = createFileRoute('/_authed/account')({
   component: Account,
 })
 
-const section = 'grid gap-3 border-t pt-6'
-const heading = 'text-lg font-semibold'
+const section = 'grid gap-4 border-t pt-8'
+const heading = 'text-lg font-semibold tracking-tight'
 
 function Account() {
   const { user } = Route.useRouteContext()
   return (
-    <main className="mx-auto grid max-w-2xl gap-6 p-4">
-      <div className="grid gap-1">
-        <h1 className="text-2xl font-semibold">Account</h1>
-        <p className="text-muted-foreground">
-          {user.name} · {user.email}
-        </p>
-      </div>
+    <Page title="Account" description={`${user.name} · ${user.email}`}>
       <section aria-labelledby="password-heading" className={section}>
         <h2 id="password-heading" className={heading}>
           Password
@@ -54,6 +49,6 @@ function Account() {
           <DeleteAccountForm />
         </SectionErrorBoundary>
       </section>
-    </main>
+    </Page>
   )
 }

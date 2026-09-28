@@ -45,7 +45,7 @@ describe('DeleteAccountForm', () => {
     expect(calls.data).toEqual([])
   })
 
-  it('deletes the account, busy meanwhile, then clears the cache and goes home', async () => {
+  it('deletes the account, busy meanwhile, then clears the cache and goes home, which says so', async () => {
     const response = held()
     const calls = authCalls('deleteAccount')
     worker.use(calls.handler, authFunction('deleteAccount', response))
@@ -58,27 +58,34 @@ describe('DeleteAccountForm', () => {
     await expect.element(formOf(deleteButton())).toHaveAttribute('aria-busy', 'true')
     response.release()
     await expect.poll(() => router.state.location.href).toBe('/')
+    expect(router.state.location.state.flash).toBe('account-deleted')
     expect(queryClient.getQueryData(['my data'])).toBeUndefined()
     expect(calls.data).toEqual([{ password: 'my password' }])
   })
 
-  it.each([
-    [
-      'a wrong password',
-      { ok: false, failure: { code: 'INVALID_PASSWORD' } } as const,
-      'That password is not correct.',
-    ],
-    ['a failing server', 'thrown' as const, unreachable],
-  ])('keeps the account and says so after %s', async (_, answer, message) => {
-    worker.use(authFunction('deleteAccount', answer))
+  it('keeps the account after a wrong password, and says so next to the password, which takes focus', async () => {
+    worker.use(authFunction('deleteAccount', { ok: false, failure: { code: 'INVALID_PASSWORD' } }))
+    const { router } = await renderInApp(<DeleteAccountForm />, { url: '/account' })
+    await deletePassword().fill('my password')
+    await deleteConfirm().click()
+    await deleteButton().click()
+    await expect.element(page.getByRole('alert')).toHaveTextContent('That password is not correct.')
+    await expectFlagged(deletePassword(), 'That password is not correct.')
+    await expect.element(formOf(deleteButton())).not.toHaveAttribute('aria-describedby')
+    expect(router.state.location.pathname).toBe('/account')
+  })
+
+  it('keeps the account and says so under the form when the server fails', async () => {
+    worker.use(authFunction('deleteAccount', 'thrown'))
     const { router, queryClient } = await renderInApp(<DeleteAccountForm />, { url: '/account' })
     queryClient.setQueryData(['my data'], ['private'])
     await deletePassword().fill('my password')
     await deleteConfirm().click()
     await deleteButton().click()
-    await expect.element(page.getByRole('alert')).toHaveTextContent(message)
-    await expect.element(formOf(deleteButton())).toHaveAccessibleDescription(message)
+    await expect.element(page.getByRole('alert')).toHaveTextContent(unreachable)
+    await expect.element(formOf(deleteButton())).toHaveAccessibleDescription(unreachable)
     await expect.element(deleteButton()).toHaveFocus()
+    await expect.element(deletePassword()).not.toHaveAttribute('aria-invalid')
     expect(router.state.location.pathname).toBe('/account')
     expect(queryClient.getQueryData(['my data'])).toEqual(['private'])
   })

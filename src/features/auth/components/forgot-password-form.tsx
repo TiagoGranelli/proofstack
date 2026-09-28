@@ -31,6 +31,7 @@ export function ForgotPasswordForm() {
       schema={schema}
       pending={request.isPending}
       error={request.error}
+      fieldCodes={{ INVALID_EMAIL: 'email' }}
     >
       <form.AppField name="email">
         {(field) => <field.TextField id="email" label="Email" type="email" autoComplete="email" required />}

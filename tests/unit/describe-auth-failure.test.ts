@@ -3,6 +3,7 @@
 import { describe, expect, it } from 'vitest'
 import { AuthActionError } from '#/features/auth/api/auth-action.ts'
 import {
+  authFieldIssues,
   describeAuthFailure,
   failureFromSearch,
   isAuthFailureCode,
@@ -110,5 +111,33 @@ describe('failureFromSearch', () => {
     ['nothing', { redirect: '/dashboard' }, {}],
   ])('reads %s', (_, search, expected) => {
     expect(failureFromSearch(search)).toEqual(expected)
+  })
+})
+
+describe('authFieldIssues', () => {
+  const changePassword = { INVALID_PASSWORD: 'currentPassword', PASSWORD_TOO_SHORT: 'newPassword' } as const
+
+  it('pins a failure the form attributes on its field, with the sentence the alert would have shown', () => {
+    expect(authFieldIssues(failure('INVALID_PASSWORD'), changePassword)).toEqual({
+      currentPassword: 'That password is not correct.',
+    })
+    expect(authFieldIssues(failure('PASSWORD_TOO_SHORT'), changePassword)).toEqual({
+      newPassword: 'Use at least 12 characters.',
+    })
+  })
+
+  it('pins the same code on whichever field the form names', () => {
+    expect(authFieldIssues(failure('INVALID_PASSWORD'), { INVALID_PASSWORD: 'password' })).toEqual({
+      password: 'That password is not correct.',
+    })
+  })
+
+  it.each<[string, unknown]>([
+    ['a code the form does not attribute', failure('SESSION_EXPIRED')],
+    ['a rate limit', failure('RATE_LIMITED', 30)],
+    ['a network error', new TypeError('Failed to fetch')],
+    ['no error', null],
+  ])('leaves %s to the form', (_, error) => {
+    expect(authFieldIssues(error, changePassword)).toEqual({})
   })
 })

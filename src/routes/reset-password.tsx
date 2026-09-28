@@ -1,4 +1,5 @@
 import { Link, createFileRoute } from '@tanstack/react-router'
+import { Page } from '#/components/layouts/page.tsx'
 import { pageTitle } from '#/config/app.ts'
 import { ResetPasswordForm } from '#/features/auth/components/reset-password-form.tsx'
 
@@ -14,8 +15,7 @@ export const Route = createFileRoute('/reset-password')({
 function ResetPassword() {
   const { token } = Route.useSearch()
   return (
-    <main className="mx-auto grid max-w-sm gap-4 p-4">
-      <h1 className="text-2xl font-semibold">Choose a new password</h1>
+    <Page title="Choose a new password" narrow>
       {token ? (
         <ResetPasswordForm token={token} />
       ) : (
@@ -27,6 +27,6 @@ function ResetPassword() {
           .
         </p>
       )}
-    </main>
+    </Page>
   )
 }

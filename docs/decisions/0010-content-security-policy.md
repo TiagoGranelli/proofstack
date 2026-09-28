@@ -52,6 +52,15 @@ them; the SSR check in `csp.test.ts` too). CSS-in-JS that injects `<style>` with
 blocked. SSR pages cannot be cached by shared caches (the nonce is per response); they already are
 `private`.
 
+Two inline pieces the UI needs follow the same rules. The theme script (`src/lib/theme.ts`) goes through the
+root route's `head()`: SSR pages give it the nonce, and the prerender hook hashes it like any inline script
+(`tests/e2e/appearance.spec.ts` runs it with the app's modules blocked on both kinds of page). Radix dialogs lock
+page scroll with a `<style>` element they inject at runtime (react-remove-scroll-bar); `src/components/ui/alert-dialog.tsx`
+hands it the page's nonce through `get-nonce`. A document that began as a prerendered page has no nonce, so if
+the visitor navigates from it to the dashboard and opens a dialog, that one style is blocked and reported: the
+dialog works, the page behind it can still scroll. Revisit if a second runtime style appears, or by loading
+pages reached from a prerendered one as documents of their own.
+
 ## Revisit when
 
 - Trusted Types: when a Playwright Firefox release no longer stalls `load` with the directive (rerun the

@@ -16,7 +16,9 @@ Read this before you add or change a feature. The root `AGENTS.md` still applies
 - Components call these hooks, never a generated `*Mutation()` directly, and component files export only
   components.
 - Forms, buttons with behavior and lists live in `components/`; pure helpers in `utils/`.
-- Forms use `useAppForm` (`src/components/form/app-form.ts`) with `validationLogic: revalidateLogic()` and the
+- Forms use `useAppForm` (`src/components/form/app-form.ts`; a form that renders none of its field components, as
+  the post composer, uses TanStack's `useForm`, so its page does not preload them) with
+  `validationLogic: revalidateLogic()` and the
   input's Effect Schema, the same one the server validates with (`src/contract/post-input.ts`,
   `src/lib/account-input.ts`), through `lazyFormSchema(() => import(...))` (`src/components/form/lazy-schema.ts`):
   `.validator` in `validators.onDynamic`, `.decode` in `onSubmit`, `loadOnInteraction` on the `<form>` and

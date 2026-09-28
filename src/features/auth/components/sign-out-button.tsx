@@ -1,38 +1,37 @@
+import { useNavigate } from '@tanstack/react-router'
 import { Button } from '#/components/ui/button.tsx'
-import type { useSignOut } from '#/features/auth/api/sign-out.ts'
-
-type SignOut = ReturnType<typeof useSignOut>
+import { useSignOut } from '#/features/auth/api/sign-out.ts'
 
 /**
- * The sign-out button. It and its failure alert (`SignOutAlert`) share one `useSignOut()` mutation, so the page
- * can place them apart. Where the user lands afterwards is the caller's `onSuccess`; the cache is already cleared
- * by then. While pending the button is only `aria-disabled` and ignores presses: a disabled button loses focus,
- * and a keyboard user would be left on <body> if signing out fails (the same holds for every pending button).
- *
- * @example const signOut = useSignOut(); <SignOutButton signOut={signOut} /> … <SignOutAlert signOut={signOut} />
+ * The header's Sign out. On success the visitor lands on `/` with a "You are signed out." flash (src/lib/flash.ts);
+ * the cache is already cleared by then. A failure is an alert on a line of its own. While pending the button is
+ * only `aria-disabled` and ignores presses: a disabled button loses focus, and a keyboard user would be left on
+ * <body> if signing out fails (the same holds for every pending button).
  */
-export function SignOutButton(props: { signOut: SignOut }) {
-  const { signOut } = props
+export function SignOutButton() {
+  const navigate = useNavigate()
+  const signOut = useSignOut({
+    mutationConfig: { onSuccess: () => navigate({ to: '/', state: { flash: 'signed-out' } }) },
+  })
   return (
-    <Button
-      type="button"
-      variant="outline"
-      aria-disabled={signOut.isPending || undefined}
-      aria-busy={signOut.isPending}
-      onClick={() => {
-        if (!signOut.isPending) signOut.mutate()
-      }}
-    >
-      Sign out
-    </Button>
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        aria-disabled={signOut.isPending || undefined}
+        aria-busy={signOut.isPending}
+        onClick={() => {
+          if (!signOut.isPending) signOut.mutate()
+        }}
+      >
+        Sign out
+      </Button>
+      {signOut.isError ? (
+        <p role="alert" className="basis-full text-right text-sm text-destructive">
+          Could not sign out. Check your connection and try again.
+        </p>
+      ) : null}
+    </>
   )
-}
-
-/** Says that signing out failed, for the mutation `SignOutButton` started; nothing otherwise. */
-export function SignOutAlert(props: { signOut: SignOut }) {
-  return props.signOut.isError ? (
-    <p role="alert" className="text-sm text-destructive">
-      Could not sign out. Check your connection and try again.
-    </p>
-  ) : null
 }

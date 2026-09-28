@@ -16,11 +16,12 @@ build and move as the code does.
   API), `src/server/posts/`, `src/server/db/schema/posts.ts`, `src/features/posts/` (the composer and editor with
   their lazily loaded schema, `post-draft.ts` and `post-draft-schema.ts`, and the post mutations' `meta`
   invalidation in `api/posts-cache.ts`)
-- `src/components/ui/card.tsx`, `src/components/ui/textarea.tsx` (only the example uses them;
-  `pnpm exec shadcn add card textarea` brings them back)
+- `src/components/ui/card.tsx`, `src/components/ui/textarea.tsx`, `src/components/ui/alert-dialog.tsx` (only
+  the example uses them; `pnpm exec shadcn add card textarea alert-dialog` brings them back), and with the dialog
+  its `get-nonce` dependency (`pnpm remove get-nonce`)
 - Tests: `tests/api/posts.test.ts`, `tests/api/posts-repo.ts`, `tests/api/posts-validation.test.ts`,
-  `tests/component/my-post.test.tsx`, `tests/component/post-composer.test.tsx`,
-  `tests/component/post-list.test.tsx`, `tests/db/posts-query-budget.test.ts` (the repository's query budgets
+  `tests/component/my-post.test.tsx`, `tests/component/delete-post.test.tsx`, `tests/component/post-composer.test.tsx`,
+  `tests/component/post-list.test.tsx`, `tests/component/post-time.test.tsx`, `tests/unit/post-time.test.ts`, `tests/db/posts-query-budget.test.ts` (the repository's query budgets
   and the uuidv7 id check), `tests/db/post-schema.test.ts` (the table's CHECK, keyset indexes and database clock),
   `tests/integration/posts.test.ts` (with the NUL-body case),
   `tests/integration/posts-pagination.test.ts`, `tests/integration/posts-rate-limit.test.ts`,
@@ -93,7 +94,9 @@ Tests:
   `PAGINATED_AUTHOR` and the header bullet about the shared public list; `PAGE_LINK` becomes
   `{ '/api/me': 'Dashboard' }`.
 - `tests/e2e/flows.spec.ts`: drop the post helpers (`exactly` through `publicListFrames`) and the three posts
-  tests (publish/edit/delete, rejected save, client-side navigation).
+  tests (publish/edit/delete, rejected save, client-side navigation); the SSR hydration test of `/` seeds no post
+  and checks no `time`.
+- `tests/e2e/navigation.spec.ts`: the home page's heading is `APP_NAME`, not "Latest posts".
 - `tests/e2e/a11y.spec.ts`, in `STATES`: replace the three `home…` states with `home`, the posts dashboard
   states with `dashboard` and `dashboard, loading`, and `error page` with the dashboard's error page:
 
@@ -125,14 +128,18 @@ Tests:
   },
   ```
 
-  In `landmarks`: `home` expects `` `${SITE_HEADER}\n- main:\n  - heading "${APP_NAME}" [level=1]\n  - paragraph` ``;
+  Drop `dashboard, delete dialog open`; `dashboard, dark theme chosen` visits `/dashboard` signed in.
+- `tests/e2e/landmarks.spec.ts`: `home` expects
+  `` `${siteHeader('signed out')}\n- main:\n  - heading "${APP_NAME}" [level=1]\n  - paragraph` ``;
   `dashboard` visits `/dashboard` signed in and expects
-  `` `${SITE_HEADER}\n- main:\n  - heading "Dashboard" [level=1]\n  - link "Account"\n  - button "Sign out"\n  - paragraph` ``;
-  `error page` uses `navigateWithApiResponse(page, '/api/me', { status: 503, json: {} })`.
-- `tests/e2e/keyboard.spec.ts`: the `home` row expects `NAV` only; the `error page` row navigates with
-  `'/api/me'`; the `dashboard` row visits `/dashboard` signed in and expects
-  `[...NAV, 'link "Account"', 'button "Sign out"']`; drop the `editing from the keyboard` block and the
-  "publishing and deleting are announced" test.
+  `` `${siteHeader('signed in')}\n- main:\n  - heading "Dashboard" [level=1]\n  - paragraph` ``;
+  `error page` uses `navigateWithApiResponse(page, '/api/me', { status: 503, json: {} })`; drop the
+  `dashboard, delete dialog open` snapshot.
+- `tests/e2e/keyboard.spec.ts`: the `home` rows expect `[...SIGNED_OUT, ...FOOTER]`; the `error page` row
+  navigates with `'/api/me'`; the `dashboard` rows visit `/dashboard` signed in and expect
+  `[...SIGNED_IN, ...FOOTER]` (with `radio "Dark"` for the dark one); drop the `editing from the keyboard` block,
+  the publishing and deleting announcements and the delete dialog test; after the skip link, Tab reaches the
+  footer's `radio "System"`.
 
 ## Add
 
@@ -140,21 +147,22 @@ Tests:
 
 ```tsx
 import { createFileRoute } from '@tanstack/react-router'
+import { Page } from '#/components/layouts/page.tsx'
 import { APP_NAME } from '#/config/app.ts'
 
 export const Route = createFileRoute('/')({
   head: () => ({ meta: [{ title: APP_NAME }] }),
-  // The HTML carries a per-request CSP nonce, so shared caches must not store it; browsers revalidate.
-  headers: () => ({ 'cache-control': 'private, no-cache' }),
+  // The HTML carries a per-request CSP nonce and the header names whoever is signed in: no cache may keep it (the
+  // session read, src/lib/session.functions.ts, says the same).
+  headers: () => ({ 'cache-control': 'private, no-store' }),
   component: Home,
 })
 
 function Home() {
   return (
-    <main className="mx-auto grid max-w-2xl gap-3 p-4">
-      <h1 className="text-2xl font-semibold">{APP_NAME}</h1>
+    <Page title={APP_NAME}>
       <p>Your app starts here. Sign in to see the dashboard, or replace this page with your own.</p>
-    </main>
+    </Page>
   )
 }
 ```
@@ -173,12 +181,11 @@ export const getMeQueryOptions = () => meGetOptions({ client: apiClient() })
 
 ```tsx
 import { useSuspenseQuery } from '@tanstack/react-query'
-import { Link, createFileRoute, useNavigate } from '@tanstack/react-router'
+import { createFileRoute } from '@tanstack/react-router'
 import { RouteError } from '#/components/errors/route-error.tsx'
+import { Page } from '#/components/layouts/page.tsx'
 import { pageTitle } from '#/config/app.ts'
 import { getMeQueryOptions } from '#/features/auth/api/get-me.ts'
-import { useSignOut } from '#/features/auth/api/sign-out.ts'
-import { SignOutAlert, SignOutButton } from '#/features/auth/components/sign-out-button.tsx'
 
 // The signed-in start page. Its data comes through the contract like any feature's: GET /api/me, in-process
 // during SSR and over HTTP in the browser.
@@ -191,26 +198,15 @@ export const Route = createFileRoute('/_authed/dashboard')({
   component: Dashboard,
 })
 
+// Account and Sign out are in the site header.
 function Dashboard() {
   const { data: me } = useSuspenseQuery(getMeQueryOptions())
-  const navigate = useNavigate()
-  const signOut = useSignOut({ mutationConfig: { onSuccess: () => navigate({ to: '/' }) } })
   return (
-    <main className="mx-auto grid max-w-2xl gap-6 p-4">
-      <div className="flex items-center justify-between gap-2">
-        <h1 className="text-2xl font-semibold">Dashboard</h1>
-        <div className="flex items-center gap-4">
-          <Link to="/account" className="text-sm underline underline-offset-4">
-            Account
-          </Link>
-          <SignOutButton signOut={signOut} />
-        </div>
-      </div>
-      <SignOutAlert signOut={signOut} />
+    <Page title="Dashboard">
       <p>
         Signed in as {me.name} ({me.email}).
       </p>
-    </main>
+    </Page>
   )
 }
 ```

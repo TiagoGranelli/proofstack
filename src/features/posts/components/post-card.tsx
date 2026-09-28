@@ -1,8 +1,7 @@
 import type { ReactElement, ReactNode } from 'react'
 import { Card, CardContent, CardDescription } from '#/components/ui/card.tsx'
+import { PostTime } from '#/features/posts/components/post-time.tsx'
 import type { Post } from '#/sdk/types.gen.ts'
-
-const dateFormat = new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeZone: 'UTC' })
 
 /**
  * A post's card. `children` replaces the body (the edit form uses it), `actions` sit next to the byline
@@ -22,7 +21,7 @@ export function PostCard(props: {
         {props.children ?? <p className="break-words whitespace-pre-wrap">{post.body}</p>}
         <div className="flex flex-wrap items-center justify-between gap-2">
           <CardDescription>
-            {post.authorName} · <time dateTime={post.createdAt}>{dateFormat.format(new Date(post.createdAt))}</time>
+            {post.authorName} · <PostTime iso={post.createdAt} />
             {post.updatedAt === post.createdAt ? null : ' · edited'}
           </CardDescription>
           {props.actions ? <div className="flex gap-1">{props.actions}</div> : null}

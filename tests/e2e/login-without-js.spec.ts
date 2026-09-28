@@ -14,7 +14,8 @@ test('signs in without JavaScript and lands where the guard sent the visitor', a
   await page.getByLabel('Password').fill(author.password)
   await page.getByRole('button', { name: 'Sign in' }).click()
   await expect(page).toHaveURL(/\/dashboard$/)
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText(`${author.name}'s posts`)
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Your posts')
+  await expect(page.getByRole('navigation', { name: 'Main' })).toContainText(author.name)
 })
 
 test('without JavaScript, a wrong password comes back as the same alert on the form', async ({ page, author }) => {

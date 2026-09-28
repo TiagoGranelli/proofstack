@@ -92,7 +92,9 @@ export function SessionList() {
   const navigate = useNavigate()
   const { data: sessions } = useSuspenseQuery(getSessionsQueryOptions())
   const others = useRevokeOtherSessions()
-  const everywhere = useSignOutEverywhere({ mutationConfig: { onSuccess: () => navigate({ to: '/login' }) } })
+  const everywhere = useSignOutEverywhere({
+    mutationConfig: { onSuccess: () => navigate({ to: '/login', state: { flash: 'signed-out-everywhere' } }) },
+  })
 
   if (!sessions.ok)
     return sessions.failure.code === 'SESSION_NOT_FRESH' ? (

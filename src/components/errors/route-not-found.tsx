@@ -1,17 +1,16 @@
 import { Link } from '@tanstack/react-router'
+import { Page } from '#/components/layouts/page.tsx'
 import { Button } from '#/components/ui/button.tsx'
 
-/** Router `defaultNotFoundComponent`. */
+/** Router `defaultNotFoundComponent`. Its document title comes from the root route's head(). */
 export function RouteNotFound() {
   return (
-    <main className="mx-auto grid max-w-2xl gap-4 p-4">
-      <h1 className="text-2xl font-semibold">Page not found</h1>
-      <p className="text-muted-foreground">There is nothing at this address.</p>
+    <Page title="Page not found" description="There is nothing at this address.">
       <div>
         <Button asChild variant="outline">
           <Link to="/">Go to the home page</Link>
         </Button>
       </div>
-    </main>
+    </Page>
   )
 }

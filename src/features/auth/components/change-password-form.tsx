@@ -8,6 +8,12 @@ import { AuthStatus } from '#/features/auth/components/auth-status.tsx'
 
 const schema = lazyFormSchema(() => import('#/lib/account-input.ts').then((module) => module.ChangePasswordInput))
 
+const FIELD_CODES = {
+  INVALID_PASSWORD: 'currentPassword',
+  PASSWORD_TOO_SHORT: 'newPassword',
+  PASSWORD_TOO_LONG: 'newPassword',
+} as const
+
 /** Changes the password. Every other session of the account is signed out; this one continues. */
 export function ChangePasswordForm() {
   const change = useChangePassword({ mutationConfig: { onSuccess: () => form.reset() } })
@@ -26,6 +32,7 @@ export function ChangePasswordForm() {
         schema={schema}
         pending={change.isPending}
         error={change.error}
+        fieldCodes={FIELD_CODES}
       >
         <form.AppField name="currentPassword">
           {(field) => (

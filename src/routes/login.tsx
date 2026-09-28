@@ -1,4 +1,5 @@
 import { Link, createFileRoute, redirect } from '@tanstack/react-router'
+import { Page } from '#/components/layouts/page.tsx'
 import { pageTitle } from '#/config/app.ts'
 import { LoginForm } from '#/features/auth/components/login-form.tsx'
 import { failureFromSearch } from '#/features/auth/utils/describe-auth-failure.ts'
@@ -35,23 +36,24 @@ function Login() {
   const { redirect: target, error, retryAfter } = Route.useSearch()
   const signUp = Route.useLoaderData()
   return (
-    <main className="mx-auto grid max-w-sm gap-4 p-4">
-      <h1 className="text-2xl font-semibold">Sign in</h1>
+    <Page title="Sign in" narrow>
       <LoginForm redirectTo={target} failure={error ? { code: error, retryAfter } : undefined} />
-      <p className="text-sm text-muted-foreground">
-        <Link to="/forgot-password" className={link}>
-          Forgot your password?
-        </Link>
-      </p>
-      {signUp.open ? (
-        <p className="text-sm text-muted-foreground">
-          No account yet?{' '}
-          <Link to="/sign-up" className={link}>
-            Create one
+      <div className="grid gap-2 text-sm text-muted-foreground">
+        <p>
+          <Link to="/forgot-password" className={link}>
+            Forgot your password?
           </Link>
-          .
         </p>
-      ) : null}
-    </main>
+        {signUp.open ? (
+          <p>
+            No account yet?{' '}
+            <Link to="/sign-up" className={link}>
+              Create one
+            </Link>
+            .
+          </p>
+        ) : null}
+      </div>
+    </Page>
   )
 }

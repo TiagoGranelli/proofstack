@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import babel from '@rolldown/plugin-babel'
+import tailwindcss from '@tailwindcss/vite'
 import react, { reactCompilerPreset } from '@vitejs/plugin-react'
 import { playwright } from '@vitest/browser-playwright'
 import type { Plugin } from 'vite'
@@ -113,8 +114,9 @@ export default defineConfig({
         },
       },
       {
-        // The same React transform as the app (vite.config.ts), so components run as they ship.
-        plugins: [react(), babel({ presets: [reactCompilerPreset()] }), mswWorkerScript()],
+        // The same React transform as the app (vite.config.ts), so components run as they ship, and Tailwind for the
+        // tests that import src/styles/app.css to measure what the browser computes (contrast.test.tsx).
+        plugins: [react(), babel({ presets: [reactCompilerPreset()] }), tailwindcss(), mswWorkerScript()],
         // Pre-bundled up front: discovering them during the run makes Vite reload the page mid-test.
         optimizeDeps: {
           include: [

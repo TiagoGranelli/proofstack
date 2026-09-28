@@ -2,6 +2,7 @@ import { useQueryErrorResetBoundary } from '@tanstack/react-query'
 import { type ErrorComponentProps, Link, useRouter } from '@tanstack/react-router'
 import { useEffect } from 'react'
 import { ApiErrorAlert } from '#/components/errors/api-error-alert.tsx'
+import { Page } from '#/components/layouts/page.tsx'
 import { Button } from '#/components/ui/button.tsx'
 
 /**
@@ -21,8 +22,7 @@ export function RouteError({
     queryErrorResetBoundary.reset()
   }, [queryErrorResetBoundary])
   return (
-    <main className="mx-auto grid max-w-2xl gap-4 p-4">
-      <h1 className="text-2xl font-semibold">{title}</h1>
+    <Page title={title}>
       <ApiErrorAlert error={error} action={action} />
       <div className="flex flex-wrap gap-2">
         <Button
@@ -38,6 +38,6 @@ export function RouteError({
           <Link to="/">Go to the home page</Link>
         </Button>
       </div>
-    </main>
+    </Page>
   )
 }

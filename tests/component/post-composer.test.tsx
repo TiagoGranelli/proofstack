@@ -78,6 +78,17 @@ describe('PostComposer', () => {
     expect(queryClient.getQueryState(getPublicPostsQueryOptions().queryKey)?.isInvalidated).toBe(true)
   })
 
+  it('puts focus back in the emptied field after publishing, since Publish is disabled again', async () => {
+    worker.use(api.myPostsCreate(() => HttpResponse.json(post({ body: 'hello' }), { status: 201 })))
+    await renderInApp(<PostComposer />)
+    await field().fill('hello')
+    ;(publish().element() as HTMLElement).focus()
+    await userEvent.keyboard('{Enter}')
+    await expect.element(field()).toHaveValue('')
+    await expect.element(publish()).toBeDisabled()
+    await expect.element(field()).toHaveFocus()
+  })
+
   it('flags a draft over the limit on Publish without sending it, moves focus to it, and clears once fixed', async () => {
     // No handler: a request would fail the test (setup.ts).
     const onPublished = vi.fn<() => void>()

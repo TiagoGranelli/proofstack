@@ -6,7 +6,7 @@ import { SessionList } from '#/features/auth/components/session-list.tsx'
 import type { AuthFailure } from '#/lib/auth.functions.ts'
 import { authCalls, authFunction, held, worker } from './api-mocks.ts'
 import { listed, listSessions, otherName, phone, renderWithSessions, thisBrowser } from './session-views.ts'
-import { expectFocusedStatus, formOf, renderInApp, statusText } from './test-utils.tsx'
+import { expectFieldIssue, expectFocusedStatus, formOf, renderInApp, statusText } from './test-utils.tsx'
 
 const unreachable = 'Could not reach the server. Check your connection and try again.'
 
@@ -80,20 +80,55 @@ describe('ChangePasswordForm', () => {
     await expect.element(page.getByRole('button', { name: otherName })).not.toBeInTheDocument()
   })
 
-  it.each<[string, AuthFailure, string]>([
-    ['a wrong current password', { code: 'INVALID_PASSWORD' }, 'That password is not correct.'],
-    ['a new password the server finds too short', { code: 'PASSWORD_TOO_SHORT' }, 'Use at least 12 characters.'],
-    ['a new password the server finds too long', { code: 'PASSWORD_TOO_LONG' }, 'Use at most 128 characters.'],
-    ['an ended session', { code: 'SESSION_EXPIRED' }, 'Your session has ended. Sign in again to continue.'],
-  ])('explains %s and keeps what was typed', async (_, failure, message) => {
+  it.each<{ name: string; failure: AuthFailure; field: typeof newPassword; message: string }>([
+    {
+      name: 'a wrong current password',
+      failure: { code: 'INVALID_PASSWORD' },
+      field: currentPassword,
+      message: 'That password is not correct.',
+    },
+    {
+      name: 'a new password the server finds too short',
+      failure: { code: 'PASSWORD_TOO_SHORT' },
+      field: newPassword,
+      message: 'Use at least 12 characters.',
+    },
+    {
+      name: 'a new password the server finds too long',
+      failure: { code: 'PASSWORD_TOO_LONG' },
+      field: newPassword,
+      message: 'Use at most 128 characters.',
+    },
+  ])('explains $name next to that field and keeps what was typed', async ({ failure, field, message }) => {
     worker.use(authFunction('changePassword', { ok: false, failure }))
+    await renderInApp(<ChangePasswordForm />, { url: '/account' })
+    await change()
+    await expectFieldIssue(field(), message, changeButton())
+    await expect.element(newPassword()).toHaveValue('a brand new password')
+    await expect.element(page.getByRole('status')).not.toBeInTheDocument()
+  })
+
+  it('explains an ended session under the form, which it describes, and keeps focus on the button', async () => {
+    const message = 'Your session has ended. Sign in again to continue.'
+    worker.use(authFunction('changePassword', { ok: false, failure: { code: 'SESSION_EXPIRED' } }))
     await renderInApp(<ChangePasswordForm />, { url: '/account' })
     await change()
     await expect.element(page.getByRole('alert')).toHaveTextContent(message)
     await expect.element(formOf(changeButton())).toHaveAccessibleDescription(message)
     await expect.element(changeButton()).toHaveFocus()
-    await expect.element(newPassword()).toHaveValue('a brand new password')
-    await expect.element(page.getByRole('status')).not.toBeInTheDocument()
+    await expect.element(currentPassword()).not.toHaveAttribute('aria-invalid')
+    await expect.element(newPassword()).not.toHaveAttribute('aria-invalid')
+  })
+
+  it('clears a field issue on the next attempt', async () => {
+    worker.use(authFunction('changePassword', { ok: false, failure: { code: 'INVALID_PASSWORD' } }))
+    await renderInApp(<ChangePasswordForm />, { url: '/account' })
+    await change()
+    await expect.element(currentPassword()).toHaveAttribute('aria-invalid', 'true')
+    worker.use(authFunction('changePassword', { ok: true, value: null }))
+    await change()
+    await expect.element(statusText('Password changed')).toBeVisible()
+    await expect.element(currentPassword()).not.toHaveAttribute('aria-invalid')
   })
 
   it('shows a generic message when the server fails', async () => {

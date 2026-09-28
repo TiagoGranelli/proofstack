@@ -37,6 +37,8 @@
     "@effect/tsgo",
     // Invoked as a CLI (`pnpm exec lighthouse`) by scripts/lighthouse.ts.
     "lighthouse",
+    // Invoked as a CLI (`pnpm exec shadcn add`) to add primitives to src/components/ui (components.json).
+    "shadcn",
     // Not imported: listed only as the provider of better-call's optional zod peer (pnpm-workspace.yaml, ADR 0007).
     "zod"
   ],

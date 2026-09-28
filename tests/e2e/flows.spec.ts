@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test'
 import { APP_NAME } from '#/config/app.ts'
 import { signInWithForm } from './support/accounts.ts'
-import { type Author, expect, failServerFunctionPosts, signIn, test, visit } from './support/app.ts'
+import { type Author, expect, failServerFunctionPosts, seedPost, signIn, test, visit } from './support/app.ts'
 
 /**
  * On the dashboard, hydrated and rendered. Leaving a page before that (a `goto`, cleared cookies) races with
@@ -62,9 +62,14 @@ const expectPostReplaced = async (page: Page, body: string, edited: string) => {
   expect(saved.items.filter((post) => post.body.includes(body)).map((post) => post.body)).toEqual([edited])
 }
 
+/** Deletes post `body`, confirming in the dialog that asks first. */
 const deletePost = async (page: Page, body: string) => {
   await myPost(page, body)
-    .getByRole('button', { name: /^Delete/ })
+    .getByRole('button', { name: /^Delete post/ })
+    .click()
+  await page
+    .getByRole('alertdialog', { name: 'Delete this post?' })
+    .getByRole('button', { name: 'Delete', exact: true })
     .click()
   await expect(myPost(page, body)).toHaveCount(0)
 }
@@ -85,10 +90,18 @@ const signInThroughForm = async (page: Page, author: Author) => {
   expect((await sessionCheck).headers()['cache-control']).toContain('no-store')
 }
 
-/** Signs out from the dashboard: the app goes home, and /dashboard sends the visitor to sign in. */
+/**
+ * Signs out from the dashboard: the app goes home, says so once (a reload does not show it again), and /dashboard
+ * sends the visitor to sign in.
+ */
 const signOutFromDashboard = async (page: Page) => {
   await page.getByRole('button', { name: 'Sign out' }).click()
   await expect(page).toHaveURL(/\/$/)
+  await expect(page.getByTestId('flash')).toHaveText('You are signed out.')
+  await expect(navLink(page, 'Sign in')).toBeVisible()
+  await page.reload()
+  await expect(page.locator('body[data-hydrated="true"]')).toBeAttached()
+  await expect(page.getByTestId('flash')).toHaveCount(0)
   await page.goto('/dashboard')
   await expect(page).toHaveURL(/\/login\?redirect=%2Fdashboard$/)
 }
@@ -127,15 +140,20 @@ const expectHomeShowsOnly = async (page: Page, body: string) => {
   expect((await publicListFrames(page)).filter((text) => !text.includes(body))).toEqual([])
 }
 
-test('public page hydrates from SSR without refetching or console errors', async ({ page }) => {
-  const apiCalls: string[] = []
+test('public page hydrates from SSR without refetching or console errors', async ({ page, request, author }) => {
+  // A post of a few seconds ago: its time reads relative in the browser and as a UTC date in the SSR HTML.
+  await seedPost(request, author)
+  const requests: string[] = []
   const errors: string[] = []
-  page.on('request', (r) => r.url().includes('/api/') && apiCalls.push(r.url()))
+  // Neither the list (/api) nor the header's session (a /_serverFn GET) is fetched again after SSR.
+  page.on('request', (r) => /\/(api|_serverFn)\//.test(r.url()) && requests.push(r.url()))
+  // React reports a hydration mismatch as a console error, so a date SSR and the browser render differently fails.
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()))
   await visit(page, '/')
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+  await expect(page.getByTestId('public-posts').locator('time').first()).toHaveText(/ago|just now/)
   await page.waitForLoadState('networkidle')
-  expect(apiCalls).toEqual([])
+  expect(requests).toEqual([])
   expect(errors).toEqual([])
 })
 

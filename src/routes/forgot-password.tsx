@@ -1,4 +1,5 @@
 import { Link, createFileRoute } from '@tanstack/react-router'
+import { Page } from '#/components/layouts/page.tsx'
 import { pageTitle } from '#/config/app.ts'
 import { ForgotPasswordForm } from '#/features/auth/components/forgot-password-form.tsx'
 
@@ -10,15 +11,13 @@ export const Route = createFileRoute('/forgot-password')({
 
 function ForgotPassword() {
   return (
-    <main className="mx-auto grid max-w-sm gap-4 p-4">
-      <h1 className="text-2xl font-semibold">Forgot your password?</h1>
-      <p className="text-sm text-muted-foreground">We will email you a link to choose a new one.</p>
+    <Page title="Forgot your password?" description="We will email you a link to choose a new one." narrow>
       <ForgotPasswordForm />
       <p className="text-sm text-muted-foreground">
         <Link to="/login" className="underline underline-offset-4">
           Back to sign in
         </Link>
       </p>
-    </main>
+    </Page>
   )
 }

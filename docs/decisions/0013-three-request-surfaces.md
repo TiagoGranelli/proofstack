@@ -41,7 +41,11 @@ that cannot call a server function.
   published description for other clients.
 - The `_authed` guard reads the session through a server function and the `HttpApi` middleware reads it again
   for the same page. During SSR both share one lookup per request (`src/server/http/request-session.ts`,
-  `tests/db/ssr-session.test.ts`); a client-side navigation still makes two requests, so two lookups.
+  `tests/db/ssr-session.test.ts`); a client-side navigation still makes two requests, so two lookups. The site
+  header shows the same session without a request of its own: the root route's loader caches it in the query
+  cache (`loadSession`), which SSR fills with that one lookup and the guard refreshes; a navigation between public
+  pages asks nothing (`tests/e2e/navigation.spec.ts`). A prerendered page cannot know who is signed in: its
+  header links to the dashboard, and asks once after hydration.
 
 ## Revisit when
 
