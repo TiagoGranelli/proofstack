@@ -97,7 +97,7 @@ in and how each layer's harness works.
 
 | Command | Covers |
 | --- | --- |
-| `pnpm check` | Every gate that needs no database and no build (format, type-aware lint, typecheck, Effect diagnostics, dead code, complexity, duplication, security sinks, unit/api/component tests with coverage, drift, migration lint, licenses), about 13 s. Run it before every hand-off; the lefthook pre-commit hook runs the jobs your staged files touch |
+| `pnpm check` | Every gate that needs no database and no build (format, type-aware lint, typecheck, Effect diagnostics, dead code, complexity, duplication, security sinks, unit/api/component tests with coverage, drift, migration lint, licenses), about 16 s. Run it before every hand-off; the lefthook pre-commit hook runs the jobs your staged files touch |
 | `pnpm test:unit\|test:api\|test:component [filter ...]` | One fast layer; `pnpm test:fast` runs all three with coverage |
 | `pnpm test:db [filter ...]` | The `db` layer on a throwaway Postgres database. Needs Postgres, no build |
 | `pnpm format`, `pnpm lint:fix` | Autofixes |
