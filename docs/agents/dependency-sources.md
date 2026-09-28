@@ -1,6 +1,6 @@
 # Dependency sources for agents
 
-Recommendation (2026-09-27): **commit no vendored sources for now.** `.repos/` is ignored through
+This repository commits no vendored sources. `.repos/` is ignored through
 `.repos/.gitignore`. When upstream code or docs would help, fetch a filtered snapshot on demand with a partial,
 sparse git clone (below).
 
@@ -53,8 +53,8 @@ formats, or typechecks `.repos/**`.
 - Everyone who clones the template would inherit about 6 MB of third-party files and the exclusions they
   require.
 
-Revisit this if agents need sources in sandboxes without network access, or if a package stops publishing
-`src/`.
+Committing a snapshot makes sense when agents need sources in sandboxes without network access, or when a package
+stops publishing `src/`.
 
 ## Subtree or sparse clone
 

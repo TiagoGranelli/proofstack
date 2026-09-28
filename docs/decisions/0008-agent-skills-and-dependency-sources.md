@@ -18,8 +18,7 @@ licensed for redistribution, and excluded from tooling.
 - Better Auth's skills have no license, so they are loaded on demand only (`skills use`) and never
   committed.
 - Do not commit upstream sources. Partial, sparse git clones fetch filtered snapshots (1–2 MB each) at
-  the lockfile's version into the git-ignored `.repos/` (since 2026-09-27; before, `scripts/vendor-source.ts`
-  read GitHub tarballs).
+  the lockfile's version into the git-ignored `.repos/`.
 
 ## Evidence
 
@@ -34,5 +33,5 @@ Agents need network access and `gh` to fetch snapshots. The shadcn skill embeds 
 
 ## Revisit when
 
-A first commit exists and agents need sources offline (then commit snapshots), Better Auth adds a
+Agents need sources offline (then commit snapshots), Better Auth adds a
 license, or official skills appear for Drizzle, Hey API, or TanStack Query.

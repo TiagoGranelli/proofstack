@@ -14,7 +14,6 @@ const BASE = {
   SMTP_URL: '',
   MAIL_FROM: '',
   AUTH_SIGN_UP: '',
-  TRUSTED_IP_HEADER: '',
   NODE_ENV: 'test',
 }
 
@@ -81,7 +80,6 @@ describe('env', () => {
       { DATABASE_URL_POOLED: 'yes' },
       'DATABASE_URL_POOLED must be one of false, true',
     ],
-    ['the replaced TRUSTED_IP_HEADER', { TRUSTED_IP_HEADER: 'x-real-ip' }, 'TRUSTED_IP_HEADER was replaced by'],
   ])('refuses %s', async (_, overrides, message) => {
     await expect(load(overrides)).rejects.toThrow(message)
   })

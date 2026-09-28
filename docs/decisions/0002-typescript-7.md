@@ -1,14 +1,14 @@
 # 0002: TypeScript 7 only, with the Hey API snapshot that no longer needs the TypeScript API
 
-Status: Accepted (2026-09-27; replaces the TS 6 alias decided on 2026-09-26)
+Status: Accepted (2026-09-27)
 
 ## Context
 
 TypeScript 7 (the native Go port) ships no JS compiler API. Hey API 0.99.0, the latest stable release, uses
-that API to print code and crashes on TS 7 (hey-api/openapi-ts#4235, still open). The first version of this
-ADR kept `typescript` as an alias for TS 6 so Hey API could run. Hey API's own printer, which removes the
-TypeScript dependency, is merged upstream (PRs #4163 and #4166) and published on the `next` dist-tag, but not
-yet in a stable release.
+that API to print code and crashes on TS 7 (hey-api/openapi-ts#4235, still open). Keeping TS 6 installed
+under a `typescript` alias would let 0.99.0 run, at the cost of two TypeScript versions in one project. Hey
+API's own printer, which removes the TypeScript dependency, is merged upstream (PRs #4163 and #4166) and
+published on the `next` dist-tag, but is not yet in a stable release.
 
 ## Decision
 
@@ -21,9 +21,9 @@ yet in a stable release.
 
 ## Evidence (2026-09-27)
 
-- With the snapshot, `pnpm codegen` produces the same six files as 0.99.0 did (types, SDK, TanStack Query
-  options including the infinite queries, MSW handlers); `git diff -w` on `src/sdk` is empty, the only change
-  is indentation. Two runs are byte-identical.
+- With the snapshot, `pnpm codegen` produces the same six files as 0.99.0 (types, SDK, TanStack Query
+  options including the infinite queries, MSW handlers). Only indentation differs: `git diff -w` on `src/sdk`
+  is empty. Two runs are byte-identical.
 - `pnpm check` (TS 7 typecheck, lint, 250+ fast tests), `pnpm check:drift`, `pnpm build` and
   `pnpm verify:app` (109 integration, 139 E2E) pass.
 - The other packages that mention `typescript` accept TS 7 or don't need it: `cosmiconfig` and `msw` (optional
@@ -32,10 +32,10 @@ yet in a stable release.
 
 ## Consequences
 
-A snapshot build is not a stable release: it is pinned exactly, regenerated output is checked by
-`pnpm check:drift contract`, and the whole SDK is exercised by the integration suite on every change. Editors
-use the TS 7 language service (`.vscode/settings.json` sets `"js/ts.experimental.useTsgo": true`). Scripts run
-through Node's type stripping, so they use erasable syntax only (`erasableSyntaxOnly`).
+A snapshot build carries more risk than a stable release, so it is pinned exactly, regenerated output is
+checked by `pnpm check:drift contract`, and the integration suite exercises the whole SDK on every change.
+Editors use the TS 7 language service (`.vscode/settings.json` sets `"js/ts.experimental.useTsgo": true`).
+Scripts run through Node's type stripping, so they use erasable syntax only (`erasableSyntaxOnly`).
 
 ## Revisit when
 

@@ -102,12 +102,6 @@ const readSmtp = (): { url: string; from: string } | undefined => {
   return { url, from }
 }
 
-// Renamed variables fail loudly instead of being ignored.
-if (process.env.TRUSTED_IP_HEADER?.trim())
-  throw new Error(
-    'TRUSTED_IP_HEADER was replaced by TRUSTED_PROXIES (the addresses of your reverse proxies). See docs/operations.md.',
-  )
-
 export const env = {
   databaseUrl: readDatabaseUrl('DATABASE_URL'),
   /** Maximum connections per process. Keep instances × this below Postgres `max_connections`. */

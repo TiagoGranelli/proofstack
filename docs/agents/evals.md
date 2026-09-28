@@ -57,7 +57,7 @@ because the hidden checks fail on the baseline).
 
 The planted bug also weakens the component test that would have caught it, so `pnpm check` passes on the buggy
 baseline and only the hidden checks tell a fix from no fix. Only `fix-post-length-check` has a reference solution;
-the first real agent run that passes another task can become its `solution/`.
+an agent run that passes another task can become that task's `solution/`.
 
 Checked on 2026-09-27 with Harbor 0.23.0: `-a oracle` on `fix-post-length-check` scored reward 1 (check, drift
 and hidden 1; one file, +2 −2), and `-a nop` on all four tasks scored reward 0 with check and drift 1 and hidden 0.

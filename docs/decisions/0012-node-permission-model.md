@@ -45,7 +45,7 @@ migrator reads `drizzle/`, and an operator runs both by hand.
 - `pnpm ci:docker`: the image (Node 26.10) passes migrations through PgBouncer, pages through the edge, a
   sign-in and the graceful stop with the flags in its `CMD`, and its log says `permissionModel: true`.
 - Without `--allow-net`, the server does not start: srvx's `listen` fails with `ERR_ACCESS_DENIED`
-  (`permission: 'Net'`), so the flags are in force, not ignored.
+  (`permission: 'Net'`), which shows that the flags are enforced.
 
 ## Consequences
 

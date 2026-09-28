@@ -15,9 +15,8 @@ OpenAPI 3.1. Hey API generates the typed client and the TanStack Query options.
 ## Evidence
 
 The full CRUD, auth, and validation-error flows run through the generated SDK
-(`tests/integration/api.test.ts`). Hey API needs no Zod at runtime. The stack review
-(`docs/stack-review.md`) found that tRPC would add only subscriptions and batching, which the example
-does not need.
+(`tests/integration/api.test.ts`). Hey API needs no Zod at runtime. Over this contract, tRPC would add only
+subscriptions and batching, which the example does not need (see [the stack](../stack.md)).
 
 ## Consequences
 

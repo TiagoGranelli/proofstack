@@ -5,10 +5,9 @@ every gate), a plain home page, and a dashboard that reads `GET /api/me`. Adopte
 example take it ([adopting.md](adopting.md#day-1)); maintainers keep it in sync by merging `main` into it
 ([CONTRIBUTING.md](../.github/CONTRIBUTING.md#the-minimal-branch)).
 
-This page is the exact recipe, for building the branch once and for checking a merge. The same list is what
-an adopter removes to drop the example from a `main`-based app later. Every step keeps `pnpm check`,
-`pnpm check:drift` and `pnpm verify:app` passing on the result; the measured values below are from the first
-build and move as the code does.
+This page is the exact recipe, for building the branch and for checking a merge. The same list is what an
+adopter removes to drop the example from a `main`-based app later. The result passes `pnpm check`,
+`pnpm check:drift` and `pnpm verify:app`; the measured values below move as the code does.
 
 ## Delete
 
@@ -20,10 +19,11 @@ build and move as the code does.
   the example uses them; `pnpm exec shadcn add card textarea alert-dialog` brings them back), and with the dialog
   its `get-nonce` dependency (`pnpm remove get-nonce`)
 - Tests: `tests/api/posts.test.ts`, `tests/api/posts-repo.ts`, `tests/api/posts-validation.test.ts`,
-  `tests/component/my-post.test.tsx`, `tests/component/delete-post.test.tsx`, `tests/component/post-composer.test.tsx`,
-  `tests/component/post-list.test.tsx`, `tests/component/post-time.test.tsx`, `tests/unit/post-time.test.ts`, `tests/db/posts-query-budget.test.ts` (the repository's query budgets
-  and the uuidv7 id check), `tests/db/post-schema.test.ts` (the table's CHECK, keyset indexes and database clock),
-  `tests/integration/posts.test.ts` (with the NUL-body case),
+  `tests/component/my-post.test.tsx`, `tests/component/delete-post.test.tsx`,
+  `tests/component/post-composer.test.tsx`, `tests/component/post-list.test.tsx`,
+  `tests/component/post-time.test.tsx`, `tests/unit/post-time.test.ts`, `tests/db/posts-query-budget.test.ts` (the
+  repository's query budgets and the uuidv7 id check), `tests/db/post-schema.test.ts` (the table's CHECK, keyset
+  indexes and database clock), `tests/integration/posts.test.ts` (with the NUL-body case),
   `tests/integration/posts-pagination.test.ts`, `tests/integration/posts-rate-limit.test.ts`,
   `tests/e2e/posts-pagination.spec.ts`, `tests/e2e/seed.setup.ts`, `tests/unit/page-cursor.test.ts`
 
@@ -216,9 +216,8 @@ function Dashboard() {
 1. `pnpm db:generate --name remove_example`: a migration with `DROP TABLE "post" CASCADE;`. It comes after
    `0009_post_body_check_validate`: the example's migrations (0000's `post` table, 0001, 0002, and 0007 to 0009:
    the `uuidv7()` default, the ascending keyset indexes and the body CHECK) stay in the journal, because
-   databases may have applied them (`tests/unit/repo-policy.test.ts` rejects an edit). Dropping the table drops its constraint
-   and indexes with it. Put the migration
-   lint's waiver above the statement:
+   databases may have applied them (`tests/unit/repo-policy.test.ts` rejects an edit). Dropping the table drops
+   its constraint and indexes with it. Put the migration lint's waiver above the statement:
 
    ```sql
    -- The example feature is gone: nothing reads or writes this table.
@@ -228,8 +227,7 @@ function Dashboard() {
 2. `pnpm codegen`: `openapi.json` and `src/sdk/` without the posts operations.
 3. `pnpm format`, then `pnpm check`, `pnpm check:drift`, `pnpm build && pnpm verify:app`.
 
-Re-measure the coverage floor in `vitest.config.ts` after the merge instead of copying the numbers above: C4's
-forms and the lazy validators moved them.
+Re-measure the coverage floor in `vitest.config.ts` after each merge instead of copying the numbers above.
 
 `git grep -n -i -w -e posts -e post -- ':!*.md'` then lists what is left of the example outside docs: the
 `POST` method, `postgres` and a few comments that use a post only as an illustration. Docs (`AGENTS.md`, the

@@ -20,8 +20,7 @@ It fits less well when:
 
 - You need production-stable dependencies today. Effect 4 is a release candidate, Nitro 3 a beta, Hey API
   a `next` snapshot, TanStack Start calls itself a release candidate, and the stack runs on TypeScript 7
-  and Node 26. [stack-review.md](stack-review.md) has the evidence and the risks; each upgrade is gated
-  but may need work.
+  and Node 26. [stack.md](stack.md) lists the risk of each piece; each upgrade is gated but may need work.
 - You want a public API for third parties with its own versioning, a mobile client with token auth, or
   several services. The contract here is for the app's own UI.
 - You want a scaffold to fill in quickly. The template trades speed of the first week for fewer
@@ -84,7 +83,7 @@ uses the same, change them there.
 
 ## Your first feature
 
-The feature workflow in [AGENTS.md](../AGENTS.md) walks through the layers in order. In short:
+The `add-feature` skill (`.agents/skills/add-feature/SKILL.md`) walks through the layers in order. In short:
 
 1. Table in `src/server/db/schema/`, then `pnpm db:generate --name <slug>` and `pnpm db:migrate`.
 2. Endpoints, schemas and tagged errors in `src/contract/`, added to `Api` in `src/contract/api.ts`.
@@ -120,8 +119,8 @@ started from `main` and drop the example later. Two things come back with your f
 ## Tuning the gates
 
 Every gate can be changed; the rule is that a change is a visible edit with its reason, in a file
-`.github/CODEOWNERS` routes to review. AGENTS.md lists each gate and its escape hatch. The ones adopters
-change most:
+`.github/CODEOWNERS` routes to review. [agents/gates.md](agents/gates.md) lists each gate and its escape
+hatches. The ones adopters change most:
 
 - Coverage: `COVERAGE_FLOOR` and `COVERAGE_GATE` in `vitest.config.ts`. Raise the floor as coverage grows;
   add modules that must stay fully covered to the gate.
@@ -130,7 +129,8 @@ change most:
 - Complexity and duplication: per-function overrides in `.fallowrc.json` (`health.thresholdOverrides`,
   `duplicates.ignoredClones`), never a higher global ceiling.
 - Browsers: `PW_PROJECTS` chooses the Playwright projects locally; CI runs all five.
-- Allowlists with expiry (`security/*-allowlist.json`) and license exceptions (`scripts/licenses.ts`).
+- Accepted advisories (`auditConfig.ignoreGhsas` in `pnpm-workspace.yaml`, `ignore` rules in
+  `.config/grype.yaml`) and license exceptions (`scripts/licenses.ts`).
 
 If a gate costs more than it catches for your product, remove it in its own commit that says why. The
 pre-commit hook runs the `.config/lefthook.yml` jobs a commit touches; `pnpm exec lefthook uninstall` turns it off
@@ -230,7 +230,7 @@ Nothing in the README asks you to take it on trust. Each claim has a command:
 | Accessibility of every page and state | `pnpm verify:app` (axe, landmarks and tab order in `tests/e2e/`) and the `routes` gate of `pnpm check` |
 | Lighthouse 100 | `pnpm build && pnpm lighthouse` |
 | The app's name lives in two files | `pnpm test:unit app-name` |
-| The branch without the example works | CI on the `minimal` branch (`pnpm check`, `pnpm verify:app`) |
+| The branch without the example works | CI on the `minimal` branch (`pnpm check`, `pnpm verify:app`), once it is published |
 | All of CI without GitHub | `pnpm ci:local` |
 
 If a claim and its check disagree, the check is the source of truth; please open an issue.

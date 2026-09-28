@@ -199,8 +199,8 @@
     "jsx-a11y/anchor-ambiguous-text": "error",
     "eslint/complexity": ["error", { "max": 20 }],
 
-    // Clean code for agents (AGENTS.md, "Code style"): a file and a function fit one read, nesting stays shallow,
-    // names grep. Comments are not counted, so nobody deletes a "why" to pass. Measured in docs/clean-code-audit.md.
+    // Code style for agents (AGENTS.md, "Code style"): a file and a function fit one read, nesting stays shallow,
+    // names grep. Comments are not counted, so nobody deletes a "why" to pass.
     "eslint/max-lines": ["error", { "max": 300, "skipBlankLines": true, "skipComments": true }],
     "eslint/max-lines-per-function": ["error", { "max": 20, "skipBlankLines": true, "skipComments": true }],
     "eslint/max-depth": ["error", { "max": 2 }],
@@ -273,9 +273,8 @@
       }
     },
     {
-      // A component's markup is part of its body: 20 lines of logic plus room for its JSX at printWidth 120 (80, the
-      // owner's choice over the audit's 40: docs/critique-2026-09-27.md). It must stay before the tests/** override,
-      // which turns the rule off (a later override wins).
+      // A component's markup is part of its body: 20 lines of logic plus room for its JSX at printWidth 120. It must
+      // stay before the tests/** override, which turns the rule off (a later override wins).
       "files": ["**/*.tsx"],
       "rules": {
         "eslint/max-lines-per-function": ["error", { "max": 80, "skipBlankLines": true, "skipComments": true }]

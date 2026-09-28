@@ -8,10 +8,9 @@ How to configure, deploy and run the app in production. The app is a single Node
 The server validates the variables read by `src/server/env.ts` while it starts (loaded by the Nitro
 plugin `src/server/nitro/startup.ts`): `DATABASE_URL`, `APP_URL`, `BETTER_AUTH_SECRET`,
 `TRUSTED_PROXIES`, `DATABASE_POOL_MAX`, `DATABASE_URL_POOLED`, `AUTH_SIGN_UP`, `SMTP_URL` and `MAIL_FROM`. An invalid value stops
-the process with exit code 1 and a message naming the variable, before the port opens. So does the removed
-`TRUSTED_IP_HEADER`, with a pointer to `TRUSTED_PROXIES`. The other variables are read by Nitro and srvx
-without validation: a non-numeric port silently falls back to 3000, and a non-numeric
-`SERVER_SHUTDOWN_TIMEOUT` to 5.
+the process with exit code 1 and a message naming the variable, before the port opens. The other variables
+are read by Nitro and srvx without validation: a non-numeric port silently falls back to 3000, and a
+non-numeric `SERVER_SHUTDOWN_TIMEOUT` to 5.
 
 | Variable | Required | Meaning |
 | --- | --- | --- |
@@ -377,7 +376,7 @@ dc exec -T db psql -U postgres -d restore_drill -c 'select count(*) from "user"'
 dc exec -T db psql -U postgres -c 'drop database restore_drill'
 ```
 
-The same steps ran against the local test of the recipe. To restore for real, stop the
+These steps were tested against the recipe running locally. To restore for real, stop the
 app (`dc stop app`), restore into a new database the same way, point `DATABASE_URL` at it (or rename the
 databases), and start the app. Deleted accounts come back with a restore; see
 [Data retention](#data-retention) for what that means for erasure.
@@ -613,7 +612,7 @@ order they ran (`cleanups`, with each one's duration in `steps`).
 
 srvx's drain waits for connections, not for the work behind them. When a client disconnects during a
 sign-in, its response settles at once (logged as 499), but Better Auth goes on hashing the password and
-then writes the session; a load test found such writes failing with `Failed query` after the pool had
+then writes the session; under load, such writes would fail with `Failed query` once the pool had
 closed. Every Better Auth call therefore counts as a background task until it finishes
 (`finishBeforeShutdown`, `src/server/background-tasks.ts`).
 
@@ -825,14 +824,14 @@ The tooling targets Linux, macOS and Windows; CI runs everything on Linux and `p
   Windows provides. The Windows path has not been run yet; `git commit --no-verify` skips the hook if it fails.
 - **The edge** runs on the bridge network on macOS and Windows ([Edge proxy](#edge-proxy-caddy)). This
   path is written for Docker Desktop and has not been run there yet. On Linux it needs a host firewall that
-  lets containers reach the host (it timed out on the maintainer's machine), which is why Linux keeps the
+  lets containers reach the host (without one the connection times out), which is why Linux keeps the
   host network by default.
 - **`pnpm ci:local` and `pnpm ci:docker`** need Docker.
 
 ### Linux: memory caps
 
 The type-aware lint, `pnpm build` (about 1.9 GB peak), `verify:app` and `lighthouse` are heavy. A
-misconfigured lint once reached 17 GB and took a laptop down. On Linux, run heavy commands one at a time
+misconfigured lint once used 17 GB. On Linux, run heavy commands one at a time
 under a cgroup limit, so a runaway process is killed alone:
 
 ```sh

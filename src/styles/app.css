@@ -24,7 +24,7 @@
 
 @theme inline {
   --font-heading: var(--font-sans);
-  /* The system font stack (owner decision): nothing to download, so nothing delays the first paint. */
+  /* The system font stack: nothing to download, so nothing delays the first paint. */
   --font-sans: ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji';
   --color-ring: var(--ring);
   --color-input: var(--input);

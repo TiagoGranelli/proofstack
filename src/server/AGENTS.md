@@ -49,7 +49,7 @@ covered by the `upgrade-prerelease-deps` skill.
   `callAuthEndpoint` (`http/auth-handler.ts`), which runs Better Auth's router in-process.
 - Sign-up answers success for an email that already exists (enumeration protection), so
   `scripts/create-user.ts` checks first.
-- Its `storage: 'database'` rate limit is not atomic on Postgres, hence `auth-rate-limit.ts`.
+- Its `storage: 'database'` rate limit is not atomic on Postgres (better-auth#10557), hence `auth-rate-limit.ts`.
 - Keep `tanstackStartCookies()` last in `plugins`.
 - `db/schema/auth.ts` is application code, edited by hand; the `auth-change` skill covers config changes and
   new account actions.

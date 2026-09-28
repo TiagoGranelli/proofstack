@@ -113,7 +113,7 @@ Lighthouse policy and the less common commands (`audit:check`, `sbom:release`) a
 
 ## Memory safety
 
-A misconfigured lint once reached 17 GB and crashed the maintainer's laptop.
+A misconfigured lint once used 17 GB of memory.
 
 - To check a few files, pass explicit paths: `pnpm lint src/x.ts`, `pnpm exec oxfmt --check src/x.ts`.
 - Keep `node_modules/**`, `.output/**`, and `.repos/**` out of every tool's scope. `.oxlintrc.json` and

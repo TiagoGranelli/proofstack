@@ -33,7 +33,7 @@ export const POLICY = {
    * - `target`, the project's bar, applies by default (`pnpm lighthouse`).
    * - `ci` (`--bar=ci`, `pnpm ci:lighthouse`): on GitHub's 2-vCPU runners a Chrome task passes Lantern's 10 ms
    *   cutoff and every mobile run of an unchanged page scores 99 (GoogleChrome/lighthouse#16539, ADR 0011). The
-   *   owner's bar there is no run below 95; the budgets and the other categories stay as strict. Back to `target`
+   *   bar there is no run below 95; the budgets and the other categories stay as strict. Back to `target`
    *   once Lighthouse stops counting modulepreloads in FCP.
    */
   performance: {
@@ -51,7 +51,7 @@ export const POLICY = {
   /**
    * Below this `environment.benchmarkIndex` (Lighthouse's own slow-CPU threshold, which also triggers its
    * "slower CPU" run warning) the simulated timings are not comparable: the run is inconclusive (exit 2),
-   * neither pass nor fail. Seen here: about 4400-4800 on the maintainer's laptop.
+   * neither pass nor fail. An 8-core development machine scores about 4400-4800.
    */
   minBenchmarkIndex: 1000,
 }

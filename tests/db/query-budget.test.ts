@@ -70,8 +70,8 @@ describe('session endpoints', () => {
   /**
    * Statements each endpoint may send for an account with the cookie's session plus `others` more. Better Auth
    * 1.7.6 revokes other sessions one by one (a lookup and a delete per session, `Promise.all` over
-   * `internalAdapter.deleteSession` in its /revoke-other-sessions): a known upstream N+1, budgeted as it is so
-   * that it cannot grow unnoticed and a fix upstream shows up here. The others are constant.
+   * `internalAdapter.deleteSession` in its /revoke-other-sessions): a known upstream N+1 (better-auth#11433),
+   * budgeted as it is so that it cannot grow unnoticed and a fix upstream shows up here. The others are constant.
    */
   const BUDGETS = {
     'GET /list-sessions': () => 3,

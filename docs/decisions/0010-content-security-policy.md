@@ -6,9 +6,8 @@ Status: Accepted (2026-09-27)
 
 The app renders HTML two ways: per request (SSR, including not-found and error pages) and once at build
 time (`/about`, [ADR 0004](0004-prerender-via-nitro.md)). Both contain inline scripts that TanStack
-Router emits for hydration. The previous setup created a nonce in a request middleware, passed it to the
-Nitro plugin in a private response header, and allowed `'unsafe-inline'` for prerendered pages and for all
-styles.
+Router emits for hydration. The policy has to allow those scripts, on both kinds of page, without
+`'unsafe-inline'` for scripts or for styles.
 
 Trusted Types (`require-trusted-types-for 'script'`) would additionally stop DOM XSS through sinks such as
 `innerHTML` and `script.src`, which matters with `'strict-dynamic'`, because that keyword trusts scripts

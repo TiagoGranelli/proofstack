@@ -112,8 +112,8 @@ A working app that you change into yours:
 - One container to deploy, with recipes for a single server with Docker Compose and Caddy, for Fly.io and for
   Kubernetes.
 
-The stack is TypeScript end to end. [docs/stack-review.md](docs/stack-review.md) covers each piece with its
-evidence and risks, and [AGENTS.md](AGENTS.md#architecture-map) shows what lives where.
+The stack is TypeScript end to end. [docs/stack.md](docs/stack.md) says why each piece is there and what its
+risk is, and [AGENTS.md](AGENTS.md#architecture-map) shows what lives where.
 
 ## Quick start
 
@@ -155,9 +155,9 @@ Prosopite or Bullet for N+1 queries. In Go, golangci-lint with depguard. [AGENTS
 
 ## Status
 
-The project is early. A tagged release and a `minimal` branch without the example feature are coming. CI runs every job in
-`pnpm check`, the drift checks against Postgres, the integration and end-to-end tests in five browser projects,
-contract coverage, Lighthouse, and the Docker image build and scan.
+The project is early. A tagged release and a `minimal` branch without the example feature are coming. CI runs
+every job in `pnpm check`, the drift checks against Postgres, the integration and end-to-end tests in five
+browser projects, contract coverage, Lighthouse, and the Docker image build and scan.
 
 Some dependencies are pre-release. Effect 4 is a release candidate, Nitro 3 is a beta, Hey API is a `next`
 snapshot, TanStack Start still calls itself a release candidate, and the project runs on TypeScript 7 and

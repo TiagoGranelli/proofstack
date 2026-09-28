@@ -9,9 +9,9 @@ new build does not know. Start's resolver throws a plain `Error("Server function
 outside `handleServerAction`'s `try`, so it escapes the handler: h3 prints the error and Nitro answers
 `500` with `{"status":500,"unhandled":true,"message":"HTTPError"}`, without the id or a stack.
 
-`src/start.ts` used to catch that error in a request middleware by matching the message text and answer
-404. That depended on the wording of an internal error message, in three variants (production resolver,
-server-only function, dev server).
+A request middleware in `src/start.ts` could catch that error by matching the message text and answer 404.
+That would depend on the wording of an internal error message, which comes in three variants (production
+resolver, server-only function, dev server).
 
 The upstream fix is TanStack/router PR #8246 ("fix(start): return 404 for unknown server function ids",
 https://github.com/TanStack/router/pull/8246, open; we commented on it). It flags the resolver's error and
@@ -19,7 +19,7 @@ answers 404 without logging.
 
 ## Decision
 
-Remove the message-matching middleware and keep Start's behavior until #8246 ships. The response already
+Do not match the message. Keep Start's behavior until #8246 ships. The response already
 leaks nothing; the cost is a 500 instead of a 404, and a raw h3 error print in the log per unknown id (see
 docs/operations.md, Logs).
 

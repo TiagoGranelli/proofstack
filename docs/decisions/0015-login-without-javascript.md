@@ -4,10 +4,11 @@ Status: Accepted (2026-09-27)
 
 ## Context
 
-Every account form kept its button disabled until hydration, because a native submit would post the fields,
-passwords included, to the page itself. On a slow device the login page is visible and useless for as long as
-the scripts take, and without JavaScript it never works. TanStack Start server functions accept `FormData`
-(urlencoded or multipart) on POST and expose their path as `.url`, so a form can post to one directly.
+An account form that submits from script keeps its button disabled until hydration, because a native submit
+would post the fields, passwords included, to the page itself. On a slow device such a login page is visible
+but unusable for as long as the scripts take, and without JavaScript it never works. TanStack Start server
+functions accept `FormData` (urlencoded or multipart) on POST and expose their path as `.url`, so a form can
+post to one directly.
 
 ## Decision
 

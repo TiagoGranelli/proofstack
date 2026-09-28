@@ -1,6 +1,6 @@
 # 0005: Drizzle ORM 0.45 stable, not 1.0 RC
 
-Status: Accepted (2026-09-26, evidence rechecked 2026-09-27)
+Status: Accepted (2026-09-26)
 
 ## Context
 

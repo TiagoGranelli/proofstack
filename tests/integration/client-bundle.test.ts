@@ -1,5 +1,5 @@
-// What the browser bundle may carry of Effect. The forms validate with Effect Schema (the owner's decision in
-// docs/critique-2026-09-27.md), so the Schema runtime ships in a chunk the forms import on their first interaction
+// What the browser bundle may carry of Effect. The forms validate with the Effect Schemas the server checks, so the
+// Schema runtime ships in a chunk the forms import on their first interaction
 // (src/components/form/lazy-schema.ts), and no page loads or preloads it up front: preloading it kept the form pages'
 // mobile Lighthouse score under 100. The contract's endpoints (`src/contract/posts.ts`, HttpApi) and the HTTP server
 // never ship: one careless value import in UI code (instead of a type, `src/contract/limits.ts` or an input module

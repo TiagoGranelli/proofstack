@@ -1,6 +1,6 @@
 # 0004: Static pages are prerendered by Nitro, the deployment layer
 
-Status: Accepted (2026-09-26, reworded 2026-09-27)
+Status: Accepted (2026-09-26)
 
 ## Context
 
@@ -17,8 +17,8 @@ not served (TanStack/router#7473, open).
 ## Decision
 
 Static routes are listed in `nitro({ prerender: { routes: ['/about'], crawlLinks: false, failOnError: true } })`
-in `vite.config.ts`. This is the mechanism of the layer that serves the files, not a workaround for Start:
-the page is rendered by the same SSR code, and Nitro owns everything about serving it (file, `ETag`,
+in `vite.config.ts`, which uses the prerendering of the layer that serves the files. The page is rendered by
+the same SSR code, and Nitro owns everything about serving it (file, `ETag`,
 precompressed copies, route-rule headers). Nitro's build-time hooks are used the same way: the
 `prerender:generate` hook writes the page's hash-based Content-Security-Policy as a route rule header
 ([ADR 0010](0010-content-security-policy.md)).

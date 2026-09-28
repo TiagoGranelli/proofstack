@@ -34,10 +34,11 @@ Reserve Important for these; everything else is a Nit at most.
   `describeAuthFailure`; a secret committed anywhere.
 - **Missing tests.** A new endpoint without API-layer tests for each branch and status (`tests/api`); a new page
   or UI state without its axe state, landmark snapshot and tab-order row (`tests/e2e/a11y.spec.ts`,
-  `tests/e2e/keyboard.spec.ts`); a new UI state without a component test; a bug fix without a test that fails
-  before it.
-- **Query budget.** A new or changed repository method without a budget in `tests/db/query-budget.test.ts`, or a
-  list whose number of statements grows with the number of rows (N+1).
+  `tests/e2e/landmarks.spec.ts`, `tests/e2e/keyboard.spec.ts`); a new UI state without a component test; a bug
+  fix without a test that fails before it.
+- **Query budget.** A new or changed repository method without a budget in its
+  `tests/db/<feature>-query-budget.test.ts`, or a list whose number of statements grows with the number of rows
+  (N+1).
 - **Migrations.** An edit to a migration already in `drizzle/meta/_journal.json` on the base branch, or a
   statement that locks a busy table without the reasoned `-- squawk-ignore` the migration lint asks for.
 - **CSP.** Inline `style` attributes, inline event handlers, or `'unsafe-inline'` in a policy.

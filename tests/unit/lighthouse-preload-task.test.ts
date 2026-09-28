@@ -1,6 +1,6 @@
 // scripts/lighthouse-runs.ts: the preload task, the main-thread task that requested the page's first stylesheet or
 // script. The numbers are from the CI run whose mobile scores fell to 99 (ADR 0011): the navigation commit ran
-// 31.9 ms on the 2-vCPU runner, against 5-10 ms on the maintainer's laptop.
+// 31.9 ms on the 2-vCPU runner, against 5-10 ms on an 8-core development machine.
 import { describe, expect, it } from 'vitest'
 import { type Lhr, preloadTaskMs } from '../../scripts/lighthouse-runs.ts'
 

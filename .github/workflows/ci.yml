@@ -10,14 +10,13 @@ permissions:
   contents: read
 
 # A new push to a pull request supersedes the running check. Runs on main and minimal (the template without the
-# example, docs/minimal-branch.md) always finish, so every
-# commit there gets a complete result.
+# example, docs/minimal-branch.md) always finish, so every commit there gets a complete result.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Each job only provides tooling and services and runs one `pnpm ci:<job>` script (scripts/ci-jobs.ts), so
-# `pnpm ci:local <job>` reproduces it on a laptop. Job logic belongs in the scripts, not here.
+# `pnpm ci:local <job>` reproduces it locally. Job logic belongs in the scripts, not here.
 env:
   CI: true
   # Matches the postgres service below. Test databases (*_test) are created next to it by the scripts.

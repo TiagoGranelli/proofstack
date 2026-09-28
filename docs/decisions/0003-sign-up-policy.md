@@ -1,7 +1,6 @@
 # 0003: Configurable sign-up, closed by default, with the full account lifecycle in both modes
 
-Status: Accepted (2026-09-27, owner decision). Replaces the first version of this ADR (closed sign-up only,
-2026-09-26), which was decided on the owner's behalf.
+Status: Accepted (2026-09-27)
 
 ## Context
 
@@ -32,10 +31,10 @@ accounts are created.
   session list with per-session revoke, sign-out of the other sessions and everywhere, and account
   deletion behind the password and an explicit confirmation (posts go with the account).
 - Mail links point at the app's own pages (`/verify-email`, `/reset-password`), which call Better Auth when
-  their button is pressed, never on page load: with open sign-up, a link scanner that followed the link would
-  otherwise confirm an address someone else registered.
-  Senders only schedule delivery through `advanced.backgroundTasks`, so response times do not reveal
-  whether an account exists; shutdown drains pending sends.
+  their button is pressed. If the page acted on load, a mail link scanner could confirm an address that
+  someone else registered through open sign-up. Senders only schedule delivery through
+  `advanced.backgroundTasks`, so response times do not reveal whether an account exists; shutdown drains
+  pending sends.
 - The UI calls these endpoints through server functions (`src/lib/auth.functions.ts`) that dispatch into
   Better Auth's router in-process, so the endpoint allowlist, the rate limits and the origin check apply to
   them. `/api/auth/*` itself only signs in and out and reads the session. The browser bundle has no Better

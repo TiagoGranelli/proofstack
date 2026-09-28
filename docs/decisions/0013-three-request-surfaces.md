@@ -17,8 +17,8 @@ the app.
 | Better Auth HTTP | `/api/auth/*` (`src/routes/api/auth/$.ts`), narrowed to `HTTP_ENDPOINTS` | Only what a client without the UI needs to use the business API with a cookie: `GET /get-session`, `POST /sign-in/email`, `POST /sign-out` | Better Auth's own JSON bodies; outside the contract |
 
 A new operation goes in the `HttpApi` unless it is an account action or a guard. A new account action is a server
-function plus an entry in `EXPOSED` (AGENTS.md, "Auth endpoint"); it reaches `HTTP_ENDPOINTS` only for a client
-that cannot call a server function.
+function plus an entry in `EXPOSED` (`src/server/http/auth-endpoints.ts`); it reaches `HTTP_ENDPOINTS` only
+for a client that cannot call a server function.
 
 ## Reasons
 

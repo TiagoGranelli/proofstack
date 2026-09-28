@@ -107,7 +107,8 @@ statements (Oxlint `max-statements`; a `describe` has no length limit) and four 
 - **Flakiness.** CI retries a failed Playwright test once but fails the run if it then passes
   (`failOnFlakyTests`): fix the cause. Locate fields by role and exact name (`getByRole('textbox', { name:
   'Email', exact: true })`); a bare `getByLabel('Email')` also matches "Email confirmed". Mutation testing is
-  not a gate yet: StrykerJS's Vitest runner skips nested tests on Vitest 5 (docs/plan.md, "Mutation testing").
+  not a gate yet: StrykerJS's Vitest runner skips nested tests on Vitest 5
+  ([docs/stack.md](../docs/stack.md#mutation-testing)).
 - **E2E hydration and CSP.** Wait for `body[data-hydrated="true"]` before interacting: input before hydration
   is lost. Import `test` and `expect` from `tests/e2e/fixtures.ts`, not `@playwright/test`: it fails the test
   on any Content-Security-Policy violation.

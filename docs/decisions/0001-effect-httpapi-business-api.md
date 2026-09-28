@@ -13,8 +13,7 @@ database directly, the contract would no longer describe them.
 - Every business operation is an endpoint of the Effect 4 `HttpApi` in `src/contract`, served at `/api/*`
   by `src/routes/api/$.ts`, which forwards to `apiHandler` in `src/server/api/web-handler.ts`.
 - `openapi.json` is generated from the contract with `OpenApi.fromApi` (`pnpm openapi:generate`), without
-  a server or database. Hey API generates `src/sdk` from it. Both are meant to be committed (no commits
-  exist yet).
+  a server or database. Hey API generates `src/sdk` from it. Both are committed.
 - SSR loaders use the same generated SDK. On the server, its `fetch` calls `apiHandler` in-process
   (`src/server/api/in-process-client.ts`) and forwards the request cookie, so SSR goes through the same
   validation and middleware as browser calls without a network hop.

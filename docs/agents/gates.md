@@ -6,7 +6,7 @@ covers and how to make an exception.
 ## What `pnpm check` runs
 
 `pnpm check` is `lefthook run pre-commit --all-files`: every job in `.config/lefthook.yml`, one at a time, about
-13 s, then a summary with each failed job's fix. No database, no build; it needs Playwright's Chromium.
+16 s, then a summary with each failed job's fix. No database, no build; it needs Playwright's Chromium.
 
 | Job | What fails it |
 | --- | --- |
@@ -27,13 +27,12 @@ covers and how to make an exception.
 
 The pre-commit hook runs the same jobs, but only those whose `glob` matches a staged file: a Markdown-only commit
 runs `secrets` and `repo-policy`, in about a second. `pnpm install` installs the hook
-(`prepare`: `lefthook install --reset-hooks-path`, which also clears the `core.hooksPath` older clones set).
+(`prepare`: `lefthook install --reset-hooks-path`, which also clears any `core.hooksPath` setting).
 
 **Working tree, not commit.** lefthook runs each job on the working tree, and every job checks the whole project.
 It sets aside the unstaged part of a partially staged file while the jobs run, but a modified file that is not
 staged at all, or an untracked one, is checked as if it were part of the commit: a file left out of the commit
-can hide a problem the commit has. The old hook checked a copy of the exact commit, at the cost of a
-temporary checkout per commit. CI checks the exact commit: `pnpm ci:static` runs `pnpm check` with
+can hide a problem the commit has. CI checks the exact commit: `pnpm ci:static` runs `pnpm check` with
 `CHECK_BASE_REF=HEAD^` (the commit under test against its parent) and without `drift`, which the `drift` job runs
 in full. A job subset: `pnpm check --job lint --job tests`, or `LEFTHOOK_EXCLUDE=tests pnpm check`.
 
@@ -103,7 +102,7 @@ the checkout are skipped. About 0.1 to 1 s per edit. Try it:
 
 Claude Code matches deny rules against every subcommand of a compound command (`&&`, `||`, `;`, `|`, newlines,
 subshells, command substitution), past leading `VAR=value` assignments and past wrappers such as `timeout`. They
-match the command text Claude writes, so they are a guard rail, not a security boundary
+match the command text Claude writes, so they are a guard rail and cannot serve as a security boundary
 ([permissions docs](https://code.claude.com/docs/en/permissions#what-a-bash-rule-doesn-t-match)). Not covered: a
 program called by path (`node_modules/.bin/eslint`) or through `sh -c`, `git -C . commit --no-verify`, a
 clustered `-an`, `pnpm exec eslint`, and other tools. A rule can also refuse a harmless command, such as
@@ -122,7 +121,7 @@ applies project `allow` rules only after you accept the workspace trust dialog. 
 `/login` and `/dashboard` (noindex). Exit 2 means inconclusive, not failed: a run's `benchmarkIndex` was below
 1000 or Lighthouse warned about a slow CPU (each run's value and warnings are in
 `lighthouse-report/summary.json`). CI runs `pnpm lighthouse --runs=5 --bar=ci`: performance only fails there when a
-run scores below 95, because GitHub's 2-vCPU runners score an unchanged page 99 on mobile (owner decision, ADR 0011);
+run scores below 95, because GitHub's 2-vCPU runners score an unchanged page 99 on mobile (ADR 0011);
 the other categories and the budgets are as strict as locally. A mobile 99 whose runs show a preload task of
 10 ms or more (`perRun[].preloadTaskMs`, and a note in `summary.md`) comes from a contended host, not from the page:
 Lantern then adds four times that task before every preloaded script ([ADR 0011](../decisions/0011-lighthouse-over-https-http2.md#the-preload-task-and-why-ci-scored-99)).
