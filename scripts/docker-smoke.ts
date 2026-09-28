@@ -141,9 +141,9 @@ const checkPages = async (base: string) => {
   const encoding = home.headers.get('content-encoding')
   if (encoding !== 'gzip')
     problems.push(`/ is not compressed by the edge (Content-Encoding ${encoding}, expected gzip)`)
-  if (home.headers.get('cache-control') !== 'private, no-cache')
+  if (home.headers.get('cache-control') !== 'private, no-store')
     problems.push(
-      `/ Cache-Control changed on the way: ${home.headers.get('cache-control')}, expected private, no-cache`,
+      `/ Cache-Control changed on the way: ${home.headers.get('cache-control')}, expected private, no-store (src/routes/index.tsx)`,
     )
   if (problems.length) throw new Error(problems.join('; '))
 }
