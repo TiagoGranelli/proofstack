@@ -1,5 +1,7 @@
 # Stack review
 
+_Written when the project was called ProofStack._
+
 Independent review of the ProofStack stack, based on official docs, package sources and tests run on the
 maintainer's machine (Node 26.8.1, pnpm 12.3.4, Postgres 18.6 in Docker). Started 2026-09-26, final
 measurements 2026-09-27. "Proven in repo" means covered by the gates below in this repository; "spike" means

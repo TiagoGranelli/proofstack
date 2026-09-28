@@ -1,6 +1,6 @@
 # AGENTS.md
 
-ProofStack is a full-stack template built around a verifiable API contract. `src/contract` generates
+Slopproof is a full-stack template built around a verifiable API contract. `src/contract` generates
 `openapi.json`, which generates `src/sdk`; the running API and the tests must agree with all three. A
 change is done when `pnpm check` passes, plus `pnpm check:drift` and `pnpm build && pnpm verify:app` for
 changes to the contract, database, auth, or UI flows.

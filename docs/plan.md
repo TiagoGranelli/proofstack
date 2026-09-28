@@ -1,5 +1,7 @@
 # Plan: remove workarounds, close known limits
 
+_Written when the project was called ProofStack._
+
 Written 2026-09-26 from four investigations (Start/Nitro, Better Auth, Bulletproof React, testing/CI) that read
 the installed sources, upstream `main`, issues and PRs, and ran experiments on copies of the repo. Each item
 names the principled replacement; nothing here patches a dependency.

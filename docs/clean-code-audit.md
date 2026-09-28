@@ -1,5 +1,7 @@
 # Clean code audit (2026-09-27)
 
+_Written when the project was called ProofStack._
+
 ProofStack measured against Fabio Akita's
 ["Clean Code para agentes de IA"](https://akitaonrails.com/2026/04/20/clean-code-para-agentes-de-ia/), with a
 proposal to enforce each rule using the tools the repository already runs (Oxlint, Fallow, oxfmt, AGENTS.md).

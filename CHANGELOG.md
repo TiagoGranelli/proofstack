@@ -10,6 +10,9 @@ repository created from the template.
 
 ### Changed
 
+- Renamed from ProofStack to Slopproof: `name` in `package.json` is `slopproof`, `APP_NAME` is "Slopproof", and
+  the repository is `TiagoGranelli/slopproof`. The Docker image and the `pnpm ci:docker` names follow the package
+  name. Older entries below keep the old name.
 - `pnpm test` and `pnpm test:e2e` start the built app themselves (their global setups, through
   `startTestServers` in `scripts/app-server.ts`), so they run directly, from `playwright test --ui` and from the
   editor extensions. `pnpm verify:app` runs the layers one after another and prints a summary; the drain check
@@ -32,6 +35,9 @@ repository created from the template.
 
 ### Upgrade notes
 
+- Point your template remote at the new name:
+  `git remote set-url template https://github.com/TiagoGranelli/slopproof.git`. Your app's own name in
+  `package.json` and `src/config/app.ts` does not change.
 - `verify:app` takes no arguments: instead of a filter or `--no-db`, `--no-integration`, `--no-e2e`, run that
   runner (`pnpm test:db`, `pnpm test`, `pnpm test:e2e`, each with a filter). `--edge` is `TEST_EDGE=1`.
   `VERIFY_PORT` and `TEST_DATABASE_URL` are gone: every run uses free ports and its own database.
