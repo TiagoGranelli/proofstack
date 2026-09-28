@@ -67,7 +67,7 @@ pre-commit:
         <file>:<line>` shows every copy). A deliberate clone goes in `duplicates.ignoredClones` in .fallowrc.json
 
     # New security-sink candidates on lines changed since CHECK_BASE_REF (default HEAD: uncommitted changes). A pnpm
-    # script, because lefthook runs commands without a shell on Windows and pnpm's shell emulator expands the default.
+    # script: lefthook 2.1.14 mangles "${VAR:-default}" on Windows (evilmartians/lefthook#1167, fixed by #1464).
     - name: security
       glob: 'src/**/*.{ts,tsx}'
       run: pnpm run --silent security:check
