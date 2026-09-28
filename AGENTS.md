@@ -1,6 +1,6 @@
 # AGENTS.md
 
-ProofStack is a full-stack template built around a verifiable API contract. `src/contract` generates
+Slopproof is a full-stack template built around a verifiable API contract. `src/contract` generates
 `openapi.json`, which generates `src/sdk`; the running API and the tests must agree with all three. A
 change is done when `pnpm check` passes, plus `pnpm check:drift` and `pnpm build && pnpm verify:app` for
 changes to the contract, database, auth, or UI flows.
@@ -97,7 +97,7 @@ in and how each layer's harness works.
 
 | Command | Covers |
 | --- | --- |
-| `pnpm check` | Every gate that needs no database and no build (format, type-aware lint, typecheck, Effect diagnostics, dead code, complexity, duplication, security sinks, unit/api/component tests with coverage, drift, migration lint, licenses), about 13 s. Run it before every hand-off; the lefthook pre-commit hook runs the jobs your staged files touch |
+| `pnpm check` | Every gate that needs no database and no build (format, type-aware lint, typecheck, Effect diagnostics, dead code, complexity, duplication, security sinks, unit/api/component tests with coverage, drift, migration lint, licenses), about 16 s. Run it before every hand-off; the lefthook pre-commit hook runs the jobs your staged files touch |
 | `pnpm test:unit\|test:api\|test:component [filter ...]` | One fast layer; `pnpm test:fast` runs all three with coverage |
 | `pnpm test:db [filter ...]` | The `db` layer on a throwaway Postgres database. Needs Postgres, no build |
 | `pnpm format`, `pnpm lint:fix` | Autofixes |

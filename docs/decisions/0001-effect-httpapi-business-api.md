@@ -4,7 +4,7 @@ Status: Accepted (2026-09-26)
 
 ## Context
 
-ProofStack promises that the published OpenAPI document, the generated client, the running API, and the
+Slopproof promises that the published OpenAPI document, the generated client, the running API, and the
 tests all agree. If some business operations bypassed the API, for example SSR loaders querying the
 database directly, the contract would no longer describe them.
 

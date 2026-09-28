@@ -1,4 +1,4 @@
-# Adopting ProofStack
+# Adopting Slopproof
 
 How to start a product from this template, keep it building on the template's gates, and take template
 updates later. [AGENTS.md](../AGENTS.md) is the reference for working in the code; this page is the path
@@ -6,7 +6,7 @@ from "Use this template" to your own app.
 
 ## Is this for you
 
-ProofStack fits when:
+Slopproof fits when:
 
 - You want one Node service on one origin: server-rendered React, a typed business API, Postgres and
   cookie sessions, deployed as a container.
@@ -37,7 +37,7 @@ It fits less well when:
 
    On GitHub, choose **Use this template** and tick **Include all branches** to get both, then make the one
    you want your default branch. Without GitHub, copy one branch with
-   `npx giget gh:TiagoGranelli/proofstack#minimal <dir>` (or `#main`).
+   `npx giget gh:TiagoGranelli/slopproof#minimal <dir>` (or `#main`).
 2. Install and start what the app needs (Node 26, pnpm 12 and Docker, see the README):
 
    ```sh
@@ -70,7 +70,7 @@ names) is neutral, so nothing else carries it.
 5. Confirm:
 
    ```sh
-   git grep -n -i proofstack
+   git grep -n -i slopproof
    ```
 
    What is left should be prose about the template. `tests/unit/repo-policy.test.ts`, part of `pnpm check`,
@@ -166,7 +166,7 @@ upgrade notes: what to run and what to check when you take the change. A reposit
 template has no shared history with it, so take updates as patches:
 
 ```sh
-git remote add template https://github.com/TiagoGranelli/proofstack.git
+git remote add template https://github.com/TiagoGranelli/slopproof.git
 git fetch template --tags
 git log --oneline v0.1.0..v0.2.0            # what changed between two releases (tags from the template)
 git cherry-pick <commit>                    # one change
