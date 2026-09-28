@@ -27,3 +27,10 @@ test('without JavaScript, a wrong password comes back as the same alert on the f
   await expect(page.getByRole('alert')).toHaveText('Wrong email or password.')
   await expect(page.locator('form')).toHaveAccessibleDescription('Wrong email or password.')
 })
+
+// signInFromForm reports a rate limit as `?error=RATE_LIMITED&retryAfter=<seconds>`. The router's search parsing
+// has to hand `retryAfter` back as a number; a change to it once dropped the wait silently.
+test('without JavaScript, a rate-limited sign-in says how long to wait', async ({ page }) => {
+  await page.goto('/login?error=RATE_LIMITED&retryAfter=12')
+  await expect(page.getByRole('alert')).toHaveText('Too many attempts. Try again in 12 seconds.')
+})
