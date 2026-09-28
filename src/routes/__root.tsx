@@ -1,5 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query'
-import { HeadContent, Outlet, Scripts, createRootRouteWithContext, useHydrated } from '@tanstack/react-router'
+import { HeadContent, Outlet, Scripts, createRootRouteWithContext } from '@tanstack/react-router'
 import { RouteAnnouncer } from '#/components/layouts/route-announcer.tsx'
 import { SiteFooter } from '#/components/layouts/site-footer.tsx'
 import { SiteHeader } from '#/components/layouts/site-header.tsx'
@@ -52,8 +52,6 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 })
 
 function RootDocument() {
-  // Exposed for E2E tests: interactions before hydration are silently lost.
-  const hydrated = useHydrated()
   const user = useSessionUser()
   return (
     // The theme script sets data-theme on <html> before React hydrates it.
@@ -61,10 +59,8 @@ function RootDocument() {
       <head>
         <HeadContent />
       </head>
-      <body
-        className="flex min-h-dvh flex-col bg-background text-foreground antialiased"
-        data-hydrated={hydrated ? 'true' : undefined}
-      >
+      {/* data-hydrated, for E2E tests, is set by the page once its content has hydrated (Page, MarkHydrated). */}
+      <body className="flex min-h-dvh flex-col bg-background text-foreground antialiased">
         <SkipLink />
         <SiteHeader user={user} signOut={<SignOutButton />} />
         <main id="main" tabIndex={-1} className="flex-1 outline-none">

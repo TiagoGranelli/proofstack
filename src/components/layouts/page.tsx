@@ -1,6 +1,21 @@
-import type { ReactNode } from 'react'
+import { type ReactNode, useEffect } from 'react'
 import { FlashMessage } from '#/components/layouts/flash-message.tsx'
 import { cn } from '#/lib/utils.ts'
+
+/**
+ * Sets `<body data-hydrated="true">` once the page's own content has hydrated, for E2E tests: text typed into a
+ * field React has not hydrated yet stays in the field but never reaches the form's state. The root layout cannot
+ * tell: every route below it renders inside a Suspense boundary (the router's pending component), and React
+ * hydrates each of those in a later pass than the layout, so `useHydrated()` there is true while the page's
+ * fields are still plain HTML. Every page state (pages, not found, errors) renders a Page, inside its route's
+ * boundary.
+ */
+function MarkHydrated() {
+  useEffect(() => {
+    document.body.dataset.hydrated = 'true'
+  }, [])
+  return null
+}
 
 /**
  * A page's content inside the root layout's `<main>`: its `<h1>` (which RouteAnnouncer focuses after a
@@ -29,6 +44,7 @@ export function Page(props: {
       </div>
       <FlashMessage />
       {props.children}
+      <MarkHydrated />
     </div>
   )
 }

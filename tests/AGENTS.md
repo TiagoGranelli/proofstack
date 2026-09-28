@@ -109,9 +109,9 @@ statements (Oxlint `max-statements`; a `describe` has no length limit) and four 
   'Email', exact: true })`); a bare `getByLabel('Email')` also matches "Email confirmed". Mutation testing is
   not a gate yet: StrykerJS's Vitest runner skips nested tests on Vitest 5
   ([docs/stack.md](../docs/stack.md#mutation-testing)).
-- **E2E hydration and CSP.** Wait for `body[data-hydrated="true"]` before interacting: input before hydration
-  is lost. Import `test` and `expect` from `tests/e2e/fixtures.ts`, not `@playwright/test`: it fails the test
-  on any Content-Security-Policy violation.
+- **E2E hydration and CSP.** Wait for `body[data-hydrated="true"]` (set by `Page`) before interacting: input
+  before hydration is lost. Import `test` and `expect` from `tests/e2e/fixtures.ts`, not `@playwright/test`: it
+  fails the test on any Content-Security-Policy violation.
 - **E2E isolation.** Specs run in parallel on one database and never depend on each other's data. Import
   `test` from `tests/e2e/support/app.ts`: every worker gets its own `author` (created verified through
   `scripts/create-user.ts`) and every browser and API context its own client IP (sign-in rate limit).
