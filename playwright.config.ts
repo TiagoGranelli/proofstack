@@ -26,6 +26,12 @@ const PROJECTS = [
       launchOptions: { firefoxUserPrefs: { 'browser.tabs.remote.useCrossOriginOpenerPolicy': false } },
     },
   },
+  // Known upstream flake in both WebKit projects: Playwright 1.63's WebKit on Linux sometimes never resolves the
+  // first `goto` of a page to a document with COOP same-origin. The process swap COOP causes is cancelled ("Load
+  // request cancelled") and Playwright drops the abort, so `goto` waits for a commit that never comes
+  // (microsoft/playwright#42957, open; about 1 in 500 such navigations under CPU contention, none without COOP).
+  // No launch option turns COOP off here as the Firefox pref does: MiniBrowser's --features never reaches the
+  // pages Playwright creates.
   { name: 'webkit', dependencies, use: { ...devices['Desktop Safari'] } },
   { name: 'Pixel 7', dependencies, use: { ...devices['Pixel 7'] } },
   { name: 'iPhone 15', dependencies, use: { ...devices['iPhone 15'] } },
