@@ -152,8 +152,8 @@ policy; load it before changing `package.json` or `pnpm-workspace.yaml`.
 - **TypeScript.** The project has one TypeScript, 7.0.2 (no JS compiler API). Hey API stays on its `next`
   snapshot; 0.99.0 crashes on TS 7 ([ADR 0002](docs/decisions/0002-typescript-7.md)). `scripts/*.ts` run through
   Node's type stripping, so use erasable syntax only (no enums, namespaces, or constructor parameter
-  properties). The TanStack ESLint plugins (Oxlint `jsPlugins`) declare a TypeScript peer below 7; their rules
-  use no type information and run fine.
+  properties). The TanStack lint plugins run without type information under Oxlint
+  (`pnpm-workspace.yaml` explains the peer rule).
 - **CSP.** No policy allows `'unsafe-inline'` ([ADR 0010](docs/decisions/0010-content-security-policy.md)): style
   with classes, and put head scripts and styles through the route's `head()` so the router adds the nonce.
 - **Tailwind.** Keep `@import "tailwindcss" source("../")` in `src/styles/app.css`. Without it, Tailwind scans

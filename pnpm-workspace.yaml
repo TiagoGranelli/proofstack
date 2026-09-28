@@ -61,9 +61,9 @@ auditConfig:
 strictPeerDependencies: true
 
 # TypeScript is 7.0.2 only (ADR 0002). The TanStack ESLint plugins, which oxlint loads as JS plugins, bring
-# typescript-eslint 8, whose packages declare typescript <6.1. Their rules use no type information (no parser
-# services), so TypeScript's compiler API, which TS 7 no longer has, is never called. Remove these once
-# typescript-eslint accepts TS 7.
+# typescript-eslint 8, whose packages declare typescript <6.1. Oxlint hands JS plugins empty parser services, so
+# the rules' optional type-aware paths are skipped and TypeScript's compiler API, which TS 7 no longer has, is
+# never called. Remove these once typescript-eslint supports TS 7 (typescript-eslint/typescript-eslint#10940).
 peerDependencyRules:
   allowedVersions:
     '@typescript-eslint/project-service>typescript': 7.0.2
