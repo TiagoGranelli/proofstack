@@ -124,7 +124,11 @@ export default defineConfig({
         // The same React transform as the app (vite.config.ts), so components run as they ship, and Tailwind for the
         // tests that import src/styles/app.css to measure what the browser computes (contrast.test.tsx).
         plugins: [react(), babel({ presets: [reactCompilerPreset()] }), tailwindcss(), mswWorkerScript()],
-        // Pre-bundled up front: discovering them during the run makes Vite reload the page mid-test.
+        // Pre-bundled up front: discovering them during the run makes Vite reload the page mid-test, and test files
+        // then fail with "Failed to fetch dynamically imported module". If the run also logs "Error during dependency
+        // optimization" about `#tanstack-router-entry`, a component under test reaches a server function file with
+        // no stub below (`session.functions.ts` through `useSessionUser`, for one): read the value from the route's
+        // context instead.
         optimizeDeps: {
           include: [
             'react',
@@ -162,6 +166,9 @@ export default defineConfig({
           browser: {
             enabled: true,
             headless: true,
+            // No port set, on purpose: the browser server takes Vitest's 63315 or, when another run holds it, the next
+            // free one (Vite's strictPort is off), so checkouts and worktrees run this project at the same time.
+            // `api.port: 0` would not ask the OS for one: Vitest reads 0 as unset and uses 63315.
             // Playwright's Chromium, or CHROME_PATH like verify:app and lighthouse.
             provider: playwright({ launchOptions: { executablePath: process.env.CHROME_PATH || undefined } }),
             instances: [{ browser: 'chromium' }],
