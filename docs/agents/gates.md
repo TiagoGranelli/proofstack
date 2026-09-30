@@ -81,6 +81,13 @@ gate files to review:
 
 `.claude/settings.json` (committed) enforces in configuration what `AGENTS.md` asks for.
 
+**Context size.** `autoCompactWindow` is 200,000 tokens. Every model turn re-reads the whole conversation, so its
+cost grows with the context; models with a 1M window otherwise compact only near the limit. When an agent added
+comments to posts, the context reached 650k tokens and re-reading it was about 85% of the cost. Raise it in
+`.claude/settings.local.json` for a task that needs more history. `.claude/agents/verifier.md` runs the slow commands
+(`verify:app`, `test:e2e`, `build`) on a smaller model and returns only the failures, so their logs never enter the
+main conversation.
+
 **Hook.** `PostToolUse` on `Edit|Write|MultiEdit` runs `scripts/format-edited-file.ts`: it reads the hook input on
 stdin, formats the edited file with oxfmt and lints that one file with oxlint (without `--type-aware` and without
 `no-unused-vars`, which an import is between the edit that adds it and the edit that uses it; `pnpm check` adds
