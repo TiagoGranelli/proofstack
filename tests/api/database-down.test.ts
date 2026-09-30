@@ -1,64 +1,43 @@
-// With the database down, no endpoint may pretend to work: each one fails with its documented error (a 503
-// ServiceUnavailable for readiness, the empty 500 of an unexpected failure elsewhere), never an empty list or
-// a success. A repository call whose DbError is swallowed (caught into a default value) fails here. The
-// endpoints come from the contract, so a new one is checked without editing this file.
+// With the database down, no endpoint may pretend to work: each one fails with its documented error, never an empty
+// list or a success. A repository call whose DbError is swallowed (caught into a default value) fails here. The
+// operations and what they declare come from the contract (./operations.ts), so a new endpoint is checked without
+// editing this file; only one that does not reach the database is listed in NO_DATABASE.
 import { describe, expect, it, onTestFinished } from '@effect/vitest'
-import { HttpApi } from 'effect/unstable/httpapi'
-import { Api } from '#/contract/api.ts'
 import { authors, webHandler } from './harness.ts'
-
-const APP = 'http://localhost:3000'
-const MISSING_ID = '00000000-0000-4000-8000-000000000000'
-
-interface Operation {
-  readonly name: string
-  readonly method: string
-  readonly path: string
-}
-const operations: Operation[] = []
-HttpApi.reflect(Api, {
-  onGroup: () => {},
-  onEndpoint: ({ group, endpoint }) =>
-    operations.push({
-      name: `${group.identifier}.${endpoint.identifier}`,
-      method: endpoint.method,
-      path: endpoint.path,
-    }),
-})
+import { operations, requestFor } from './operations.ts'
 
 /**
- * What each operation answers while every repository call fails. Liveness never touches the database, and
- * neither does `me.get` here, where the session check is faked (the real one reads the session from Postgres:
- * tests/integration/db-failure.test.ts).
+ * What an operation answers while every repository call fails: the 503 ServiceUnavailable it declares for an outage
+ * (readiness), or else the empty 500 of an unexpected failure.
  */
-const EXPECTED: Record<string, { status: number; body: unknown }> = {
+const expectedFor = (errorStatuses: ReadonlySet<number>) =>
+  errorStatuses.has(503)
+    ? { status: 503, body: { _tag: 'ServiceUnavailable', message: 'Database unavailable' } }
+    : { status: 500, body: '' }
+
+/**
+ * Operations that answer without the database. Liveness never touches it, and neither does `me.get` here, where the
+ * session check is faked (the real one reads the session from Postgres: tests/integration/db-failure.test.ts).
+ */
+const NO_DATABASE: Record<string, { status: number; body: unknown }> = {
   'system.health': { status: 200, body: { status: 'ok' } },
-  'system.ready': { status: 503, body: { _tag: 'ServiceUnavailable', message: 'Database unavailable' } },
   'me.get': { status: 200, body: authors.alice },
-  'publicPosts.list': { status: 500, body: '' },
-  'myPosts.list': { status: 500, body: '' },
-  'myPosts.create': { status: 500, body: '' },
-  'myPosts.update': { status: 500, body: '' },
-  'myPosts.remove': { status: 500, body: '' },
 }
 
 describe('with the database down', () => {
-  it('knows every operation of the contract', () => {
-    expect(operations.map((op) => op.name).toSorted()).toEqual(Object.keys(EXPECTED).toSorted())
+  it('lists in NO_DATABASE only operations the contract has', () => {
+    const names = new Set(operations.map((op) => op.name))
+    expect(Object.keys(NO_DATABASE).filter((name) => !names.has(name))).toEqual([])
   })
 
-  it.each(operations)('$name fails with its documented error', async ({ name, method, path }) => {
+  it.each(operations)('$name fails with its documented error', async (operation) => {
     const { handler, dispose } = webHandler({ databaseDown: true })
     onTestFinished(dispose)
-    const response = await handler(
-      new Request(`${APP}${path.replace(':id', MISSING_ID)}`, {
-        method,
-        // A valid request from a signed-in author, so only the database can make it fail.
-        headers: { cookie: 'better-auth.session_token=alice', 'content-type': 'application/json' },
-        ...(method === 'POST' || method === 'PATCH' ? { body: JSON.stringify({ body: 'hello' }) } : {}),
-      }),
-    )
+    // A valid request from a signed-in author, so only the database can make it fail.
+    const response = await handler(requestFor(operation, { cookie: 'better-auth.session_token=alice' }))
     const text = await response.text()
-    expect({ status: response.status, body: text ? (JSON.parse(text) as unknown) : '' }).toEqual(EXPECTED[name])
+    expect({ status: response.status, body: text ? (JSON.parse(text) as unknown) : '' }).toEqual(
+      NO_DATABASE[operation.name] ?? expectedFor(operation.errorStatuses),
+    )
   })
 })

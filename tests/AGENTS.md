@@ -23,8 +23,7 @@ statements (Oxlint `max-statements`; a `describe` has no length limit) and four 
 
 - `pnpm test:unit|test:api|test:component [filter ...]` runs one fast layer; `pnpm test:fast` runs all three with
   coverage. `pnpm test:db [filter ...]` runs the `db` layer against a fresh `app_db_<pid>_test` database
-  next to `DATABASE_URL` (dropped afterwards; `KEEP_TEST_DB=1` keeps it). It needs Postgres, no build. Creating
-  any per-run database also drops those of runs whose pid is gone (stopped with Ctrl-C, killed).
+  next to `DATABASE_URL` (dropped afterwards; `KEEP_TEST_DB=1` keeps it). It needs Postgres, no build.
 - `pnpm test [filter ...]` (Vitest project `integration`) and `pnpm test:e2e [filter ...]` (Playwright) each
   start the built app themselves, after `pnpm build`, with Postgres and Mailpit (`pnpm mail:up`) running. Set no
   variables by hand: the runner's global setup (`tests/integration/global-setup.ts`, `tests/e2e/global-setup.ts`,
@@ -59,9 +58,10 @@ statements (Oxlint `max-statements`; a `describe` has no length limit) and four 
   store's rule on a virtual clock, one second per request, so `retryAfter` is computed, not a constant);
   `clientAs('alice' | 'bob' | 'forged' | 'none')` is a typed client with that session (one client per identity:
   the client captures its middleware). The typed client refuses to encode invalid payloads, so send those
-  through `webHandler(options?)` as raw `Request`s. `database-down.test.ts` sends every contract operation with
-  the database down and expects its documented failure, and `public-operations.test.ts` sends each one without a
-  session and expects 401 unless `PUBLIC_OPERATIONS` lists it, so a new endpoint is checked without edits.
+  through `webHandler(options?)` as raw `Request`s. `database-down.test.ts` sends every contract operation
+  (`operations.ts`) with the database down and expects the 503 it declares or else an empty 500 (`NO_DATABASE`
+  lists the few that skip the database), and `public-operations.test.ts` expects 401 without a session unless
+  `PUBLIC_OPERATIONS` lists it: a new endpoint needs no edit. List fakes page with `memoryPage` (`memory-keyset.ts`).
   Dummy env values (`vitest.config.ts`) pass the import-time check of `src/server/env.ts`; nothing uses them.
 - **db.** `tests/db` runs against a real, migrated database of its own (`tests/db/global-setup.ts`). A new
   repository method gets a query budget in its feature's `tests/db/<feature>-query-budget.test.ts` (as

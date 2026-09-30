@@ -20,9 +20,10 @@ together and must agree; the running API and the tests must agree with all three
    `tests/api/public-operations.test.ts`, which expects 401 without a session from every other operation. Add
    endpoints to the contract, never as raw Start server routes: a lint rule allows only `src/routes/api/$.ts` and
    `src/routes/api/auth/$.ts`.
-3. Implement the handler in `src/server/api/handlers.ts` and any repository method it needs (for example
-   `src/server/posts/repo.ts`). Keep the in-memory repository in `tests/api/harness.ts` in step with the real
-   one. A change to stored data follows the `database-change` skill first.
+3. Implement the handler in `src/server/api/handlers.ts` (a new group joins `ApiHandlers` there) and any
+   repository method it needs (for example `src/server/posts/repo.ts`). Keep the in-memory repository of
+   `tests/api/harness.ts` in step with the real one. A change to stored data follows the `database-change` skill
+   first.
 4. Run `pnpm codegen` to regenerate `openapi.json` and `src/sdk/`. Never edit either by hand.
 5. Map every new error tag to a message in `src/lib/api-error.ts`. Its error union is derived from the
    generated SDK, so `pnpm typecheck` fails until the switch in `describeApiError` handles the new tag.
@@ -30,7 +31,7 @@ together and must agree; the running API and the tests must agree with all three
    `clientAs(...)` (`handlers.ts` is in the 100% coverage gate), including each declared status, because the
    contract-coverage check after a full `verify:app` fails on a declared status no test provoked. A repository
    method also gets a query budget in `tests/db/<feature>-query-budget.test.ts`. `tests/api/database-down.test.ts`
-   covers a new operation without edits.
+   and `tests/api/public-operations.test.ts` cover a new operation without edits (`tests/api/operations.ts`).
 
 ## Done when
 
