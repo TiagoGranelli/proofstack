@@ -14,29 +14,43 @@ another stack ([README](../README.md#other-stacks)).
   API), `src/server/posts/`, `src/server/db/schema/posts.ts`, `src/features/posts/` (the composer and editor with
   their lazily loaded schema, `post-draft.ts` and `post-draft-schema.ts`, and the post mutations' `meta`
   invalidation in `api/posts-cache.ts`)
-- `src/components/ui/card.tsx`, `src/components/ui/textarea.tsx`, `src/components/ui/alert-dialog.tsx` (only
-  the example uses them; `pnpm exec shadcn add card textarea alert-dialog` brings them back), and with the dialog
-  its `get-nonce` dependency (`pnpm remove get-nonce`)
+- `src/components/ui/card.tsx`, `src/components/ui/textarea.tsx` (only the example uses them;
+  `pnpm exec shadcn add card textarea` brings them back)
 - Tests: `tests/api/posts.test.ts`, `tests/api/posts-repo.ts`, `tests/api/posts-validation.test.ts`,
   `tests/component/my-post.test.tsx`, `tests/component/delete-post.test.tsx`,
   `tests/component/post-composer.test.tsx`, `tests/component/post-list.test.tsx`,
-  `tests/component/post-time.test.tsx`, `tests/unit/post-time.test.ts`, `tests/db/posts-query-budget.test.ts` (the
-  repository's query budgets and the uuidv7 id check), `tests/db/post-schema.test.ts` (the table's CHECK, keyset
-  indexes and database clock), `tests/integration/posts.test.ts` (with the NUL-body case),
-  `tests/integration/posts-pagination.test.ts`, `tests/integration/posts-rate-limit.test.ts`,
-  `tests/e2e/posts-pagination.spec.ts`, `tests/e2e/seed.setup.ts`, `tests/unit/page-cursor.test.ts`
+  `tests/db/posts-query-budget.test.ts` (the repository's query budgets and the uuidv7 id check),
+  `tests/db/post-schema.test.ts` (the table's CHECK, keyset indexes and database clock),
+  `tests/integration/posts.test.ts` (with the NUL-body case), `tests/integration/posts-pagination.test.ts`,
+  `tests/integration/posts-rate-limit.test.ts`, `tests/e2e/posts-pagination.spec.ts`, `tests/e2e/seed.setup.ts`
+
+## Keep
+
+What a list of items needs is shared, not the example's, and stays for your first list feature, each with a test
+that does not go through posts:
+
+- UI: `src/components/lists/load-more-list.tsx`, `src/components/time/`, `src/components/confirm-delete/` (with
+  `src/components/ui/alert-dialog.tsx` and its `get-nonce` dependency), `src/components/form/character-count.tsx`,
+  `src/lib/infinite-pages.ts`; tests `tests/component/load-more-list.test.tsx`,
+  `tests/component/relative-time.test.tsx`, `tests/component/confirm-delete-button.test.tsx`,
+  `tests/component/character-count.test.tsx`, `tests/unit/describe-time.test.ts`
+- Contract and server: `src/contract/pages.ts` with `POSTS_PAGE_DEFAULT` and `POSTS_PAGE_MAX` in
+  `src/contract/limits.ts`, `src/server/db/query.ts`, `src/server/db/keyset.ts`,
+  `src/server/db/schema/columns.ts`; tests `tests/unit/page-cursor.test.ts`, `tests/db/keyset.test.ts`
+- Test helpers: `tests/api/memory-keyset.ts`, `tests/api/operations.ts`, and `listPage`/`listPages` in
+  `tests/component/api-mocks.ts`
 
 ## Edit
 
 Application code:
 
 - `src/contract/api.ts`: drop `.add(PublicPosts)`, `.add(MyPosts)` and their import.
-- `src/contract/limits.ts`: drop `POST_MAX_LENGTH`, `POSTS_PAGE_DEFAULT`, `POSTS_PAGE_MAX`.
+- `src/contract/limits.ts`: drop `POST_MAX_LENGTH`.
 - `src/lib/api-error.ts`: drop the `PostNotFound` case. The `ValidationError` and `RateLimited` cases stay:
   they are always part of the union (`MiddlewareError`).
-- `src/server/api/handlers.ts`: drop `pageRequest`, `PublicPostsHandlers`, `MyPostsHandlers` and the posts
-  imports.
-- `src/server/api/web-handler.ts`: drop `PublicPostsHandlers`, `MyPostsHandlers` and the `PostsRepo` layer.
+- `src/server/api/handlers.ts`: drop `PublicPostsHandlers`, `MyPostsHandlers` (also from `ApiHandlers`), and
+  the imports only they used.
+- `src/server/api/web-handler.ts`: drop `PostsRepo.layer` and its import.
 - `src/server/db/schema/index.ts`: drop `export * from './posts.ts'`.
 - `src/routes/__root.tsx`: the description becomes
   ``{ name: 'description', content: `${APP_NAME}: sign in to reach your dashboard.` }``.
@@ -59,11 +73,8 @@ Tests:
   account inputs (name, email, tokens) still use it.
 - `tests/db/transaction.test.ts`: its writes go through `PostsRepo`. `Database.transaction` stays, so keep the
   test and write through `Database.client` into a table that stays (for example `verification`).
-- `tests/api/database-down.test.ts`: drop the `publicPosts.*` and `myPosts.*` entries of `EXPECTED`.
-- `tests/api/harness.ts`: drop `PublicPostsHandlers`, `MyPostsHandlers` and `memoryPostsRepo`.
-- `tests/api/memory-db.ts`: drop `clockStepMicros` from `RepoOptions`.
-- `tests/component/api-mocks.ts`: drop the posts entries of `ErrorsByOperation` and the `post`, `postPage`,
-  `postPages` factories.
+- `tests/api/harness.ts`: drop `memoryPostsRepo`.
+- `tests/component/api-mocks.ts`: drop the posts entries of `ErrorsByOperation` and the `post` factory.
 - `tests/component/api-error-alert.test.tsx` and `tests/unit/api-error.test.ts`: drop the `PostNotFound` cases.
 - `tests/component/error-boundaries.test.tsx`: drop the section-boundary test that mounts `PostComposer` and
   `MyPostList`, and replace the two dashboard tests with:
@@ -226,7 +237,8 @@ function Dashboard() {
 2. `pnpm codegen`: `openapi.json` and `src/sdk/` without the posts operations.
 3. `pnpm format`, then `pnpm check`, `pnpm check:drift`, `pnpm build && pnpm verify:app`.
 
-Re-measure the coverage floor in `vitest.config.ts` after each merge instead of copying the numbers above.
+Re-measure the coverage floor in `vitest.config.ts` after each merge instead of copying the numbers above (they
+were measured before the shared list pieces and their tests stayed behind).
 
 `git grep -n -i -w -e posts -e post -- ':!*.md'` then lists what is left of the example outside docs: the
 `POST` method, `postgres` and a few comments that use a post only as an illustration. Docs (`AGENTS.md`, the

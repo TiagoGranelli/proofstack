@@ -31,7 +31,9 @@ export const api = createMswHandlers().pick
 
 /**
  * The error responses each operation declares, by status (from the generated SDK types). Keys must be
- * generated operations: `api[operation]` below does not compile otherwise.
+ * generated operations: `api[operation]` below does not compile otherwise. An operation needs its line only once a
+ * test calls `apiError` for it (the call does not compile before). Written by hand because nothing generated maps an
+ * operation to its `<Operation>Errors` type: the SDK functions return the errors as one union, without the statuses.
  */
 type ErrorsByOperation = {
   systemReady: SystemReadyErrors

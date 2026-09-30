@@ -1,7 +1,9 @@
 // The shared list plumbing on real Postgres, on a table of its own built from the shared columns
 // (src/server/db/schema/columns.ts): keyset pages (src/server/db/keyset.ts) that never skip or repeat a row, even
-// rows written in the same microsecond, in the order the api layer's fake uses (tests/api/memory-keyset.ts); the
-// uuidv7 id; and the text CHECK. The posts table has its own checks (post-schema.test.ts).
+// rows written in the same microsecond, in the order and with the sort keys of the api layer's fake
+// (tests/api/memory-keyset.ts); the uuidv7 id; and the text CHECK. The posts table has its own checks
+// (post-schema.test.ts).
+import { inArray } from 'drizzle-orm'
 import { PgDialect, getTableConfig, pgTable, text } from 'drizzle-orm/pg-core'
 import { Effect } from 'effect'
 import type { DatabaseError } from 'pg'
@@ -11,7 +13,7 @@ import { db, pool } from '#/server/db/client.ts'
 import { keyset, toPage } from '#/server/db/keyset.ts'
 import { query } from '#/server/db/query.ts'
 import { authorId, createdAt, trimmedTextCheck, updatedAt, uuidv7Id } from '#/server/db/schema/columns.ts'
-import { memoryPage } from '../api/memory-keyset.ts'
+import { memoryClock, memoryPage } from '../api/memory-keyset.ts'
 import { createAccount } from './helpers.ts'
 
 const note = pgTable(
@@ -98,6 +100,28 @@ const sqlState = (body: string) =>
     () => 'ok',
     (error: unknown) => (error as DatabaseError).code,
   )
+
+describe('the fake clock (tests/api/memory-keyset.ts)', () => {
+  it('writes sort keys as Postgres renders them, down to the microsecond', async () => {
+    const tick = memoryClock(1)
+    const keys = [tick().key, tick().key, tick().key]
+    const { rows } = await pool.query<{ id: string }>(
+      `insert into keyset_test_note (author_id, body, created_at)
+         select $1, 'clock', created_at from unnest($2::timestamptz[]) created_at returning id`,
+      [author.id, keys],
+    )
+    const read = await db
+      .select({ cursorAt: notes.cursorAt })
+      .from(note)
+      .where(
+        inArray(
+          note.id,
+          rows.map((row) => row.id),
+        ),
+      )
+    expect(read.map((row) => row.cursorAt).toSorted()).toEqual(keys)
+  })
+})
 
 describe('shared columns', () => {
   it('give a new row a time-ordered uuidv7 id and the database clock', async () => {
