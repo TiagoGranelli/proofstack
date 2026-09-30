@@ -96,6 +96,9 @@ describe('SessionList', () => {
     response.release()
     await expect.poll(() => router.state.location.href).toBe('/login')
     expect(queryClient.getQueryData(['my data'])).toBeUndefined()
+    // The list's reload must end inside this test: after it, the handlers are reset and a late request would fail
+    // the next test as unhandled.
+    await expect.poll(() => queryClient.isFetching()).toBe(0)
   })
 
   it('stays and says so when signing out everywhere fails', async () => {
