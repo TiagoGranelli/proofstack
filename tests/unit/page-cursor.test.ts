@@ -1,11 +1,12 @@
 import { Exit, Schema } from 'effect'
-// The list cursor (`PageCursor` in src/contract/posts.ts): an opaque base64url JSON key that the server hands
+// The list cursor (`PageCursor` in src/contract/pages.ts): an opaque base64url JSON key that the server hands
 // out as `nextCursor` and takes back as `?cursor=`. Whatever it decodes to reaches Postgres as
-// `::timestamptz` and `::uuid` (src/server/posts/repo.ts), where a malformed value fails the query (a 500)
+// `::timestamptz` and `::uuid` (src/server/db/keyset.ts), where a malformed value fails the query (a 500)
 // instead of answering 400, so the schema must admit exactly the keys Postgres produces and nothing else.
 import * as fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
-import { PageCursor } from '#/contract/posts.ts'
+import { POSTS_PAGE_MAX } from '#/contract/limits.ts'
+import { PageCursor, PageQuery, pageOf } from '#/contract/pages.ts'
 
 type Key = PageCursor
 
@@ -150,5 +151,28 @@ describe('PageCursor', () => {
     ['year 9999', '9999-12-31T23:59:59.999999Z'],
   ])('accepts %s', (_, createdAt) => {
     expect(accepts(createdAt)).toBe(true)
+  })
+})
+
+describe('PageQuery', () => {
+  const decodeQuery = Schema.decodeUnknownExit(Schema.Struct(PageQuery))
+
+  it('takes no parameter, or a limit from 1 to the maximum as a whole number', () => {
+    expect(decodeQuery({})).toEqual(Exit.succeed({}))
+    expect(decodeQuery({ limit: '1' })).toEqual(Exit.succeed({ limit: 1 }))
+    expect(decodeQuery({ limit: String(POSTS_PAGE_MAX) })).toEqual(Exit.succeed({ limit: POSTS_PAGE_MAX }))
+  })
+
+  it.each(['0', String(POSTS_PAGE_MAX + 1), '1e1', ' 5', '2.5', '-1'])('rejects the limit "%s"', (limit) => {
+    expect(Exit.isFailure(decodeQuery({ limit }))).toBe(true)
+  })
+})
+
+describe('pageOf', () => {
+  it('encodes the next cursor opaquely, and null on the last page', () => {
+    const encodePage = Schema.encodeSync(pageOf(Schema.String))
+    const key = { createdAt: '2026-01-01T00:00:01.000001Z', id: ID }
+    expect(encodePage({ items: ['a'], nextCursor: key })).toEqual({ items: ['a'], nextCursor: encode(key) })
+    expect(encodePage({ items: [], nextCursor: null })).toEqual({ items: [], nextCursor: null })
   })
 })

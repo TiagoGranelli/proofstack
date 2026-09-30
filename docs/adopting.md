@@ -84,8 +84,9 @@ The `add-feature` skill (`.agents/skills/add-feature/SKILL.md`) walks through th
 2. Endpoints, schemas and tagged errors in `src/contract/`, added to `Api` in `src/contract/api.ts`.
    Private endpoints go in a group with the `Authentication` middleware; `tests/api/public-operations.test.ts`
    fails for an operation that answers without a session unless you list it in `PUBLIC_OPERATIONS` there.
-3. A repository under `src/server/<feature>/` and handlers in `src/server/api/handlers.ts`, provided in
-   `src/server/api/web-handler.ts` and in the api test harness (`tests/api/harness.ts`).
+3. A repository under `src/server/<feature>/` (on `src/server/db/query.ts`, and `keyset.ts` for a list) and
+   handlers in `src/server/api/handlers.ts`, added to `ApiHandlers`; the repository is provided in
+   `src/server/api/web-handler.ts` and, in memory, in the api test harness (`tests/api/harness.ts`).
 4. `pnpm codegen`, then a message for each new error tag in `src/lib/api-error.ts` (typecheck fails until
    there is one).
 5. UI in `src/features/<name>/`, pages in `src/routes/`.

@@ -289,6 +289,14 @@
       }
     },
     {
+      // Except the Drizzle schema's shared column builders: their type is Drizzle's record of the column's name,
+      // nullability, default and key, which the table infers from them; spelled out, it restates Drizzle internals.
+      "files": ["src/server/db/schema/columns.ts"],
+      "rules": {
+        "typescript/explicit-module-boundary-types": "off"
+      }
+    },
+    {
       // The Effect API takes its dependencies from Layers (Database, PostsRepo, RateLimitStore, SessionLookup), so
       // tests/api can provide fakes. Module singletons and drivers stay out of it. No later override may set
       // no-restricted-imports on these paths: it would replace this list.

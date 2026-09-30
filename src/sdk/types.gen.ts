@@ -150,7 +150,7 @@ export type PublicPostsListData = {
   query?: {
     cursor?: PageCursor;
     /**
-     * Posts per page, 1 to 50. Default 20.
+     * Items per page, 1 to 50. Default 20.
      */
     limit?: string;
   };
@@ -181,7 +181,7 @@ export type MyPostsListData = {
   query?: {
     cursor?: PageCursor;
     /**
-     * Posts per page, 1 to 50. Default 20.
+     * Items per page, 1 to 50. Default 20.
      */
     limit?: string;
   };

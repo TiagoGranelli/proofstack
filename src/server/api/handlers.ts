@@ -1,14 +1,14 @@
 import '@tanstack/react-start/server-only'
-import { Effect } from 'effect'
+import { Effect, Layer } from 'effect'
 import { HttpApiBuilder } from 'effect/unstable/httpapi'
 import { Api } from '#/contract/api.ts'
 import { ServiceUnavailable } from '#/contract/errors.ts'
-import { POSTS_PAGE_DEFAULT } from '#/contract/limits.ts'
 import { CurrentUser } from '#/contract/middleware.ts'
 import { PostNotFound } from '#/contract/posts.ts'
 import { DatabaseHealth } from '../db/health.ts'
+import { pageRequest } from '../db/keyset.ts'
 import { isDraining } from '../lifecycle.ts'
-import { PostsRepo, type PageRequest } from '../posts/repo.ts'
+import { PostsRepo } from '../posts/repo.ts'
 
 // A draining process is not ready, whatever the database says: the load balancer stops routing to it while it
 // finishes what it has (../lifecycle.ts).
@@ -22,7 +22,7 @@ const readiness = (database: DatabaseHealth['Service']) =>
   })
 
 /** GET /api/health (the process answers) and GET /api/ready (it can serve: not draining, database up). */
-export const SystemHandlers = HttpApiBuilder.group(
+const SystemHandlers = HttpApiBuilder.group(
   Api,
   'system',
   Effect.fn(function* (handlers) {
@@ -34,17 +34,12 @@ export const SystemHandlers = HttpApiBuilder.group(
 )
 
 /** The session's user, as the Authentication middleware resolved it: no query of its own. */
-export const MeHandlers = HttpApiBuilder.group(Api, 'me', (handlers) =>
+const MeHandlers = HttpApiBuilder.group(Api, 'me', (handlers) =>
   handlers.handle('get', () => CurrentUser.use(Effect.succeed)),
 )
 
-const pageRequest = (query: { readonly cursor?: PageRequest['cursor']; readonly limit?: number }): PageRequest => ({
-  cursor: query.cursor,
-  limit: query.limit ?? POSTS_PAGE_DEFAULT,
-})
-
 /** The public feed, newest first, a page at a time. Needs no session. */
-export const PublicPostsHandlers = HttpApiBuilder.group(
+const PublicPostsHandlers = HttpApiBuilder.group(
   Api,
   'publicPosts',
   Effect.fn(function* (handlers) {
@@ -73,7 +68,7 @@ const removeOwnPost = (repo: Repo, id: string) =>
   })
 
 /** The signed-in author's own posts: list, create, update and remove, behind the Authentication middleware. */
-export const MyPostsHandlers = HttpApiBuilder.group(
+const MyPostsHandlers = HttpApiBuilder.group(
   Api,
   'myPosts',
   Effect.fn(function* (handlers) {
@@ -89,3 +84,9 @@ export const MyPostsHandlers = HttpApiBuilder.group(
       .handle('remove', ({ params }) => removeOwnPost(repo, params.id))
   }),
 )
+
+/**
+ * Every handler group of the contract, the one list both the running API (./web-handler.ts) and the api test layer
+ * (tests/api/harness.ts) provide: a new group goes here, and each of those two adds the Layers it needs.
+ */
+export const ApiHandlers = Layer.mergeAll(SystemHandlers, MeHandlers, PublicPostsHandlers, MyPostsHandlers)

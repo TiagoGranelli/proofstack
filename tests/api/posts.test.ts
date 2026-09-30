@@ -4,7 +4,8 @@
 import { assert, describe, it } from '@effect/vitest'
 import { Effect } from 'effect'
 import { WRITE_WINDOW_SECONDS, WRITES_PER_WINDOW, POSTS_PAGE_DEFAULT, POSTS_PAGE_MAX } from '#/contract/limits.ts'
-import type { PageCursor, PostPage } from '#/contract/posts.ts'
+import type { PageCursor } from '#/contract/pages.ts'
+import type { PostPage } from '#/contract/posts.ts'
 import { apiLayer, authors, clientAs } from './harness.ts'
 
 const MISSING_ID = '00000000-0000-4000-8000-000000000000'

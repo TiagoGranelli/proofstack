@@ -9,7 +9,7 @@ import { requestSession } from '../http/request-session.ts'
 import { onShutdown } from '../lifecycle.ts'
 import { log } from '../log.ts'
 import { PostsRepo } from '../posts/repo.ts'
-import { MeHandlers, MyPostsHandlers, PublicPostsHandlers, SystemHandlers } from './handlers.ts'
+import { ApiHandlers } from './handlers.ts'
 import { AuthenticationLive, issuePath, RequestValidationLive } from './middleware.ts'
 import { RateLimitStore, WriteRateLimitLive } from './rate-limit.ts'
 import { SessionLookup } from './session-lookup.ts'
@@ -69,10 +69,10 @@ const SessionLookupLive = Layer.succeed(SessionLookup, {
 })
 
 const ApiLive = HttpApiBuilder.layer(Api, { openapiPath: '/api/openapi.json' }).pipe(
-  Layer.provide([SystemHandlers, MeHandlers, PublicPostsHandlers, MyPostsHandlers]),
+  Layer.provide(ApiHandlers),
   Layer.provide([
-    DatabaseHealth.layer.pipe(Layer.provide(Database.layer)),
-    PostsRepo.layer.pipe(Layer.provide(Database.layer)),
+    // The services the handlers read, each over the app's Postgres pool.
+    Layer.mergeAll(DatabaseHealth.layer, PostsRepo.layer).pipe(Layer.provide(Database.layer)),
     AuthenticationLive.pipe(Layer.provide(SessionLookupLive)),
     RequestValidationLive,
     WriteRateLimitLive.pipe(Layer.provide(RateLimitStore.postgres)),

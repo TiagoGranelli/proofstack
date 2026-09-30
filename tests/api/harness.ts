@@ -16,7 +16,7 @@ import {
 import { HttpApiBuilder, HttpApiClient, HttpApiMiddleware } from 'effect/unstable/httpapi'
 import { Api } from '#/contract/api.ts'
 import { Authentication } from '#/contract/middleware.ts'
-import { MeHandlers, MyPostsHandlers, PublicPostsHandlers, SystemHandlers } from '#/server/api/handlers.ts'
+import { ApiHandlers } from '#/server/api/handlers.ts'
 import { AuthenticationLive, RequestValidationLive } from '#/server/api/middleware.ts'
 import { RateLimitStore, WriteRateLimitLive } from '#/server/api/rate-limit.ts'
 import { SessionLookup } from '#/server/api/session-lookup.ts'
@@ -84,9 +84,9 @@ export const memoryRateLimitStore = Layer.sync(RateLimitStore, () => {
  * are built.
  */
 export const apiLayer = (options: RepoOptions = {}) =>
-  Layer.mergeAll(SystemHandlers, MeHandlers, PublicPostsHandlers, MyPostsHandlers).pipe(
-    Layer.provide(memoryDatabaseHealth(options)),
-    Layer.provide(memoryPostsRepo(options)),
+  ApiHandlers.pipe(
+    // In memory, what src/server/api/web-handler.ts builds over Postgres.
+    Layer.provide(Layer.mergeAll(memoryDatabaseHealth(options), memoryPostsRepo(options))),
     Layer.provideMerge(
       Layer.mergeAll(
         AuthenticationOverFakeSessions,

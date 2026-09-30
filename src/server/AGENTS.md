@@ -20,7 +20,8 @@ shutdown (`lifecycle.ts`). Read this before you change anything here. The root `
 - Authorization happens in the Effect `Authentication` middleware (`api/middleware.ts`). The `_authed` route
   guard is only a UX redirect. Ownership is part of each repository query's `WHERE`, so another author's id
   behaves like a missing one.
-- A repository takes its client per statement from `Database.client`; a write of several statements runs in
+- A repository sends each statement through `query` (`db/query.ts`), which takes the client from
+  `Database.client`, and pages a list with `db/keyset.ts`; a write of several statements runs in
   `Database.transaction(effect)` (`db/client.ts`, proven in `tests/db/transaction.test.ts`).
 - A repository method sends a fixed number of statements, whatever the page size: every new one gets a query
   budget in `tests/db/<feature>-query-budget.test.ts` (see `tests/AGENTS.md`).
@@ -39,7 +40,7 @@ shutdown (`lifecycle.ts`). Read this before you change anything here. The root `
 `effect@latest` on npm is still v3, so most examples on the web use the wrong API. Read
 `node_modules/effect/AGENTS.md` in full before writing Effect code, and look up APIs in `node_modules/effect/src`.
 `effect/unstable/*` imports are confined to `src/contract`, `src/server/api`, and `scripts/openapi.ts`. Core
-`effect` is also imported by `src/server/posts` and `src/server/db/client.ts`. The coming rename of those paths is
+`effect` is also imported by `src/server/posts` and `src/server/db`. The coming rename of those paths is
 covered by the `upgrade-prerelease-deps` skill.
 
 ## Better Auth

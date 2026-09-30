@@ -1,7 +1,8 @@
 // Query budgets of the example's repository (see query-budget.test.ts): a list sends one statement for 1 row or 50.
 import { Effect, Layer } from 'effect'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import type { PageCursor, PostPage } from '#/contract/posts.ts'
+import type { PageCursor } from '#/contract/pages.ts'
+import type { PostPage } from '#/contract/posts.ts'
 import { pool } from '#/server/db/client.ts'
 import * as schema from '#/server/db/schema/index.ts'
 import { PostsRepo } from '#/server/posts/repo.ts'

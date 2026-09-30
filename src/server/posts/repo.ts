@@ -1,11 +1,11 @@
 import '@tanstack/react-start/server-only'
-import { and, desc, eq, sql, type SQL } from 'drizzle-orm'
-import { Context, Data, Effect, Layer } from 'effect'
-import type { PageCursor, Post, PostPage } from '#/contract/posts.ts'
+import { and, eq } from 'drizzle-orm'
+import { Context, Effect, Layer } from 'effect'
+import type { Post, PostPage } from '#/contract/posts.ts'
 import { Database, type Db } from '../db/client.ts'
+import { keyset, toPage, type PageRequest } from '../db/keyset.ts'
+import { type DbError, isUuid, query } from '../db/query.ts'
 import { post, user } from '../db/schema/index.ts'
-
-class DbError extends Data.TaggedError('DbError')<{ readonly cause: unknown }> {}
 
 const toPost = (row: { id: string; body: string; createdAt: Date; updatedAt: Date }, authorName: string): Post => ({
   id: row.id,
@@ -15,60 +15,20 @@ const toPost = (row: { id: string; body: string; createdAt: Date; updatedAt: Dat
   updatedAt: row.updatedAt.toISOString(),
 })
 
+const posts = keyset(post)
+
 const pageColumns = {
   id: post.id,
   body: post.body,
   createdAt: post.createdAt,
   updatedAt: post.updatedAt,
-  // The sort key at full (microsecond) precision. `createdAt` as a JS Date is rounded to milliseconds, and a
-  // cursor built from it would skip or repeat posts created within the same millisecond.
-  cursorAt: sql<string>`to_char(${post.createdAt} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
+  cursorAt: posts.cursorAt,
 }
-
-/** A page of a list ordered by (created_at desc, id desc): the first `limit` posts after the cursor's key. */
-export interface PageRequest {
-  readonly cursor?: PageCursor | undefined
-  readonly limit: number
-}
-
-// A row-value comparison, which Postgres answers from the (…, created_at desc, id desc) indexes: the scan
-// starts right after the cursor instead of skipping over an offset.
-const afterCursor = (cursor: PageCursor | undefined): SQL | undefined =>
-  cursor ? sql`(${post.createdAt}, ${post.id}) < (${cursor.createdAt}::timestamptz, ${cursor.id}::uuid)` : undefined
-
-const newestFirst = [desc(post.createdAt), desc(post.id)]
-
-interface PageRow {
-  readonly id: string
-  readonly body: string
-  readonly createdAt: Date
-  readonly updatedAt: Date
-  readonly cursorAt: string
-}
-
-/** `rows` come from a query with `limit + 1`: the extra row only tells whether another page exists. */
-const toPage = <R extends PageRow>(rows: ReadonlyArray<R>, limit: number, authorName: (row: R) => string): PostPage => {
-  const items = rows.slice(0, limit)
-  const last = items.at(-1)
-  return {
-    items: items.map((row) => toPost(row, authorName(row))),
-    nextCursor: rows.length > limit && last ? { createdAt: last.cursorAt, id: last.id } : null,
-  }
-}
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 interface Author {
   readonly id: string
   readonly name: string
 }
-
-// Each statement goes through the current transaction, if the caller runs in one (Database.transaction), and
-// through `own`, the client the repository was built with, otherwise.
-const query = <A>(own: Db, run: (db: Db) => Promise<A>): Effect.Effect<A, DbError> =>
-  Effect.flatMap(Database.client(own), (db) =>
-    Effect.tryPromise({ try: () => run(db), catch: (cause) => new DbError({ cause }) }),
-  )
 
 const listPublic = Effect.fn('PostsRepo.listPublic')(function* (own: Db, page: PageRequest) {
   const rows = yield* query(own, (db) =>
@@ -76,11 +36,11 @@ const listPublic = Effect.fn('PostsRepo.listPublic')(function* (own: Db, page: P
       .select({ ...pageColumns, authorName: user.name })
       .from(post)
       .innerJoin(user, eq(user.id, post.authorId))
-      .where(afterCursor(page.cursor))
-      .orderBy(...newestFirst)
+      .where(posts.after(page.cursor))
+      .orderBy(...posts.newestFirst)
       .limit(page.limit + 1),
   )
-  return toPage(rows, page.limit, (row) => row.authorName)
+  return toPage(rows, page.limit, (row) => toPost(row, row.authorName))
 })
 
 const listByAuthor = Effect.fn('PostsRepo.listByAuthor')(function* (own: Db, author: Author, page: PageRequest) {
@@ -88,11 +48,11 @@ const listByAuthor = Effect.fn('PostsRepo.listByAuthor')(function* (own: Db, aut
     db
       .select(pageColumns)
       .from(post)
-      .where(and(eq(post.authorId, author.id), afterCursor(page.cursor)))
-      .orderBy(...newestFirst)
+      .where(and(eq(post.authorId, author.id), posts.after(page.cursor)))
+      .orderBy(...posts.newestFirst)
       .limit(page.limit + 1),
   )
-  return toPage(rows, page.limit, () => author.name)
+  return toPage(rows, page.limit, (row) => toPost(row, author.name))
 })
 
 const create = Effect.fn('PostsRepo.create')(function* (own: Db, author: Author, body: string) {
@@ -110,7 +70,7 @@ interface Edit {
 
 // Ownership is part of the WHERE clause, so another author's id behaves exactly like a missing id.
 const update = Effect.fn('PostsRepo.update')(function* (own: Db, author: Author, edit: Edit) {
-  if (!UUID.test(edit.id)) return undefined
+  if (!isUuid(edit.id)) return undefined
   const [row] = yield* query(own, (db) =>
     db
       .update(post)
@@ -122,7 +82,7 @@ const update = Effect.fn('PostsRepo.update')(function* (own: Db, author: Author,
 })
 
 const remove = Effect.fn('PostsRepo.remove')(function* (own: Db, author: Author, id: string) {
-  if (!UUID.test(id)) return false
+  if (!isUuid(id)) return false
   const rows = yield* query(own, (db) =>
     db
       .delete(post)
