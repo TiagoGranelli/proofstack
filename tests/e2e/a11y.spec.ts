@@ -24,7 +24,7 @@ const STATES: Record<string, (fixtures: Fixtures) => Promise<unknown>> = {
   'home with posts': async ({ page, request, author }) => {
     const { body } = await seedPost(request, author)
     await visit(page, '/')
-    await expect(page.getByTestId('public-posts').locator('li').filter({ hasText: body })).toBeVisible()
+    await expect(page.getByTestId('public-posts').locator(':scope > li').filter({ hasText: body })).toBeVisible()
   },
   'home, no posts yet': async ({ page }) => {
     await navigateWithApiResponse(page, '/api/posts', { json: lastPage() })

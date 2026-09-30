@@ -11,6 +11,13 @@ const publicListRequest = (url: URL) => url.pathname === '/api/posts'
 
 const items = (page: Page, testId: string) => page.getByTestId(testId).locator(':scope > li')
 
+/**
+ * The body of each post in the list, in order: its item's first paragraph. Not the item's whole text, nor every
+ * paragraph in the list, so what a feature adds under a post (its comments) changes nothing here.
+ */
+const postBodies = (page: Page, testId: string) =>
+  items(page, testId).evaluateAll((posts) => posts.map((post) => post.querySelector('p')?.textContent))
+
 /** From now on, the URL of every request the page makes to `pathname`, in order. */
 const recordRequests = (page: Page, pathname: string) => {
   const urls: string[] = []
@@ -26,10 +33,10 @@ const loadMoreWithKeyboard = async (page: Page, testId: string, key: 'Enter' | '
   await page.keyboard.press(key)
   // Focus moves to the first post of the new page, so reading continues where the new posts start.
   await expect(items(page, testId).nth(before)).toBeFocused()
-  const texts = await items(page, testId).allTextContents()
-  expect(texts.length).toBeGreaterThan(before)
-  expect(texts.length).toBeLessThanOrEqual(before + PAGE_SIZE)
-  expect(new Set(texts).size).toBe(texts.length)
+  const bodies = await postBodies(page, testId)
+  expect(bodies.length).toBeGreaterThan(before)
+  expect(bodies.length).toBeLessThanOrEqual(before + PAGE_SIZE)
+  expect(new Set(bodies).size).toBe(bodies.length)
 }
 
 test.describe('as the seeded author', () => {
@@ -61,9 +68,7 @@ test.describe('as the seeded author', () => {
     await expect(page.getByRole('button', { name: 'Load more posts' })).toHaveCount(0)
     await expect(page.locator(':focus')).toHaveCount(1)
     // Every post exactly once, newest first.
-    expect(await page.getByTestId('my-posts').locator('p').allTextContents()).toEqual(
-      PAGINATED_AUTHOR.bodies.toReversed(),
-    )
+    expect(await postBodies(page, 'my-posts')).toEqual(PAGINATED_AUTHOR.bodies.toReversed())
   })
 })
 

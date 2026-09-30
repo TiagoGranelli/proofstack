@@ -176,7 +176,8 @@ export const dashboardWithMyPost = async (page: Page, author: Author) => {
   const body = `a11y post ${crypto.randomUUID()}`
   await page.getByLabel('New post').fill(body)
   await page.getByRole('button', { name: 'Publish' }).click()
-  const post = page.getByTestId('my-posts').locator('li').filter({ hasText: body })
+  // The list's own items: a feature may nest lists of its own inside a post.
+  const post = page.getByTestId('my-posts').locator(':scope > li').filter({ hasText: body })
   await expect(post).toBeVisible()
   return { body, post, edit: post.getByRole('button', { name: /^Edit/ }) }
 }

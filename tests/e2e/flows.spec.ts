@@ -20,13 +20,13 @@ const exactly = (text: string) => new RegExp(`^${text.replaceAll(/[.*+?^${}()|[\
 const myPost = (page: Page, body: string) =>
   page
     .getByTestId('my-posts')
-    .locator('li')
+    .locator(':scope > li')
     .filter({ has: page.locator('p', { hasText: exactly(body) }) })
 /** The post currently being edited. */
 const editing = (page: Page) =>
   page
     .getByTestId('my-posts')
-    .locator('li')
+    .locator(':scope > li')
     .filter({ has: page.getByRole('textbox', { name: 'Edit post' }) })
 
 const publish = async (page: Page, body: string) => {
