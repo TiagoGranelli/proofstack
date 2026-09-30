@@ -98,9 +98,9 @@ statements (Oxlint `max-statements`; a `describe` has no length limit) and four 
   in `tests/e2e/a11y.spec.ts`, a landmark snapshot in `tests/e2e/landmarks.spec.ts`, and, if it has controls, a row
   in the tab-order table of `tests/e2e/keyboard.spec.ts` (`tests/unit/route-coverage.test.ts` fails for a page
   route without all three; it recognizes `visit(page, '/path')` and the helpers listed in
-  `scripts/route-coverage.ts`). `tabOrder` records every Tab stop, its accessible name and visible focus, and
-  fails on a focus trap: `tabThrough` walks until a temporary sentinel after the last control, because what a
-  browser does past the last control differs by engine.
+  `scripts/route-coverage.ts`). `tabOrder` records each Tab stop, its name and visible focus, and fails on a
+  focus trap; `expectTabStops` checks the header and footer exactly and a row's own controls in order
+  with others between, so a new section on a page breaks no other state's row.
   `navigateWithApiResponse(page, '/api/posts' | '/api/me/posts', response)` (`tests/e2e/support/app.ts`)
   reaches empty and failure states by answering the browser's API call on a client-side navigation; build
   list bodies with `lastPage(...)` so they match the contract's `PostPage`.

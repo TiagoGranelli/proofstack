@@ -44,8 +44,10 @@ export type TabStop = {
 
 /**
  * Presses Tab (Shift+Tab with `backwards`) from the current focus until focus has gone past every control
- * of the page, and returns every stop on the way. Fails if that takes more than `max` presses (a focus trap,
- * or more controls than expected), or if focus is lost to the document on the way.
+ * of the page, and returns every stop on the way. Fails if focus comes back to a control it already left (a
+ * focus trap), if focus is lost to the document on the way, or after `max` presses. A trap is found by the
+ * repeated control, not by counting presses, so a page that gains controls (a comment field under each post)
+ * needs no new limit.
  *
  * "Past every control" is a temporary, focusable sentinel at the very end of `body` (at the very start when
  * going backwards): what the browser does once Tab leaves the last control differs and is not part of the
@@ -54,7 +56,7 @@ export type TabStop = {
  * a trap. Focus that reaches the sentinel has left every control in the page's own order, in every engine.
  */
 export async function tabThrough(page: Page, options: { backwards?: boolean; max?: number } = {}): Promise<TabStop[]> {
-  const { backwards = false, max = 40 } = options
+  const { backwards = false, max = 300 } = options
   await page.evaluate((atStart) => {
     const sentinel = Object.assign(document.createElement('span'), { tabIndex: 0, id: 'tab-walk-end' })
     if (atStart) document.body.prepend(sentinel)
@@ -63,9 +65,15 @@ export async function tabThrough(page: Page, options: { backwards?: boolean; max
   try {
     return await walkToSentinel(page, { backwards, max })
   } finally {
-    await page.evaluate(() => document.getElementById('tab-walk-end')?.remove())
+    await page.evaluate(() => {
+      document.getElementById('tab-walk-end')?.remove()
+      delete (globalThis as WalkState).tabWalkSeen
+    })
   }
 }
+
+/** The controls a walk has stopped on so far, kept in the page: a locator cannot tell two elements apart. */
+type WalkState = { tabWalkSeen?: WeakSet<Element> }
 
 /** Presses Tab (or Shift+Tab) until focus reaches the sentinel of `tabThrough`, and returns the stops on the way. */
 const walkToSentinel = async (page: Page, { backwards, max }: { backwards: boolean; max: number }) => {
@@ -76,16 +84,24 @@ const walkToSentinel = async (page: Page, { backwards, max }: { backwards: boole
     const stop = await focusedStop(page)
     if (stop === 'lost') throw new Error(`focus was lost to the document after ${walked() || 'no stops'}`)
     if (stop === 'sentinel') return stops
+    if (stop.again) throw new Error(`focus is trapped: it came back to ${stop.name} after ${walked()}`)
     stops.push(stop)
   }
   throw new Error(`focus did not get past the page after ${max} key presses: ${walked()}`)
 }
 
 /** Where focus is now: a control, as a tab stop; the sentinel of `tabThrough`; or nowhere (lost to the document). */
-const focusedStop = async (page: Page): Promise<TabStop | 'sentinel' | 'lost'> => {
+const focusedStop = async (page: Page): Promise<(TabStop & { again: boolean }) | 'sentinel' | 'lost'> => {
   const focused = page.locator(':focus')
   if ((await focused.count()) === 0) return 'lost'
-  if (await focused.evaluate((element) => element.id === 'tab-walk-end')) return 'sentinel'
+  const visit = await focused.evaluate((element) => {
+    if (element.id === 'tab-walk-end') return 'sentinel'
+    const seen = ((globalThis as WalkState).tabWalkSeen ??= new WeakSet())
+    const again = seen.has(element)
+    seen.add(element)
+    return again ? 'again' : 'first'
+  })
+  if (visit === 'sentinel') return 'sentinel'
   const snapshot = await focused.ariaSnapshot()
   // `- button "Sign out"`, or YAML-quoted when the name has a colon: `- 'button "Edit post: First"'`.
   const [, role, label] = /^- '?([\w-]+)(?: "((?:[^"\\]|\\.)*)")?/.exec(snapshot) ?? []
@@ -94,7 +110,7 @@ const focusedStop = async (page: Page): Promise<TabStop | 'sentinel' | 'lost'> =
     const outline = style.outlineStyle !== 'none' && Number.parseFloat(style.outlineWidth) > 0
     return element.matches(':focus-visible') && (outline || style.boxShadow !== 'none')
   })
-  return { name: label === undefined ? `${role}` : `${role} "${label}"`, visibleFocus }
+  return { name: label === undefined ? `${role}` : `${role} "${label}"`, visibleFocus, again: visit === 'again' }
 }
 
 /**
@@ -112,6 +128,38 @@ export async function tabOrder(page: Page, max?: number) {
   } finally {
     await page.evaluate(() => document.getElementById('tab-order-start')?.remove())
   }
+}
+
+/**
+ * The Tab stops a walk must have: exactly `first` at the start and exactly `last` at the end (the site header and
+ * footer, whose order is the product), and `inOrder` in that order between them, with any other stops among them.
+ * No stop may be one of `never` (a control that must not be a Tab stop yet), and every stop shows its focus.
+ */
+export function expectTabStops(
+  stops: TabStop[],
+  expected: { first: string[]; inOrder: string[]; last: string[]; never?: string[] },
+) {
+  const names = stops.map((stop) => stop.name)
+  const walk = `the walk ${names.join(' → ')}`
+  expect(names.slice(0, expected.first.length), `the start of ${walk}`).toEqual(expected.first)
+  expect(names.slice(names.length - expected.last.length), `the end of ${walk}`).toEqual(expected.last)
+  const between = names.slice(expected.first.length, names.length - expected.last.length)
+  expect(inOrderWithin(between, expected.inOrder), `controls in order in ${walk}`).toEqual(expected.inOrder)
+  expect(
+    between.filter((name) => expected.never?.includes(name)),
+    `controls that must not be Tab stops`,
+  ).toEqual([])
+  expect(
+    stops.filter((stop) => !stop.visibleFocus).map((stop) => stop.name),
+    'stops without visible focus',
+  ).toEqual([])
+}
+
+/** The part of `wanted` that `names` holds in the same order, others between them allowed: all of it on a match. */
+const inOrderWithin = (names: string[], wanted: string[]) => {
+  let found = 0
+  for (const name of names) if (name === wanted[found]) found++
+  return wanted.slice(0, found)
 }
 
 const ACCOUNT_LINKS = {
