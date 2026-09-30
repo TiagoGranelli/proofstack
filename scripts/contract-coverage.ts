@@ -139,12 +139,13 @@ if (import.meta.main) {
   const problems = contractCoverageProblems(ops, observed, allowlist)
   for (const problem of problems) console.error(problem)
   const pairs = ops.reduce((sum, op) => sum + op.declared.size, 0)
-  // For information: declared statuses only the in-memory api layer produced, never the built app.
+  // For information: declared statuses only the in-memory api layer produced, never the built app. A status no
+  // test produced at all is a problem above, not listed here.
+  const seenIn = (list: Observation[], op: Operation, status: number) =>
+    list.some((o) => o.method === op.method && op.pattern.test(o.path) && o.status === status)
   const inMemoryOnly = ops.flatMap((op) =>
     [...op.declared]
-      .filter(
-        (status) => !fromApp.some((o) => o.method === op.method && op.pattern.test(o.path) && o.status === status),
-      )
+      .filter((status) => !seenIn(fromApp, op, status) && seenIn(observed, op, status))
       .map((status) => `${op.id} ${status}`),
   )
   if (inMemoryOnly.length) console.log(`seen only in the api layer, not from the built app: ${inMemoryOnly.join(', ')}`)

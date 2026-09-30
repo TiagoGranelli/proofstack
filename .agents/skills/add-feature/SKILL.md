@@ -41,5 +41,8 @@ The posts feature is the reference for each step: open the one file a step names
 ## Done when
 
 `pnpm check`, `pnpm check:drift` and `pnpm build && pnpm verify:app` pass, and every generated file is
-committed with its source. Run `pnpm check` after each layer; run `pnpm build && pnpm verify:app` once, at the
-end, through the `verifier` subagent, then rerun only the layer it names as failed.
+committed with its source. Run `pnpm check` after each layer. At the end, run `pnpm build && pnpm verify:app` through
+the `verifier` subagent; while fixing, rerun only the layer that failed (its summary names the command), then run
+the whole `verify:app` once more. The feature is done only when that last full run passed: contract coverage runs
+only there. Every status the contract declares needs a test that provokes it (the api layer counts): a 400 for
+an operation with a body or query, a 429 for a rate-limited write.

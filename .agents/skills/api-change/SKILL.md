@@ -16,7 +16,8 @@ together and must agree; the running API and the tests must agree with all three
    or looked up in Postgres starts its checks with `isFreeOfNul` (`src/contract/stored-text.ts`): Postgres text
    cannot hold U+0000, and without the check a NUL answers 500 instead of 400.
 2. Put a new endpoint that needs a session in a group behind the `Authentication` middleware (as `MyPosts` in
-   `src/contract/posts.ts`). A public endpoint is a deliberate edit to `PUBLIC_OPERATIONS` in
+   `src/contract/posts.ts`), with a path under `/api/me/` (a comment on a post is `POST /api/me/posts/{postId}/comments`,
+   not `POST /api/posts/{postId}/comments`): `tests/unit/openapi-rules.test.ts` fails otherwise. A public endpoint is a deliberate edit to `PUBLIC_OPERATIONS` in
    `tests/api/public-operations.test.ts`, which expects 401 without a session from every other operation. Add
    endpoints to the contract, never as raw Start server routes: a lint rule allows only `src/routes/api/$.ts` and
    `src/routes/api/auth/$.ts`.
