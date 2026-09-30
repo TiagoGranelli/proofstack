@@ -85,8 +85,9 @@ gate files to review:
 cost grows with the context; models with a 1M window otherwise compact only near the limit. When an agent added
 comments to posts, the context reached 650k tokens and re-reading it was about 85% of the cost. Raise it in
 `.claude/settings.local.json` for a task that needs more history. `.claude/agents/verifier.md` runs the slow commands
-(`verify:app`, `test:e2e`, `build`) on a smaller model and returns only the failures, so their logs never enter the
-main conversation.
+(`verify:app`, `test:e2e`, `build`) at low effort and returns the summary verbatim plus the failures, so their logs
+never enter the main conversation. It stays on Sonnet 5.5 (an exact id, not the `sonnet` alias, which has pointed at
+older models): on Haiku 4.5 it dropped two failed layers from a report.
 
 **Hook.** `PostToolUse` on `Edit|Write|MultiEdit` runs `scripts/format-edited-file.ts`: it reads the hook input on
 stdin, formats the edited file with oxfmt and lints that one file with oxlint (without `--type-aware` and without

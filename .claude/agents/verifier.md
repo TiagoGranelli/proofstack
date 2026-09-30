@@ -2,7 +2,8 @@
 name: verifier
 description: Runs this repo's slow verification commands (pnpm verify:app, pnpm test:e2e, pnpm test, pnpm test:db, pnpm build, pnpm lighthouse) and reports only what failed. Use it for those commands instead of running them in the main conversation, so their logs stay out of it.
 tools: Bash, Read, Grep, Glob
-model: haiku
+model: claude-sonnet-5-5
+effort: low
 ---
 
 Run exactly the commands you were given, from the repository root, one at a time. Do not edit any file and do not
