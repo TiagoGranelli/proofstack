@@ -17,8 +17,11 @@ const run = (tool: string, args: string[]) =>
 
 if (file !== '' && !file.startsWith('..')) {
   const format = run('oxfmt', [])
-  // A file oxfmt cannot parse gets the same parse error from oxlint: report it once.
-  const check = format.status === 0 ? run('oxlint', ['--deny-warnings', '--format=agent']) : format
+  // A file oxfmt cannot parse gets the same parse error from oxlint: report it once. no-unused-vars waits for
+  // `pnpm check`: an agent adds an import in one edit and its first use in the next, and blocking in between cost
+  // a turn per import (42 of the 60 blocks in a measured feature).
+  const check =
+    format.status === 0 ? run('oxlint', ['--deny-warnings', '--format=agent', '-A', 'no-unused-vars']) : format
   if (check.status !== 0) {
     const reason = `${check.stdout}${check.stderr}`.trim()
     console.log(JSON.stringify({ decision: 'block', reason: `${reason}\n\nFix this in ${file}.` }))

@@ -82,8 +82,9 @@ gate files to review:
 `.claude/settings.json` (committed) enforces in configuration what `AGENTS.md` asks for.
 
 **Hook.** `PostToolUse` on `Edit|Write|MultiEdit` runs `scripts/format-edited-file.ts`: it reads the hook input on
-stdin, formats the edited file with oxfmt and lints that one file with oxlint (without `--type-aware`; `pnpm check`
-adds those rules). A problem goes back to Claude as `{"decision": "block", "reason": ...}`, which Claude Code adds
+stdin, formats the edited file with oxfmt and lints that one file with oxlint (without `--type-aware` and without
+`no-unused-vars`, which an import is between the edit that adds it and the edit that uses it; `pnpm check` adds
+both). A problem goes back to Claude as `{"decision": "block", "reason": ...}`, which Claude Code adds
 next to the tool result. Files the Oxc configs ignore (generated code, Markdown, `node_modules`) and files outside
 the checkout are skipped. About 0.1 to 1 s per edit. Try it:
 `echo '{"tool_input":{"file_path":"'"$PWD"'/src/lib/utils.ts"}}' | node scripts/format-edited-file.ts`.
