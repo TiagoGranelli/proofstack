@@ -61,9 +61,9 @@ export default defineConfig({
   fullyParallel: false,
   // Half the CPUs, as Playwright's default, but the CPUs this process may use: Playwright counts os.cpus(), every
   // core of the host, so in a container limited to 4 (`pnpm ci:local`) it started 16 workers and tests timed out.
-  // At most 8: on a 32-thread laptop, 8 workers ran the suite as fast as 16 (54 s) with 5.7 GB instead of 7.7 GB
-  // at the peak. `--workers=<n>` overrides it.
-  workers: Math.min(8, Math.max(1, Math.floor(availableParallelism() / 2))),
+  // At most 4: on a 32-thread laptop, 4 workers ran the suite in 65 s at 3.4 GB at the peak, against 54 s at 5.7 GB
+  // with 8 and 54 s at 7.7 GB with 16. `--workers=<n>` overrides it.
+  workers: Math.min(4, Math.max(1, Math.floor(availableParallelism() / 2))),
   forbidOnly: !!process.env.CI,
   // A retry keeps one bad run from hiding the report of the others, but a test that only passes on retry is a
   // failure in CI: flakiness is fixed, not absorbed (the report names the flaky test).
