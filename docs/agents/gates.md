@@ -81,7 +81,7 @@ gate files to review:
 
 `.claude/settings.json` (committed) enforces in configuration what `AGENTS.md` asks for.
 
-**Context size.** `autoCompactWindow` is 200,000 tokens. Every model turn re-reads the whole conversation, so its
+**Context size.** `autoCompactWindow` is 300,000 tokens. Every model turn re-reads the whole conversation, so its
 cost grows with the context; models with a 1M window otherwise compact only near the limit. When an agent added
 comments to posts, the context reached 650k tokens and re-reading it was about 85% of the cost. Raise it in
 `.claude/settings.local.json` for a task that needs more history. `.claude/agents/verifier.md` runs the slow commands
