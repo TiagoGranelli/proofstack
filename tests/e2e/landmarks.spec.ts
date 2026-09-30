@@ -1,6 +1,13 @@
 // The landmark structure and headings of every page, and of the UI states that change it, as ARIA snapshots.
-// Partial snapshots: only what is listed is checked, in order. scripts/route-coverage.ts requires one for every page
-// route in the `landmarks` block.
+// scripts/route-coverage.ts requires one for every page route in the `landmarks` block.
+//
+// The snapshots are partial (Playwright's default matching): each listed node must be there, in this order and at
+// this depth, and anything not listed may come between them. So a snapshot lists the page frame (skip link, banner
+// with the main navigation, main, and the footer where the state changes it) and what the page's main owns: its
+// headings, regions, forms and lists, not what goes inside a list item. A feature that adds a section to a page (a
+// comment list under each post) then breaks no snapshot, and one that restructures what is listed does. The price is
+// that an unexpected extra landmark passes here; axe (a11y.spec.ts) still fails on content outside the landmarks
+// and on landmarks that are not unique.
 import { SITE_FOOTER, siteHeader } from './support/a11y.ts'
 import {
   dashboardWithMyPost,
@@ -118,10 +125,7 @@ ${SITE_FOOTER}`)
   - region "Published":
     - heading "Published" [level=2]
     - list:
-      - listitem:
-        - paragraph: One of mine
-        - 'button "Edit post: One of mine"'
-        - 'button "Delete post: One of mine"'
+      - listitem
   - status`)
   })
 
