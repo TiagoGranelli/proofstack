@@ -16,8 +16,9 @@ The first version of the template.
   OpenAPI document and a generated Hey API client, Postgres through Drizzle, and Better Auth sessions with
   email and password, sign-up closed or open (`AUTH_SIGN_UP`), email verification, password reset, session
   management and account deletion.
-- An example feature (posts) that exercises every layer, and the recipe for a `minimal` branch without it
-  ([docs/minimal-branch.md](docs/minimal-branch.md)).
+- An example feature (posts) that exercises every layer, and the recipe to remove it
+  ([docs/removing-the-example.md](docs/removing-the-example.md)).
+- A `minimal` branch with only the gates, on a small client-side React app, for projects on another stack.
 - `GET /api/me`, the signed-in user, which the security tests use as their subject.
 - The app's name in two places, `package.json` and `src/config/app.ts`, with neutral internal identifiers
   and a test that keeps it so; renaming is a short manual step ([docs/adopting.md](docs/adopting.md#rename-the-app)).

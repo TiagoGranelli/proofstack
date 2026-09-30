@@ -1,13 +1,12 @@
-# The `minimal` branch
+# Removing the example
 
-`minimal` is `main` without the posts example: the same foundation (auth, the account pages, `GET /api/me`,
-every gate), a plain home page, and a dashboard that reads `GET /api/me`. Adopters who start without the
-example take it ([adopting.md](adopting.md#day-1)); maintainers keep it in sync by merging `main` into it
-([CONTRIBUTING.md](../.github/CONTRIBUTING.md#the-minimal-branch)).
+How to take the posts example out of an app that started from `main`. What is left is the same foundation (auth,
+the account pages, `GET /api/me`, every gate), a plain home page, and a dashboard that reads `GET /api/me`. The
+result passes `pnpm check`, `pnpm check:drift` and `pnpm verify:app`; the measured values below move as the code
+does.
 
-This page is the exact recipe, for building the branch and for checking a merge. The same list is what an
-adopter removes to drop the example from a `main`-based app later. The result passes `pnpm check`,
-`pnpm check:drift` and `pnpm verify:app`; the measured values below move as the code does.
+This is not what the `minimal` branch is. `minimal` keeps only the gates, for React and TypeScript projects on
+another stack ([README](../README.md#other-stacks)).
 
 ## Delete
 

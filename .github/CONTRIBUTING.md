@@ -18,7 +18,8 @@ workflows and the rules; it is written for coding agents and applies to people a
 - Keep one change per pull request, and commit in logical steps.
 - Generated files (`openapi.json`, `src/sdk/`, `src/routeTree.gen.ts`, `drizzle/`) are regenerated, never
   edited by hand, and committed with their source.
-- Keep example code in posts-named files where you can, so the `minimal` branch (below) merges cleanly.
+- Keep example code in posts-named files where you can, and update
+  [docs/removing-the-example.md](../docs/removing-the-example.md) when the example touches shared code.
 - Keep the app's name out of code: import `APP_NAME` or `pageTitle` from `src/config/app.ts` and use neutral
   identifiers (`tests/unit/repo-policy.test.ts` checks).
 - Every exception to a gate is a visible edit next to its reason.
@@ -35,20 +36,11 @@ pnpm build && pnpm verify:app    # for contract, database, auth or UI changes; n
 
 ## The minimal branch
 
-`minimal` is `main` without the posts example, for adopters who start without it
-([docs/minimal-branch.md](../docs/minimal-branch.md) lists exactly what it removes and adds). Pull requests go
-to `main`; maintainers bring each change over by merging:
-
-```sh
-git switch minimal
-git merge main
-```
-
-Resolve conflicts by keeping `minimal`'s side wherever the example was removed, and carry over what the change
-adds to shared code. A new example-only file is deleted on `minimal`; a change to shared code that the example
-also touches may need the edit described in docs/minimal-branch.md. CI runs on pushes to both branches
-(`pnpm check`, `pnpm check:drift`, `pnpm verify:app`, the rest), so push the merge and let it run before a
-release. Tag releases on `main`; `minimal` follows the same versions.
+`minimal` carries only the gates, on a small client-side React app, for projects on another stack. It does not
+merge `main`: most of `main` is gone there. Pull requests go to `main`, and a change to something `minimal` also
+has (the Oxlint, Oxfmt, Fallow, lefthook or TypeScript config, `tests/unit/repo-policy.test.ts`, the Lighthouse
+policy, the CI jobs, `AGENTS.md`'s code style) is ported by hand in a second pull request against `minimal`. Its
+CI runs its own workflow on every push.
 
 ## Changelog
 

@@ -28,18 +28,13 @@ It fits less well when:
 
 ## Day 1
 
-1. Choose how to start. The template has two branches:
-   - `main`: the foundation plus an example feature (posts: a public list, authoring, pagination) that shows
-     every layer working together. Useful while you learn the structure.
-   - `minimal`: the same foundation without the example, with a plain home page and a dashboard that reads
-     `GET /api/me`. CI runs `pnpm check` and `pnpm verify:app` on it like on `main`.
+1. Start from `main`: the foundation plus an example feature (posts: a public list, authoring, pagination)
+   that shows every layer working together. On GitHub, choose **Use this template**; without GitHub, copy it
+   with `npx giget gh:TiagoGranelli/slopproof#main <dir>`. Keep the example while you learn the structure, and
+   remove it with [removing-the-example.md](removing-the-example.md) when you no longer need it.
 
-   On GitHub, choose **Use this template** and tick **Include all branches** to get both, then make the one
-   you want your default branch. Without GitHub, copy one branch with
-   `npx giget gh:TiagoGranelli/slopproof#minimal <dir>` (or `#main`).
-
-   The `minimal` branch is not published yet. Until it is, start from `main` and remove the example with
-   [minimal-branch.md](minimal-branch.md).
+   The `minimal` branch is something else: only the gates, on a small client-side React app, for projects
+   that keep their own stack ([README](../README.md#other-stacks)).
 2. Install and start what the app needs (pnpm 12 and Docker; `pnpm install` downloads the pinned Node):
 
    ```sh
@@ -97,10 +92,10 @@ The `add-feature` skill (`.agents/skills/add-feature/SKILL.md`) walks through th
 6. Tests from the cheapest layer up, an axe state, a landmark snapshot and a tab-order row for each new
    page (the `routes` gate checks), and a query budget for each repository method.
 
-On the `minimal` branch, the posts code on `main` is the most complete reference for each layer
+After you remove the example, the posts code on `main` is still the most complete reference for each layer
 (`git show template/main:src/server/posts/repo.ts` with the `template` remote below).
-[minimal-branch.md](minimal-branch.md) lists what `minimal` removes, which is also what you remove if you
-started from `main` and drop the example later. Two things come back with your first write endpoint:
+[removing-the-example.md](removing-the-example.md) lists what the removal takes out. Two things come back with
+your first write endpoint:
 
 - Give it the shared middleware: `RequestValidation` for input and `WriteRateLimit` for a per-user budget.
   Their errors are already handled in `src/lib/api-error.ts`.
@@ -176,12 +171,12 @@ git cherry-pick <commit>                    # one change
 git diff v0.1.0 v0.2.0 -- scripts/ | git apply -3   # or a whole area, with three-way merge
 ```
 
-Some adopters merge instead: `git merge --allow-unrelated-histories template/minimal` (or `template/main`)
-once, then plain merges of the same branch later. That keeps the history connected but brings every
+Some adopters merge instead: `git merge --allow-unrelated-histories template/main` once, then plain merges
+later. That keeps the history connected but brings every
 template change at once. Either way:
 
-- Take updates from the branch you started from (`template/minimal` or `template/main`), so the example does
-  not come back. The name is only in `package.json` and `src/config/app.ts`: keep yours when those conflict.
+- If you removed the example, keep it removed when a change touches it. The name is only in `package.json` and
+  `src/config/app.ts`: keep yours when those conflict.
 - Read the upgrade notes of every version you skip, in order.
 - After taking a change, run the full set: `pnpm check`, `pnpm check:drift`, `pnpm build && pnpm verify:app`.
 
@@ -230,7 +225,6 @@ Nothing in the README asks you to take it on trust. Each claim has a command:
 | Accessibility of every page and state | `pnpm verify:app` (axe, landmarks and tab order in `tests/e2e/`) and the `routes` gate of `pnpm check` |
 | Lighthouse 100 | `pnpm build && pnpm lighthouse` |
 | The app's name lives in two files | `pnpm test:unit app-name` |
-| The branch without the example works | CI on the `minimal` branch (`pnpm check`, `pnpm verify:app`), once it is published |
 | All of CI without GitHub | `pnpm ci:local` |
 
 If a claim and its check disagree, the check is the source of truth; please open an issue.

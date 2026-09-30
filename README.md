@@ -153,11 +153,18 @@ pytest-django's `django_assert_num_queries` for query budgets. In Rails, RuboCop
 Prosopite or Bullet for N+1 queries. In Go, golangci-lint with depguard. [AGENTS.md](AGENTS.md) and
 [docs/agents/gates.md](docs/agents/gates.md) show how each check is set up here, which is the part worth copying.
 
+### Other stacks
+
+If your project is React and TypeScript on another stack, the
+[`minimal`](https://github.com/TiagoGranelli/slopproof/tree/minimal) branch has only the gates, on a small
+client-side app with TanStack Router and Tailwind, and lists the files to copy for each one. It assumes React
+19 with the React Compiler and TypeScript 6 or 7.
+
 ## Status
 
-The project is early. A tagged release and a `minimal` branch without the example feature are coming. CI runs
-every job in `pnpm check`, the drift checks against Postgres, the integration and end-to-end tests in five
-browser projects, contract coverage, Lighthouse, and the Docker image build and scan.
+The project is early, and a tagged release is coming. CI runs every job in `pnpm check`, the drift checks
+against Postgres, the integration and end-to-end tests in five browser projects, contract coverage, Lighthouse,
+and the Docker image build and scan.
 
 Some dependencies are pre-release. Effect 4 is a release candidate, Nitro 3 is a beta, Hey API is a `next`
 snapshot, TanStack Start still calls itself a release candidate, and the project runs on TypeScript 7 and
