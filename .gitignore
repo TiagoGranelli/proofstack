@@ -1,22 +1,14 @@
 node_modules/
-.output/
-.nitro/
-.tanstack/
-.fallow/
 dist/
+.fallow/
 coverage/
 test-results/
 playwright-report/
-.lighthouseci/
 lighthouse-report/
-sbom/
 *.log
 .env
 .env.*
-!.env.example
-deploy/deploy.env
 # Personal lefthook overrides (lefthook reads it on top of .config/lefthook.yml).
 lefthook-local.yml
 .DS_Store
 .claude/worktrees/
-jobs/

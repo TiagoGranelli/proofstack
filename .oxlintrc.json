@@ -2,27 +2,19 @@
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "ignorePatterns": [
     "node_modules/**",
-    ".output/**",
-    ".nitro/**",
-    ".tanstack/**",
+    "dist/**",
     ".fallow/**",
-    "drizzle/**",
-    ".repos/**",
-    "src/sdk/**",
     "src/routeTree.gen.ts",
     "test-results/**",
     "playwright-report/**",
-    // Skills, and the agent evals: their hidden checks import tests/<layer> helpers by the path they get when
-    // .agents/evals/grade.sh copies them there.
-    ".agents/**",
-    ".claude/**",
     "lighthouse-report/**",
-    "coverage/**"
+    "coverage/**",
+    // Skills and agent settings: Markdown and JSON, no code.
+    ".agents/**",
+    ".claude/**"
   ],
   "plugins": ["typescript", "unicorn", "oxc", "import", "react", "jsx-a11y", "promise"],
   "jsPlugins": [
-    "@shadcn/lint",
-    "@tanstack/eslint-plugin-query",
     "@tanstack/eslint-plugin-router",
     "eslint-plugin-playwright",
     // ESLint's core rules, for `no-restricted-syntax`, which oxlint has no native version of. The object form,
@@ -30,9 +22,9 @@
     { "name": "eslint-js", "specifier": "oxlint-plugin-eslint" }
   ],
   // Every rule is "error" or "off" (`pnpm lint` runs with --deny-warnings). `pedantic` is on as a whole; each rule
-  // turned off below was measured on this code base and says why. An escape hatch for one line is an
-  // `oxlint-disable-next-line <rule>` directly under a comment giving the reason (tests/unit/repo-policy.test.ts
-  // rejects a bare one, and `reportUnusedDisableDirectives` rejects a stale one).
+  // turned off below says why. An escape hatch for one line is an `oxlint-disable-next-line <rule>` directly under a
+  // comment giving the reason (tests/unit/repo-policy.test.ts rejects a bare one, and `reportUnusedDisableDirectives`
+  // rejects a stale one).
   //
   // Repository rules are `eslint-js/no-restricted-syntax` selectors in the overrides at the end. An override
   // replaces the whole selector list of an earlier one, so each list repeats the selectors of the wider globs.
@@ -41,11 +33,6 @@
     "suspicious": "error",
     "perf": "error",
     "pedantic": "error"
-  },
-  "settings": {
-    "shadcn": {
-      "note": "Theme tokens live in src/styles/app.css; shadcn primitives live in src/components/ui (add new ones with `pnpm exec shadcn add`)."
-    }
   },
   "options": {
     "reportUnusedDisableDirectives": "error"
@@ -62,6 +49,7 @@
     ],
     "react/react-in-jsx-scope": "off",
     "unicorn/filename-case": ["error", { "case": "kebabCase" }],
+    // Import the file that defines a symbol: an index.ts that re-exports a folder hides where code lives.
     "oxc/no-barrel-file": ["error", { "threshold": 0 }],
     "react/rules-of-hooks": "error",
     "react/no-unstable-nested-components": [
@@ -73,15 +61,10 @@
     "import/no-unassigned-import": [
       "error",
       {
-        "allow": ["@tanstack/react-start/server-only", "**/*.css"]
+        "allow": ["**/*.css"]
       }
     ],
-    "eslint/no-underscore-dangle": [
-      "error",
-      {
-        "allow": ["_tag"]
-      }
-    ],
+    "eslint/no-underscore-dangle": "error",
     "typescript/no-floating-promises": "error",
     "typescript/no-misused-promises": [
       "error",
@@ -106,12 +89,12 @@
     // `new Promise((resolve) => setTimeout(resolve, ms))` is the idiom it flags.
     "eslint/no-promise-executor-return": "off",
     "unicorn/no-useless-undefined": "off",
-    // Its fix changes behavior: `Number.parseFloat("2px")` is 2, `Number("2px")` is NaN (CSS values in tests/e2e).
+    // Its fix changes behavior: `Number.parseFloat("2px")` is 2, `Number("2px")` is NaN (CSS values in E2E tests).
     "unicorn/prefer-number-coercion": "off",
-    // Better Auth hooks and TanStack loaders must be async functions even when they await nothing.
+    // Framework callbacks (route loaders, auth hooks) must be async functions even when they await nothing.
     "eslint/require-await": "off",
     "typescript/require-await": "off",
-    // Effect Schema declares a const and a type of the same name (`const Post = Schema.Struct(...)`, `type Post`).
+    // A schema and its type often share a name (`const User = z.object(...)`, `type User = z.infer<typeof User>`).
     "eslint/no-redeclare": "off",
     "eslint/no-negated-condition": "off",
     "unicorn/no-negated-condition": "off",
@@ -204,14 +187,13 @@
     "eslint/max-lines": ["error", { "max": 300, "skipBlankLines": true, "skipComments": true }],
     "eslint/max-lines-per-function": ["error", { "max": 20, "skipBlankLines": true, "skipComments": true }],
     "eslint/max-depth": ["error", { "max": 2 }],
-    // Effect's idiom is three deep: `Effect.fn` > `.handle(...)` > `CurrentUser.use(...)`.
     "eslint/max-nested-callbacks": ["error", { "max": 3 }],
     "eslint/max-params": ["error", { "max": 3 }],
     "eslint/no-nested-ternary": "error",
     "react/jsx-max-depth": ["error", { "max": 4 }],
     "unicorn/error-message": "error",
-    // Names that say nothing and grep everywhere. `data` and `handler(s)` are keys TanStack Start, TanStack Query and
-    // Effect impose (`signIn({ data })`, `server: { handlers }`), so AGENTS.md covers them instead.
+    // Names that say nothing and grep everywhere. Keys a library imposes (`data`, `handler`) are covered in
+    // AGENTS.md instead: keep them as keys and destructure into a specific name.
     "eslint/id-denylist": [
       "error",
       "result",
@@ -231,47 +213,10 @@
       "utils"
     ],
 
-    // TanStack Query and Router (ESLint plugins run by oxlint).
-    "@tanstack/query/exhaustive-deps": "error",
-    "@tanstack/query/stable-query-client": "error",
-    "@tanstack/query/no-rest-destructuring": "error",
-    "@tanstack/query/prefer-query-options": "error",
-    "@tanstack/router/create-route-property-order": "error",
-
-    "shadcn/no-unknown-classes": "error",
-    "shadcn/no-raw-colors": "error",
-    "shadcn/no-arbitrary-values": "error",
-    "shadcn/no-inline-styles": "error",
-    "shadcn/require-static-classes": "error",
-    "shadcn/no-restyle": [
-      "error",
-      {
-        "allow": ["layout"],
-        "contracts": [
-          {
-            "pattern": "^CardContent$",
-            "allow": ["layout", "spacing"]
-          }
-        ]
-      }
-    ]
+    // TanStack Router (its ESLint plugin, run by oxlint): route options in the order their types infer from.
+    "@tanstack/router/create-route-property-order": "error"
   },
   "overrides": [
-    {
-      // Drizzle's schema entry: drizzle-kit (drizzle.config.ts), scripts/check-drift.ts and `drizzle({ schema })`
-      // need every table in one module. The only barrel file allowed.
-      "files": ["src/server/db/schema/index.ts"],
-      "rules": {
-        "oxc/no-barrel-file": "off"
-      }
-    },
-    {
-      "files": ["src/components/ui/**"],
-      "rules": {
-        "shadcn/no-restyle": "off",
-        "shadcn/no-arbitrary-values": "off"
-      }
-    },
     {
       // A component's markup is part of its body: 20 lines of logic plus room for its JSX at printWidth 120. It must
       // stay before the tests/** override, which turns the rule off (a later override wins).
@@ -281,99 +226,11 @@
       }
     },
     {
-      // Server and plumbing modules declare what they return. UI code is exempt: components return JSX and hooks
-      // return TanStack generics that would restate the generated SDK's types.
-      "files": ["src/server/**", "src/lib/**", "src/contract/**", "scripts/**"],
+      // Plumbing modules declare what they return. UI code is exempt: components return JSX and hooks return
+      // library generics that would only restate inferred types.
+      "files": ["src/lib/**", "scripts/**"],
       "rules": {
         "typescript/explicit-module-boundary-types": "error"
-      }
-    },
-    {
-      // The Effect API takes its dependencies from Layers (Database, PostsRepo, RateLimitStore, SessionLookup), so
-      // tests/api can provide fakes. Module singletons and drivers stay out of it. No later override may set
-      // no-restricted-imports on these paths: it would replace this list.
-      "files": ["src/server/api/**", "src/server/posts/**"],
-      "rules": {
-        "no-restricted-imports": [
-          "error",
-          {
-            "paths": [
-              { "name": "pg", "message": "Use the Database service (src/server/db/client.ts)." },
-              { "name": "nodemailer", "message": "Use authMail (src/server/mail/)." }
-            ],
-            "patterns": [
-              {
-                "regex": "(^|/)server/auth\\.ts$|^\\.\\./auth\\.ts$",
-                "message": "The Effect API reads Better Auth through a service provided by a Layer, not the module singleton."
-              },
-              {
-                "regex": "(^|/)db/client\\.ts$",
-                "importNames": ["db", "pool"],
-                "message": "Use the Database service, provided by a Layer."
-              }
-            ]
-          }
-        ]
-      }
-    },
-    {
-      // UI code and page routes: data only through the SDK or a server function (AGENTS.md, "Architecture map").
-      "files": ["src/components/**", "src/features/**", "src/routes/**/*.tsx"],
-      "plugins": ["node"],
-      "rules": {
-        "node/no-process-env": "error",
-        "no-restricted-globals": [
-          "error",
-          {
-            "name": "fetch",
-            "message": "UI code calls the API through the generated SDK (#/sdk) or a server function (#/lib/*.functions.ts), never raw fetch."
-          }
-        ],
-        "no-restricted-imports": [
-          "error",
-          {
-            "paths": [
-              {
-                "name": "@tanstack/react-start/server",
-                "message": "Server-only helpers. Use a server function in #/lib/*.functions.ts."
-              }
-            ],
-            "patterns": [
-              {
-                "regex": "^#/server(/|$)",
-                "message": "UI code must not import src/server/**. Go through the SDK (#/sdk) or a server function (#/lib/*.functions.ts)."
-              },
-              {
-                "regex": "^(\\.\\./)+server(/|$)",
-                "message": "UI code must not import src/server/**. Go through the SDK (#/sdk) or a server function (#/lib/*.functions.ts)."
-              },
-              {
-                "regex": "^(drizzle-orm|pg)(/|$)",
-                "message": "UI code must not touch the database. Call the API through the generated SDK (#/sdk)."
-              },
-              {
-                "regex": "^(better-auth|@better-auth)(/|$)",
-                "message": "Better Auth runs on the server only, its client included. UI code calls the account server functions in #/lib/auth.functions.ts."
-              }
-            ]
-          }
-        ]
-      }
-    },
-    {
-      "files": ["src/contract/**"],
-      "rules": {
-        "no-restricted-imports": [
-          "error",
-          {
-            "patterns": [
-              {
-                "group": ["*", "!effect", "!effect/**", "!./*", "!\\#/contract/*", "!\\#/config/*"],
-                "message": "src/contract is the pure API contract: it may import only `effect`, other src/contract modules and src/config."
-              }
-            ]
-          }
-        ]
       }
     },
     {
@@ -386,7 +243,7 @@
         // statements instead (a `describe` holds far fewer statements than lines), and files to max-lines.
         "eslint/max-lines-per-function": "off",
         "eslint/max-statements": ["error", { "max": 15 }],
-        // describe > it.effect > Effect.gen > callback.
+        // describe > it > fc.assert > fc.property callback.
         "eslint/max-nested-callbacks": ["error", { "max": 4 }],
         // `.only` runs one test alone; `.skip` and `.todo` ship a test that checks nothing. A skip that depends on
         // the platform takes a condition (`it.skipIf(...)`).
@@ -396,7 +253,7 @@
         "vitest/expect-expect": [
           "error",
           {
-            "assertFunctionNames": ["expect", "expect.*", "assert.*", "expectAccessible", "tabOrder"]
+            "assertFunctionNames": ["expect", "expect.*", "assert.*", "fc.assert", "expectAccessible", "tabOrder"]
           }
         ],
         "vitest/no-identical-title": "error",
@@ -404,8 +261,8 @@
         "vitest/prefer-hooks-on-top": "error",
         "vitest/require-mock-type-parameters": "error",
         "vitest/no-conditional-expect": "error",
-        // pedantic: flags every `??`, ternary and callback in a test body (29 findings, none a hidden branch of the
-        // test itself). no-conditional-expect above catches the harmful case: an assertion that may not run.
+        // pedantic: flags every `??`, ternary and callback in a test body. no-conditional-expect above catches the
+        // harmful case: an assertion that may not run.
         "vitest/no-conditional-in-test": "off",
         "vitest/valid-expect": [
           "error",
@@ -448,93 +305,11 @@
           },
           {
             "selector": "TSAsExpression > TSAsExpression.expression[typeAnnotation.type='TSUnknownKeyword']",
-            "message": "`as unknown as` switches the type checker off. Decode the value with Effect Schema, or fix the type where it comes from."
-          },
-          {
-            "selector": "Literal[value=/access-control-allow-origin/i], TemplateElement[value.raw=/access-control-allow-origin/i]",
-            "message": "CORS does not belong in application code: the app is same-origin (src/start.ts rejects other origins). Serving other origins is a reviewed edge decision in deploy/Caddyfile."
+            "message": "`as unknown as` switches the type checker off. Check the value at runtime and narrow it, or fix the type where it comes from."
           },
           {
             "selector": "MemberExpression[object.object.type='MetaProperty'][object.property.name='env'][property.name=/^VITE_/]",
-            "message": "import.meta.env.VITE_* is compiled into the browser bundle, so its value is public. Read server configuration through src/server/env.ts."
-          },
-          {
-            "selector": "CallExpression[callee.property.name=/^(inputValidator|validator)$/]:not([arguments.0.callee.object.name='Schema'][arguments.0.callee.property.name='toStandardSchemaV1'])",
-            "message": "A server function's validator is the only check between the network and its handler. Decode with Effect Schema: `.validator(Schema.toStandardSchemaV1(Schema.Struct({ ... })))`."
-          }
-        ]
-      }
-    },
-    {
-      // Only the two raw routes below serve HTTP themselves; everything else goes through the API contract.
-      "files": ["src/routes/**"],
-      "rules": {
-        "eslint-js/no-restricted-syntax": [
-          "error",
-          {
-            "selector": "CallExpression:matches([callee.name=/^(spawn|spawnSync|execFile|execFileSync)$/], [callee.property.name=/^(spawn|spawnSync|execFile|execFileSync)$/])[arguments.0.value=/^(pnpm|npm|npx|yarn)$|^node_modules/]",
-            "message": "Start pnpm, npm or a node_modules/.bin tool with `xSync` or `x` from tinyexec, not node:child_process: on Windows it is a `.cmd` shim, which Node refuses to start without a shell (CVE-2024-27980)."
-          },
-          {
-            "selector": "TSAsExpression > TSAsExpression.expression[typeAnnotation.type='TSUnknownKeyword']",
-            "message": "`as unknown as` switches the type checker off. Decode the value with Effect Schema, or fix the type where it comes from."
-          },
-          {
-            "selector": "Literal[value=/access-control-allow-origin/i], TemplateElement[value.raw=/access-control-allow-origin/i]",
-            "message": "CORS does not belong in application code: the app is same-origin (src/start.ts rejects other origins). Serving other origins is a reviewed edge decision in deploy/Caddyfile."
-          },
-          {
-            "selector": "MemberExpression[object.object.type='MetaProperty'][object.property.name='env'][property.name=/^VITE_/]",
-            "message": "import.meta.env.VITE_* is compiled into the browser bundle, so its value is public. Read server configuration through src/server/env.ts."
-          },
-          {
-            "selector": "CallExpression[callee.property.name=/^(inputValidator|validator)$/]:not([arguments.0.callee.object.name='Schema'][arguments.0.callee.property.name='toStandardSchemaV1'])",
-            "message": "A server function's validator is the only check between the network and its handler. Decode with Effect Schema: `.validator(Schema.toStandardSchemaV1(Schema.Struct({ ... })))`."
-          },
-          {
-            "selector": "Identifier[name='createServerFileRoute'], Property[key.name='server'] > ObjectExpression.value > Property[key.name='handlers']",
-            "message": "A raw HTTP route bypasses the API contract (no openapi.json entry, no SDK, no Authentication middleware). Add an endpoint to src/contract and src/server/api/handlers.ts instead."
-          }
-        ]
-      }
-    },
-    {
-      "files": ["src/routes/api/**"],
-      "rules": {
-        "eslint-js/no-restricted-syntax": [
-          "error",
-          {
-            "selector": "CallExpression:matches([callee.name=/^(spawn|spawnSync|execFile|execFileSync)$/], [callee.property.name=/^(spawn|spawnSync|execFile|execFileSync)$/])[arguments.0.value=/^(pnpm|npm|npx|yarn)$|^node_modules/]",
-            "message": "Start pnpm, npm or a node_modules/.bin tool with `xSync` or `x` from tinyexec, not node:child_process: on Windows it is a `.cmd` shim, which Node refuses to start without a shell (CVE-2024-27980)."
-          },
-          {
-            "selector": "Program",
-            "message": "src/routes/api holds only the two raw routes, api/$.ts (the Effect API) and api/auth/$.ts (Better Auth). Add an endpoint to src/contract and src/server/api/handlers.ts instead."
-          }
-        ]
-      }
-    },
-    {
-      // The two raw routes: the Effect API and Better Auth. A third one is a reviewed edit here, with its reason.
-      "files": ["src/routes/api/$.ts", "src/routes/api/auth/$.ts"],
-      "rules": {
-        "eslint-js/no-restricted-syntax": [
-          "error",
-          {
-            "selector": "CallExpression:matches([callee.name=/^(spawn|spawnSync|execFile|execFileSync)$/], [callee.property.name=/^(spawn|spawnSync|execFile|execFileSync)$/])[arguments.0.value=/^(pnpm|npm|npx|yarn)$|^node_modules/]",
-            "message": "Start pnpm, npm or a node_modules/.bin tool with `xSync` or `x` from tinyexec, not node:child_process: on Windows it is a `.cmd` shim, which Node refuses to start without a shell (CVE-2024-27980)."
-          },
-          {
-            "selector": "TSAsExpression > TSAsExpression.expression[typeAnnotation.type='TSUnknownKeyword']",
-            "message": "`as unknown as` switches the type checker off. Decode the value with Effect Schema, or fix the type where it comes from."
-          },
-          {
-            "selector": "Literal[value=/access-control-allow-origin/i], TemplateElement[value.raw=/access-control-allow-origin/i]",
-            "message": "CORS does not belong in application code: the app is same-origin (src/start.ts rejects other origins). Serving other origins is a reviewed edge decision in deploy/Caddyfile."
-          },
-          {
-            "selector": "MemberExpression[object.object.type='MetaProperty'][object.property.name='env'][property.name=/^VITE_/]",
-            "message": "import.meta.env.VITE_* is compiled into the browser bundle, so its value is public. Read server configuration through src/server/env.ts."
+            "message": "import.meta.env.VITE_* is compiled into the browser bundle, so its value is public. Keep secrets on the server."
           }
         ]
       }
@@ -556,8 +331,8 @@
       }
     },
     {
-      // Layers that wait for a browser or a server.
-      "files": ["tests/component/**", "tests/integration/**", "tests/e2e/**"],
+      // Layers that wait for a browser.
+      "files": ["tests/component/**", "tests/e2e/**"],
       "rules": {
         "eslint-js/no-restricted-syntax": [
           "error",

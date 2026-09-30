@@ -1,37 +1,34 @@
 # The quality gates decide what "done" means for every change, agent-written ones included. A pull request that
 # loosens them (a rule turned off, a threshold raised, a module dropped from COVERAGE_GATE, a selector dropped from
-# .oxlintrc.json, an entry in PUBLIC_OPERATIONS) needs a review from the owners below. A repository
-# created from the template replaces @TiagoGranelli with its own team or user (docs/adopting.md), and requires
-# code-owner review in the branch protection of main; until then this file only suggests reviewers. The last
-# matching pattern wins, so later lines narrow earlier ones.
+# .oxlintrc.json, a Lighthouse budget raised) needs a review from the owners below. A repository that copies these
+# files replaces @TiagoGranelli with its own team or user, and requires code-owner review in the branch protection of
+# its default branch; until then this file only suggests reviewers. The last matching pattern wins, so later lines
+# narrow earlier ones.
 
-# Lint, types, dead code, complexity, duplication, formatting.
+# Lint, types, dead code, complexity, duplication, boundaries, formatting.
 /.oxlintrc.json      @TiagoGranelli
 /.oxfmtrc.json       @TiagoGranelli
 /.fallowrc.json      @TiagoGranelli
 /tsconfig.json       @TiagoGranelli
 
-# Test gates: COVERAGE_GATE and the projects live in vitest.config.ts.
-/vitest.config.ts    @TiagoGranelli
-/playwright.config.ts @TiagoGranelli
+# Test gates: COVERAGE_GATE and the projects live in vitest.config.ts; the Lighthouse policy in its script.
+/vitest.config.ts               @TiagoGranelli
+/playwright.config.ts           @TiagoGranelli
+/scripts/lighthouse-policy.ts   @TiagoGranelli
 
-# The gate list and pre-commit hook, the repository rules, the public operations, the drift checks.
-/.config/lefthook.yml                @TiagoGranelli
-/tests/unit/repo-policy.test.ts      @TiagoGranelli
-/tests/api/public-operations.test.ts @TiagoGranelli
-/scripts/check-drift.ts              @TiagoGranelli
-/scripts/ci-jobs.ts                  @TiagoGranelli
+# The gate list and pre-commit hook, the repository rules, the route coverage, the CI jobs.
+/.config/lefthook.yml             @TiagoGranelli
+/tests/unit/repo-policy.test.ts   @TiagoGranelli
+/scripts/route-coverage.ts        @TiagoGranelli
+/scripts/ci-jobs.ts               @TiagoGranelli
 
-# Supply chain: exact versions, build-script, release-age and trust exceptions, overrides, vulnerability and
-# license exceptions, secret-scan and migration-lint exceptions.
+# Supply chain: exact versions, build-script, release-age and trust exceptions, vulnerability exceptions,
+# secret-scan exceptions, image pins.
 /package.json                 @TiagoGranelli
 /pnpm-workspace.yaml          @TiagoGranelli
-/.config/grype.yaml           @TiagoGranelli
-/scripts/licenses.ts          @TiagoGranelli
 /scripts/images.ts            @TiagoGranelli
 /.config/gitleaks.toml        @TiagoGranelli
 /.config/gitleaksignore       @TiagoGranelli
-/.config/squawk.toml          @TiagoGranelli
 
 # CI workflows, actions, Renovate (renovate.json), the community files and this file.
 /.github/            @TiagoGranelli

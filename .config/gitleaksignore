@@ -9,6 +9,3 @@ f62cfb6ce3df07e37666b38a5c8d537cbc78f783:tests/unit/env.test.ts:url-credentials:
 
 # Commit be0c75c added a made-up MySQL URL (`user:secret`) as an unsupported-scheme case; the file no longer has it.
 be0c75cff2dfdc4d28d2e1bf745ad5d43edb83ba:tests/unit/env.test.ts:url-credentials:59
-# Commit 89fe6ec set BETTER_AUTH_SECRET to `randomBytes(32).toString('base64')`, an expression the rule reads as a
-# literal; the smoke test now takes its secret from the compose recipe.
-89fe6ec190b7bc2d69b1735a7fb1333541ecf358:scripts/docker-smoke.ts:better-auth-secret:40

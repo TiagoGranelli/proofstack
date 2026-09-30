@@ -7,17 +7,12 @@
       "Bash(pnpm typecheck)",
       "Bash(pnpm lint*)",
       "Bash(pnpm format*)",
-      "Bash(pnpm codegen)",
-      "Bash(pnpm db:generate *)",
       "Bash(git status*)",
       "Bash(git diff*)",
       "Bash(git log*)"
     ],
     "deny": [
-      "Edit(/src/sdk/**)",
-      "Edit(/openapi.json)",
       "Edit(/src/routeTree.gen.ts)",
-      "Edit(/drizzle/meta/**)",
       "Bash(git commit --no-verify*)",
       "Bash(git commit * --no-verify*)",
       "Bash(git commit -n*)",

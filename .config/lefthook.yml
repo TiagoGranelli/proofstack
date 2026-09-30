@@ -1,7 +1,7 @@
-# Every static gate that needs no database and no build (docs/agents/gates.md). The pre-commit hook runs the jobs
-# whose glob matches a staged file; `pnpm check` runs all of them on all files. Each job checks the whole project,
-# not only the staged files: lefthook reads the working tree, so an unstaged edit is checked too, and CI checks
-# the exact commit. One job at a time, because the type-aware jobs each take a few GB.
+# Every static gate that needs no build (docs/agents/gates.md). The pre-commit hook runs the jobs whose glob matches
+# a staged file; `pnpm check` runs all of them on all files. Each job checks the whole project, not only the staged
+# files: lefthook reads the working tree, so an unstaged edit is checked too, and CI checks the exact commit. One job
+# at a time, because the type-aware jobs each take a few GB.
 # `LEFTHOOK_EXCLUDE=<job,...>` skips jobs; `git commit --no-verify` skips the hook (CI runs every job anyway).
 output:
   - failure
@@ -35,14 +35,7 @@ pre-commit:
     - name: typecheck
       glob: ['**/*.{ts,tsx}', 'tsconfig.json', 'package.json', 'pnpm-lock.yaml']
       run: pnpm run --silent typecheck
-      fail_text: fix the type errors; in src/sdk run `pnpm codegen`, in src/routeTree.gen.ts run `pnpm build`
-
-    - name: effect
-      glob: ['**/*.{ts,tsx}', 'tsconfig.json', 'package.json', 'pnpm-lock.yaml']
-      run: pnpm exec effect-tsgo diagnostics --project tsconfig.json --strict
-      fail_text: >-
-        do what the Effect diagnostic says. A deliberate exception takes the JSDoc tag or
-        `// @effect-diagnostics <rule>:off` comment the message names, with the reason next to it
+      fail_text: fix the type errors; after adding, renaming or removing a route, `pnpm build` regenerates src/routeTree.gen.ts
 
     - name: deadcode
       glob: ['**/*.{ts,tsx}', 'package.json', '.fallowrc.json']
@@ -75,46 +68,16 @@ pre-commit:
         keep untrusted input away from the sink (validate, encode, allowlist). A reviewed false positive gets
         `// fallow-ignore-next-line security-sink` above it with the reason
 
-    # unit, api and component tests with the coverage gate (vitest.config.ts); needs Playwright's Chromium.
+    # unit and component tests with the coverage gate (vitest.config.ts); needs Playwright's Chromium.
     - name: tests
-      glob: ['**/*.{ts,tsx,css}', 'openapi.json', 'package.json', 'pnpm-lock.yaml']
+      glob: ['**/*.{ts,tsx,css}', 'package.json', 'pnpm-lock.yaml']
       run: pnpm run --silent test:fast
       fail_text: >-
-        fix the failing test or the code it covers (one layer: `pnpm test:unit|test:api|test:component [filter]`).
-        A coverage failure names a module in COVERAGE_GATE: cover every line and branch coverage/index.html shows
+        fix the failing test or the code it covers (one layer: `pnpm test:unit|test:component [filter]`). A coverage
+        failure names a module in COVERAGE_GATE: cover every line and branch coverage/index.html shows
 
-    # Repository rules no linter checks (tests/unit/repo-policy.test.ts), under a second. No glob: the app's name
-    # must stay out of every file, and the AGENTS.md budget applies to commits without code.
+    # Repository rules no linter checks (tests/unit/repo-policy.test.ts), under a second. No glob: the AGENTS.md
+    # budget applies to commits without code.
     - name: repo-policy
       run: pnpm exec vitest run --project unit repo-policy
       fail_text: each failed test lists the files and what to do
-
-    - name: drift
-      glob:
-        - 'src/contract/**/*.ts'
-        - 'src/server/**/*.ts'
-        - 'src/sdk/**'
-        - 'openapi.json'
-        - 'openapi-ts.config.ts'
-        - 'drizzle/**'
-        - 'scripts/openapi.ts'
-        - 'package.json'
-        - 'pnpm-lock.yaml'
-      run: node scripts/check-drift.ts contract migrations auth
-      fail_text: >-
-        contract: commit what `pnpm codegen` regenerated; migrations: `pnpm db:generate --name <slug>`; auth: edit
-        src/server/db/schema/auth.ts by hand (skill auth-change)
-
-    - name: migrations
-      glob: ['drizzle/*.sql', '.config/squawk.toml', 'package.json']
-      run: pnpm run --silent check:migrations
-      fail_text: >-
-        make the migration safe, or waive the statement with `-- squawk-ignore <rule>` under a comment that says why
-        (docs/operations.md, "Migration safety")
-
-    - name: licenses
-      glob: ['package.json', 'pnpm-lock.yaml', 'scripts/licenses.ts']
-      run: pnpm run --silent licenses:check
-      fail_text: >-
-        replace the dependency, or allow its license in scripts/licenses.ts (ALLOWED, or EXCEPTIONS for one exact
-        version) with the reason

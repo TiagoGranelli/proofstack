@@ -12,13 +12,13 @@ const LANDMARKS = 'tests/e2e/landmarks.spec.ts'
 const KEYBOARD = 'tests/e2e/keyboard.spec.ts'
 
 /**
- * The URL path of a file route, or undefined for files that are not pages: the root and layout routes, API
- * routes, and files TanStack Router ignores (`-` prefix). Pathless (`_x`) and group (`(x)`) segments add
- * nothing to the path; `index` is the parent's path.
+ * The URL path of a file route, or undefined for files that are not pages: the root and layout routes, and files
+ * TanStack Router ignores (`-` prefix). Pathless (`_x`) and group (`(x)`) segments add nothing to the path; `index`
+ * is the parent's path.
  */
 export const pagePath = (file: string): string | undefined => {
   const segments = file.replace(/\.tsx?$/, '').split('/')
-  if (segments[0] === 'api' || segments.some((segment) => segment.startsWith('-'))) return undefined
+  if (segments.some((segment) => segment.startsWith('-'))) return undefined
   const last = segments.at(-1) ?? ''
   if (last.startsWith('__') || (last.startsWith('_') && !last.includes('.'))) return undefined
   const path = segments
@@ -34,22 +34,9 @@ export const pageRoutes = (root = ROUTES): string[] =>
     .filter((path): path is string => path !== undefined)
     .toSorted()
 
-/**
- * Page paths a block of a spec reaches: every `visit(page, '/path…')`, plus the helpers that reach a page
- * without naming it.
- */
-const HELPERS: Array<[RegExp, string]> = [
-  // Every API call under /api/me is made by a page of the dashboard.
-  [/navigateWithApiResponse\(page, '\/api\/me[/']/, '/dashboard'],
-  [/\bdashboardWithMyPost\(/, '/dashboard'],
-  [/navigateWithApiResponse\(page, '\/api\/posts'/, '/'],
-]
-export const reachedPaths = (block: string): Set<string> => {
-  const paths = new Set<string>()
-  for (const [, path = ''] of block.matchAll(/\bvisit\(page, '([^'?#]*)/g)) paths.add(path)
-  for (const [pattern, path] of HELPERS) if (pattern.test(block)) paths.add(path)
-  return paths
-}
+/** Page paths a block of a spec reaches: every `visit(page, '/path…')`, without its query or fragment. */
+export const reachedPaths = (block: string): Set<string> =>
+  new Set([...block.matchAll(/\bvisit\(page, '([^'?#]*)/g)].map(([, path = '']) => path))
 
 /** Whether a concrete path in `reached` is `route`, whose `$param` segments match any one segment. */
 const reaches = (reached: Set<string>, route: string) => {

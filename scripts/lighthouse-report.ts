@@ -29,8 +29,8 @@ export type PageOutcome = {
   failingAudits: string[]
 }
 
-/** How the pages were reached: the Node server directly, or through the edge over `edge` (h2, h1, http). */
-export type Setup = { runs: number; edge: false | string; shmBytes: number }
+/** How the pages were reached: `vite preview` over `protocol` (h2, h1, http). */
+export type Setup = { runs: number; protocol: string; shmBytes: number }
 
 /** One console line per page and form factor, as it is measured. */
 export const progressLine = (outcome: PageOutcome): string => {
@@ -79,9 +79,8 @@ const contendedHostNote = (outcomes: PageOutcome[]): string => {
 const tableIntro = (outcomes: PageOutcome[], setup: Setup): string => {
   const { version } = JSON.parse(readFileSync('node_modules/lighthouse/package.json', 'utf8')) as { version: string }
   const indexes = outcomes.flatMap((outcome) => outcome.perRun.map((run) => run.benchmarkIndex))
-  const through = setup.edge === false ? 'Node server without the edge' : `through the Caddy edge (${setup.edge})`
   return (
-    `Lighthouse ${version}, median of ${setup.runs} runs, ${through}. ` +
+    `Lighthouse ${version}, median of ${setup.runs} runs, vite preview (${setup.protocol}). ` +
     `benchmarkIndex ${Math.min(...indexes)}–${Math.max(...indexes)}, ${availableParallelism()} CPUs.` +
     contendedHostNote(outcomes) +
     ' * = reported, not gated. Diagnose with `<page>-<form factor>-median.report.html` (Lighthouse median run).'
@@ -103,7 +102,7 @@ export const writeReport = (outcomes: PageOutcome[], setup: Setup & { outputDir:
   const table = summaryTable(outcomes, setup)
   const summary = {
     policy: POLICY,
-    edge: setup.edge,
+    protocol: setup.protocol,
     shmBytes: setup.shmBytes,
     cpus: availableParallelism(),
     // `results` is summary.json's key for the pages, which people and CI artifacts read; the rule is about names in code.

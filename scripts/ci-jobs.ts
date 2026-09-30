@@ -1,16 +1,13 @@
-// Every CI job's logic, one function per job. .github/workflows/ci.yml only installs tooling, starts
-// services and calls `pnpm ci:<job>`; `pnpm ci:local` runs the same commands in the Playwright Ubuntu image.
+// Every CI job's logic, one function per job. .github/workflows/ci.yml only installs tooling and calls
+// `pnpm ci:<job>`; `pnpm ci:local` runs the same commands in the Playwright Ubuntu image.
 // Usage: node scripts/ci-jobs.ts <job> [args for the job's script]
-//   workflows   actionlint + zizmor on .github, image pins (compose files, ci.yml, Dockerfile) consistent with
-//               scripts/images.ts, and the deploy recipes in deploy/ valid (Docker)
-//   static      pnpm check against the parent commit, without its drift job (the drift job runs every drift check)
+//   workflows    actionlint + zizmor on .github, and the image pins (compose file, ci.yml) consistent with
+//                scripts/images.ts (Docker)
+//   static       pnpm check against the parent commit
 //   supply-chain registry signatures of every installed package, and the vulnerability gate (`pnpm audit:check`)
-//   secrets     gitleaks over every commit of HEAD's history (.config/gitleaks.toml; Docker, a full clone)
-//   drift       every drift check, including the database one (DATABASE_URL)
-//   build       the production build, with placeholder configuration
-//   verify      verify:app on all five Playwright projects (DATABASE_URL, the build)
-//   lighthouse  the Lighthouse gate through the edge, 5 runs (DATABASE_URL, the build, Docker or caddy)
-//   docker      the Docker image end to end (scripts/docker-smoke.ts; Docker)
+//   secrets      gitleaks over every commit of HEAD's history (.config/gitleaks.toml; Docker, a full clone)
+//   e2e          the Playwright tests against the production build (Playwright builds and serves it)
+//   lighthouse   the production build, then the Lighthouse gate with CI's performance bar, 5 runs
 import { spawnSync } from 'node:child_process'
 import { relative, resolve } from 'node:path'
 import { xSync } from 'tinyexec'
@@ -26,10 +23,6 @@ const run = (command: string, args: string[] = [], env: NodeJS.ProcessEnv = {}) 
     return 1
   }
 }
-
-// GitHub Actions tests the build job's artifact, built from this commit by another job (its .output/build-inputs.json
-// should match the checkout, so this override may go once a CI run confirms it: scripts/build-freshness.ts).
-const downloadedBuild = process.env.GITHUB_ACTIONS === 'true' ? { ALLOW_STALE_BUILD: '1' } : {}
 
 /** Runs every step even after a failure, so one run shows every problem. */
 const sequence = (steps: [string, () => number][]) => {
@@ -47,31 +40,20 @@ const OFFLINE = ['--rm', '--network', 'none', '--memory', '512m']
 const CHECKOUT_READ_ONLY = ['--volume', `${process.cwd()}:/repo:ro`, '--workdir', '/repo']
 const ZIZMOR = [IMAGES.zizmor, '--offline', '--config', '.github/zizmor.yml', '.']
 
+/** Every reference to an image from scripts/images.ts in the compose file and ci.yml is the same pin. */
+const imagePins = () => {
+  const problems = pinProblems()
+  for (const problem of problems) console.error(problem)
+  if (problems.length) console.error('Copy the pin from scripts/images.ts into each file listed.')
+  return problems.length ? 1 : 0
+}
+
 /** actionlint (with shellcheck) and zizmor from their pinned images, offline and read-only. */
 const workflows = () =>
   sequence([
     ['actionlint', () => run('docker', ['run', ...OFFLINE, ...CHECKOUT_READ_ONLY, IMAGES.actionlint, '-color'])],
     ['zizmor', () => run('docker', ['run', ...OFFLINE, ...CHECKOUT_READ_ONLY, ...ZIZMOR])],
     ['image pins', imagePins],
-    ['deploy recipes', deployRecipes],
-  ])
-
-const EXAMPLE_DEPLOY = ['-f', 'deploy/compose.production.yaml', '--env-file', 'deploy/deploy.env.example']
-const DEPLOY_READ_ONLY = ['--volume', `${process.cwd()}/deploy:/deploy:ro`]
-const KUBERNETES_1_33 = ['-strict', '-summary', '-kubernetes-version', '1.33.0', '/deploy/kubernetes.yaml']
-
-/**
- * The production compose file resolves with the example settings, and the Kubernetes manifests match the
- * Kubernetes 1.33 schemas (kubeconform, strict: an unknown field fails). kubeconform downloads the schemas.
- */
-const deployRecipes = () =>
-  sequence([
-    ['compose.production.yaml', () => run('docker', ['compose', ...EXAMPLE_DEPLOY, 'config', '--quiet'])],
-    [
-      'kubernetes.yaml',
-      () =>
-        run('docker', ['run', '--rm', '--memory', '256m', ...DEPLOY_READ_ONLY, IMAGES.kubeconform, ...KUBERNETES_1_33]),
-    ],
   ])
 
 /** The rules, and the fingerprints of reviewed findings in history that cannot be rewritten. */
@@ -106,22 +88,10 @@ const secrets = (args: string[]) => {
   )
 }
 
-/** Every reference to an image from scripts/images.ts in compose.yaml, ci.yml and the Dockerfile is the same pin. */
-const imagePins = () => {
-  const problems = pinProblems()
-  for (const problem of problems) console.error(problem)
-  if (problems.length) console.error('Copy the pin from scripts/images.ts into each file listed.')
-  return problems.length ? 1 : 0
-}
-
 const JOBS: Record<string, (args: string[]) => number> = {
   workflows,
-  // The commit under test against its parent (the checkout fetches two commits). The drift job runs every drift check.
-  static: (args) =>
-    run('pnpm', ['check', ...args], {
-      CHECK_BASE_REF: process.env.CHECK_BASE_REF ?? 'HEAD^',
-      LEFTHOOK_EXCLUDE: 'drift',
-    }),
+  // The commit under test against its parent (the checkout fetches two commits).
+  static: (args) => run('pnpm', ['check', ...args], { CHECK_BASE_REF: process.env.CHECK_BASE_REF ?? 'HEAD^' }),
   // The install before it already verified the lockfile against minimumReleaseAge and trustPolicy.
   'supply-chain': () =>
     sequence([
@@ -129,34 +99,14 @@ const JOBS: Record<string, (args: string[]) => number> = {
       ['vulnerabilities', () => run('pnpm', ['audit:check'])],
     ]),
   secrets,
-  drift: (args) => run('node', ['scripts/check-drift.ts', ...args]),
-  // Nitro prerenders /about during the build, which loads the server configuration. The placeholders only
-  // satisfy its validation (the same ones as the Dockerfile); nothing connects, nothing lands in .output.
-  build: (args) =>
-    run('pnpm', ['build', ...args], {
-      DATABASE_URL: 'postgres://build:build@127.0.0.1:1/build',
-      APP_URL: 'http://localhost:3000',
-      BETTER_AUTH_SECRET: 'ci-build-placeholder-secret-not-used-at-runtime',
-    }),
-  verify: (args) =>
-    run('node', ['scripts/verify-app.ts', ...args], {
-      PW_PROJECTS: process.env.PW_PROJECTS || 'all',
-      ...downloadedBuild,
-    }),
-  lighthouse: (args) =>
-    run(
-      'node',
-      [
-        'scripts/lighthouse.ts',
-        '--bar=ci',
-        ...(args.some((a) => a.startsWith('--runs=')) ? [] : ['--runs=5']),
-        ...args,
-      ],
-      {
-        ...downloadedBuild,
-      },
-    ),
-  docker: (args) => run('node', ['scripts/docker-smoke.ts', ...args]),
+  e2e: (args) => run('pnpm', ['test:e2e', ...args]),
+  // The gate's own exit code, so 2 (inconclusive: too slow a machine) stays distinct from a failure.
+  lighthouse: (args) => {
+    const built = run('pnpm', ['build'])
+    if (built !== 0) return built
+    const runs = args.some((a) => a.startsWith('--runs=')) ? [] : ['--runs=5']
+    return run('node', ['scripts/lighthouse.ts', '--bar=ci', ...runs, ...args])
+  },
 }
 
 const [job, ...args] = process.argv.slice(2)

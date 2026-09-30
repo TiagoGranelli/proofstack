@@ -9,15 +9,12 @@ const GATED: Category[] = ['performance', 'accessibility', 'best-practices', 'se
 // Lighthouse 13.5 category; reported but not gated while its audits (llms.txt, WebMCP) are experimental.
 export const REPORTED: Category[] = [...GATED, 'agentic-browsing']
 
-export type Page = { name: string; path: string; auth?: boolean; gated: Category[] }
+/** A page to measure. A page that is noindex by design (private, a form) leaves 'seo' out of `gated`. */
+export type Page = { name: string; path: string; gated: Category[] }
 
 export const PAGES: Page[] = [
   { name: 'home', path: '/', gated: GATED },
   { name: 'about', path: '/about', gated: GATED },
-  // noindex by design (nothing to find there), so SEO does not apply.
-  { name: 'login', path: '/login', gated: ['performance', 'accessibility', 'best-practices'] },
-  // Private and noindex by design, so SEO does not apply.
-  { name: 'dashboard', path: '/dashboard', auth: true, gated: ['performance', 'accessibility', 'best-practices'] },
 ]
 
 export const POLICY = {
@@ -41,12 +38,12 @@ export const POLICY = {
     ci: { minMedian: 95, maxRunsBelow100: Number.POSITIVE_INFINITY, minRun: 95 },
   },
   /**
-   * Hard budgets on the medians (ms, unitless CLS, bytes): a backstop ~30-50% above the measured values.
-   * The score gate above is the tighter check.
+   * Hard budgets on the medians (ms, unitless CLS, bytes): a backstop ~30-50% above the measured values (the demo:
+   * FCP = LCP = SI 1.35 s on mobile and 0.33 s on desktop, 100 KB). The score gate above is the tighter check.
    */
   budgets: {
-    mobile: { fcp: 2000, lcp: 2100, tbt: 150, cls: 0.02, si: 2000, bytes: 300_000 },
-    desktop: { fcp: 600, lcp: 700, tbt: 50, cls: 0.02, si: 800, bytes: 300_000 },
+    mobile: { fcp: 2000, lcp: 2000, tbt: 150, cls: 0.02, si: 2000, bytes: 150_000 },
+    desktop: { fcp: 500, lcp: 500, tbt: 50, cls: 0.02, si: 500, bytes: 150_000 },
   } satisfies Record<FormFactor, Record<Metric, number>>,
   /**
    * Below this `environment.benchmarkIndex` (Lighthouse's own slow-CPU threshold, which also triggers its

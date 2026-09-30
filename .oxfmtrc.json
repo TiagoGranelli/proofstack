@@ -13,24 +13,20 @@
     "newlinesBetween": false
   },
   "sortTailwindcss": {
-    "stylesheet": "./src/styles/app.css",
-    "functions": ["cn", "cva"]
+    "stylesheet": "./src/styles/app.css"
   },
   "sortPackageJson": false,
   "ignorePatterns": [
     "node_modules/**",
-    ".output/**",
-    ".nitro/**",
-    ".tanstack/**",
+    "dist/**",
     ".fallow/**",
-    "drizzle/**",
-    ".repos/**",
-    "src/sdk/**",
+    "coverage/**",
+    "test-results/**",
+    "playwright-report/**",
+    "lighthouse-report/**",
     "src/routeTree.gen.ts",
-    "openapi.json",
     "pnpm-lock.yaml",
-    "skills-lock.json",
-    ".agents/skills/**",
+    ".agents/**",
     ".claude/**",
     "**/*.md"
   ]

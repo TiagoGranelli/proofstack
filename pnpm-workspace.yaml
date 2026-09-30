@@ -2,13 +2,8 @@
 # not know (ERR_PNPM_UNRECOGNIZED_WORKSPACE_SETTINGS), so a typo cannot silently drop a policy.
 # Dependency lifecycle scripts are blocked by default; every exception must be listed here.
 allowBuilds:
-  # esbuild (via drizzle-kit/tsx) works without its postinstall binary check.
-  esbuild: false
   # lefthook's postinstall runs `lefthook install`, which the `prepare` script already does.
   lefthook: false
-  # msw's postinstall only copies mockServiceWorker.js into `msw.workerDirectory`, which is not set: the
-  # component tests serve the worker straight from node_modules (vitest.config.ts).
-  msw: false
 engineStrict: true
 # Scripts run in pnpm's own shell on every platform, so `${VAR:-default}` and globs in package.json behave the
 # same on Windows (cmd.exe expands neither) as on Linux and macOS.
@@ -37,30 +32,17 @@ minimumReleaseAgeExclude: []
 trustPolicy: no-downgrade
 trustPolicyIgnoreAfter: 43200
 
-# Transitive versions forced for a security fix; each names the advisory. Remove an entry once the parent ships
-# the fix (`pnpm why <package>`).
-overrides:
-  # GHSA-pm4m-ph32-ghv5 (high) and GHSA-724g-mxrg-4qvm (moderate): @hey-api/json-schema-ref-parser pins js-yaml
-  # 5.2.0 exactly. 5.2.2 is the first release with both fixes, a patch release of the same line.
-  'js-yaml@5.2.0': 5.2.2
-
 # Advisories `pnpm audit:check` (`pnpm audit --audit-level high`, CI `supply-chain`) accepts. Only one that cannot
-# apply here goes in, with the reason and a review date; the usual fix is an upgrade or an `overrides` entry.
+# apply here goes in, with the reason and a review date; the usual fix is an upgrade or an `overrides` entry that
+# names the advisory.
 auditConfig:
-  ignoreGhsas:
-    # esbuild 0.18.20, only through drizzle-kit 0.31 (@esbuild-kit/esm-loader), a CLI the server bundle does not
-    # contain. The advisory is about `esbuild --serve`, which drizzle-kit never starts. Moderate, so below the
-    # gate; listed so a plain `pnpm audit` stays clean. drizzle-kit 1.0 drops @esbuild-kit (ADR 0005).
-    # Review by 2026-12-31.
-    - GHSA-67mh-4wv8-2f99
+  ignoreGhsas: []
 
-# better-call (Better Auth's router) has an optional peer on zod ^4. pnpm fills a missing optional peer from any
-# version in the graph and chose shadcn's zod 3.25.76, which gave @better-auth/core a second copy of better-call
-# next to better-auth's own (two APIError classes). zod 4.6.5 in package.json, the version better-auth already
-# depends on, is the provider instead; nothing imports it (ADR 0007).
+# An unmet peer fails the install instead of printing a warning nobody reads. pnpm otherwise fills a missing
+# optional peer from any version in the graph, which can load two copies of one library.
 strictPeerDependencies: true
 
-# TypeScript is 7.0.2 only (ADR 0002). The TanStack ESLint plugins, which oxlint loads as JS plugins, bring
+# TypeScript is 7.0.2 (ADR 0002). The TanStack Router lint plugin, which oxlint loads as a JS plugin, brings
 # typescript-eslint 8, whose packages declare typescript <6.1. Oxlint hands JS plugins empty parser services, so
 # the rules' optional type-aware paths are skipped and TypeScript's compiler API, which TS 7 no longer has, is
 # never called. Remove these once typescript-eslint supports TS 7 (typescript-eslint/typescript-eslint#10940).

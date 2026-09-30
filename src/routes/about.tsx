@@ -1,19 +1,18 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { Page } from '#/components/layouts/page.tsx'
-import { pageTitle } from '#/config/app.ts'
 
-// Finite static page: prerendered at build time (see nitro.prerender.routes in vite.config.ts).
 export const Route = createFileRoute('/about')({
-  head: () => ({ meta: [{ title: pageTitle('About') }] }),
+  head: () => ({ meta: [{ title: 'About · Word counter' }] }),
   component: About,
 })
 
 function About() {
   return (
-    <Page title="About">
-      <p className="leading-relaxed text-pretty">
-        This app's API contract, generated SDK, running API and tests are checked against each other in CI.
+    <>
+      <h1 className="text-2xl font-semibold">About</h1>
+      <p className="mt-2">
+        A demo small enough to replace. It exists so that every check in this repository has something to run on: a pure
+        function with property tests, a component with state, two routes, and pages that must pass axe and Lighthouse.
       </p>
-    </Page>
+    </>
   )
 }

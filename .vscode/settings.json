@@ -11,42 +11,29 @@
   // TypeScript 7 (Go) language service from the TypeScriptTeam.native-preview extension.
   "js/ts.experimental.useTsgo": true,
 
-  "tailwindCSS.classFunctions": ["cn", "cva"],
-
-  // Generated files: edit their sources instead (src/contract, src/routes, src/server/auth.ts, the Drizzle schema).
+  // Generated files: edit their sources instead (src/routes for the route tree, package.json for the lockfile).
   "files.readonlyInclude": {
-    "src/sdk/**": true,
     "src/routeTree.gen.ts": true,
-    "src/server/db/schema/auth.ts": true,
-    "openapi.json": true,
-    "drizzle/**": true,
     "pnpm-lock.yaml": true
   },
   "files.watcherExclude": {
     "**/node_modules/**": true,
-    "**/.output/**": true,
-    "**/.nitro/**": true,
-    "**/.tanstack/**": true,
+    "**/dist/**": true,
     "**/.fallow/**": true,
     "**/test-results/**": true,
     "**/playwright-report/**": true,
-    "**/.repos/**": true
+    "**/lighthouse-report/**": true
   },
   "search.exclude": {
-    "**/.output": true,
-    "**/.nitro": true,
-    "**/.tanstack": true,
+    "**/dist": true,
     "**/.fallow": true,
     "**/test-results": true,
     "**/playwright-report": true,
-    "**/.repos": true,
-    "src/sdk/**": true,
+    "**/lighthouse-report": true,
     "src/routeTree.gen.ts": true,
     "pnpm-lock.yaml": true
   },
   "files.exclude": {
-    "**/.nitro": true,
-    "**/.tanstack": true,
     "**/.fallow": true
   }
 }

@@ -1,23 +1,15 @@
 # gitleaks configuration (`pnpm ci:secrets`, and the pre-commit hook when a local gitleaks binary exists; both pass
-# it with --config, and .config/gitleaksignore with --gitleaks-ignore-path): gitleaks' default rules plus two for
-# how this project handles secrets.
-# Values that are safe to commit follow a convention the allowlist knows: the fixed passwords of the
-# throwaway local, CI and smoke-test databases (app-local, app-ci, app-smoke), build and
-# test placeholders that say so (`...-placeholder-...`, `...-not-a-secret...`), and the documentation example
-# `user:password`. Name a new test value the same way instead of adding an allowlist entry.
+# it with --config, and .config/gitleaksignore with --gitleaks-ignore-path): gitleaks' default rules plus one for
+# passwords in URLs, which the defaults miss.
+# Values that are safe to commit follow a convention the allowlist knows: placeholders that say so
+# (`...-placeholder-...`, `...-not-a-secret...`) and the documentation example `user:password`. Name a new test value
+# the same way instead of adding an allowlist entry. The secret scan reads the whole history, which this branch shares
+# with `main`, so the allowlist also keeps the fixed passwords of main's throwaway databases (app-local, app-ci,
+# app-smoke).
 title = "gitleaks config"
 
 [extend]
 useDefault = true
-
-[[rules]]
-id = "better-auth-secret"
-description = "BETTER_AUTH_SECRET set to a literal value (it signs every session cookie)"
-# Same line only: `BETTER_AUTH_SECRET=...`, `BETTER_AUTH_SECRET: '...'`. Expressions (process.env..., ${...}) are
-# not literals.
-regex = '''BETTER_AUTH_SECRET["']?[ \t]*[:=][ \t]*["'`]?([A-Za-z0-9+/=_.~-]{8,})'''
-secretGroup = 1
-keywords = ["better_auth_secret"]
 
 [[rules]]
 id = "url-credentials"
@@ -28,19 +20,16 @@ keywords = ["://"]
 
 [[allowlists]]
 description = "Values that are safe to commit by convention (see the top of this file)"
-targetRules = ["better-auth-secret", "url-credentials"]
+targetRules = ["url-credentials"]
 regexTarget = "secret"
 regexes = [
-  # Fixed passwords of the throwaway local (compose.yaml), CI and smoke-test databases: <name>-local, -ci, -smoke.
-  # Any name, because older commits in the history the CI job scans used the app's name before `app`.
+  # Fixed passwords of main's throwaway local, CI and smoke-test databases, in the shared history.
   '''^[a-z]+-(local|ci|smoke)$''',
   # Build-time and test placeholders that nothing connects with.
   '''placeholder''',
   '''not-a-secret''',
   # Dummies and documentation examples: postgres://build:build@127.0.0.1:1/build, smtps://user:password@...
   '''^(build|unused|password)$''',
-  # An expression, not a literal: BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET
-  '''^process\.env\.''',
 ]
 
 [[allowlists]]

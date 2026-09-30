@@ -1,9 +1,8 @@
 // The faithful local CI: the same `pnpm ci:<job>` scripts as .github/workflows/ci.yml. The container jobs run in
-// .github/compose.ci.yaml (the Playwright image with Postgres and Mailpit, CPU, memory and /dev/shm limits), each
-// in a fresh `runner` container on one copy of the checkout; the host jobs drive Docker themselves and run here.
+// .github/compose.ci.yaml (the Playwright image, with CPU, memory and /dev/shm limits), each in a fresh `runner`
+// container on one copy of the checkout; the host jobs drive Docker themselves and run here.
 // Usage: pnpm ci:local [job ...]   (default: every job, in CI order)
-//   Container jobs: static supply-chain drift build verify lighthouse. Host jobs: workflows secrets docker.
-//   verify and lighthouse need build, which is added when missing (CI's `needs: build`).
+//   Container jobs: static supply-chain e2e lighthouse. Host jobs: workflows secrets.
 // Env: CI_LOCAL_CPUS (default 4, a GitHub-hosted runner), CI_LOCAL_MEMORY (6g), CI_LOCAL_SHM (2g),
 //      CI_DOCKER_PREFIX (default <package name>-ci) names the compose project and the pnpm store volume.
 // Reports (test-results, playwright-report, lighthouse-report) land in test-results/ci-local/<job>/.
@@ -13,8 +12,8 @@ import { resolve } from 'node:path'
 import { xSync } from 'tinyexec'
 import { dockerPrefix } from './images.ts'
 
-const ORDER = ['workflows', 'secrets', 'static', 'supply-chain', 'drift', 'build', 'verify', 'lighthouse', 'docker']
-const HOST_JOBS = new Set(['workflows', 'secrets', 'docker'])
+const ORDER = ['workflows', 'secrets', 'static', 'supply-chain', 'e2e', 'lighthouse']
+const HOST_JOBS = new Set(['workflows', 'secrets'])
 
 const requested = process.argv.slice(2)
 const unknown = requested.filter((job) => !ORDER.includes(job))
@@ -23,10 +22,6 @@ if (unknown.length) {
   process.exit(2)
 }
 const jobs = new Set(requested.length ? requested : ORDER)
-if ((jobs.has('verify') || jobs.has('lighthouse')) && !jobs.has('build')) {
-  console.log('adding build: verify and lighthouse test the build of this run')
-  jobs.add('build')
-}
 const plan = ORDER.filter((job) => jobs.has(job))
 
 const git = (...args: string[]) => spawnSync('git', args, { encoding: 'utf8', maxBuffer: 64 * 2 ** 20 }).stdout
@@ -100,10 +95,6 @@ const runContainerJobs = (containerJobs: string[]) => {
   for (const job of containerJobs) {
     console.log(`\n▶ ci:${job} (container)`)
     rows.push(timed(job, () => inRunner(job, ['pnpm', `ci:${job}`])))
-    if (job === 'build' && rows.at(-1)?.status !== 0) {
-      console.error(`build failed (exit ${rows.at(-1)?.status}): skipping the jobs that need it`)
-      break
-    }
   }
   return rows
 }
@@ -126,7 +117,7 @@ try {
 }
 for (const job of plan.filter((j) => HOST_JOBS.has(j))) {
   console.log(`\n▶ ci:${job} (host)`)
-  // tinyexec starts pnpm's .cmd shim on Windows too (docs/operations.md, "Development platforms").
+  // tinyexec starts pnpm's .cmd shim on Windows too.
   rows.push(timed(job, () => xSync('pnpm', [`ci:${job}`], { nodeOptions: { stdio: 'inherit' } }).exitCode ?? 1))
 }
 

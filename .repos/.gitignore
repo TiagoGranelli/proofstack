@@ -1,4 +1,0 @@
-# Vendored upstream snapshots are local reference material, fetched on demand with
-# partial, sparse git clones. See docs/agents/dependency-sources.md.
-*
-!.gitignore

@@ -1,8 +1,7 @@
 {
-  // Strictness beyond `strict`. Two flags stay off on purpose, measured on this code base:
-  // exactOptionalPropertyTypes (34 errors, all an optional `x?: T` receiving `T | undefined` from env or options
-  // plumbing, no bug among them) and noPropertyAccessFromIndexSignature (96 errors, mostly `process.env.X`, which
-  // src/server/env.ts validates). Turning either on means rewriting correct code, not catching mistakes.
+  // Strictness beyond `strict`, with no setting that only TypeScript 7 knows: TypeScript 6 checks this project too
+  // (ADR 0002). exactOptionalPropertyTypes and noPropertyAccessFromIndexSignature stay off: on the full-stack
+  // template they flagged correct code (an optional `x?: T` receiving `T | undefined`, `process.env.X`), no bugs.
   "compilerOptions": {
     "target": "ES2024",
     "lib": ["ES2024", "DOM", "DOM.Iterable"],
@@ -23,70 +22,9 @@
     "isolatedModules": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "erasableSyntaxOnly": true,
-    // Effect's diagnostics (floating effects, leaking requirements, missing yield*, …): in the editor through
-    // @effect/tsgo's language service, and in `pnpm check` as the `effect` job (`effect-tsgo diagnostics --strict`).
-    // --strict fails on errors and warnings but not on suggestions, so every rule whose default is "suggestion"
-    // is promoted to "warning": each one names a simpler or safer Effect API, and the gate has always failed on
-    // them. A rule added in an @effect/tsgo upgrade starts as a suggestion: add it here.
-    "plugins": [
-      {
-        "name": "@effect/language-service",
-        "diagnosticSeverity": {
-          "abortControllerInEffect": "warning",
-          "acquireReleaseDisposable": "warning",
-          "allOfMapToForEach": "warning",
-          "catchAllTagDispatchToCatchTag": "warning",
-          "catchAllToMapError": "warning",
-          "catchChainToFirstSuccessOf": "warning",
-          "catchConditionalRefailToCatchIf": "warning",
-          "catchDieToOrDie": "warning",
-          "catchIfTagToCatchTag": "warning",
-          "catchRefailToTapError": "warning",
-          "catchTagToCatchReason": "warning",
-          "catchToIgnore": "warning",
-          "catchToOrElseSucceed": "warning",
-          "catchUnfailableEffect": "warning",
-          "effectFnOpportunity": "warning",
-          "effectMapFlatten": "warning",
-          "effectMapVoid": "warning",
-          "effectSucceedWithVoid": "warning",
-          "flatMapConditionalToFilterOrFail": "warning",
-          "flatMapIgnoredParamToAndThen": "warning",
-          "flatMapToMap": "warning",
-          "lazyEffect": "warning",
-          "leakingRequirements": "warning",
-          "mapSomeToAsSome": "warning",
-          "matchEffectToMapBoth": "warning",
-          "matchEffectToMatch": "warning",
-          "multipleCatchTag": "warning",
-          "optionMatchToFromOption": "warning",
-          "preferSucceedSomeOrNone": "warning",
-          "preferTypedSchemaDecoder": "warning",
-          "preferUnsafeConstructor": "warning",
-          "provideLayerSucceedToProvideService": "warning",
-          "raceFirstWithSleepToTimeout": "warning",
-          "redundantMapError": "warning",
-          "redundantOrDie": "warning",
-          "redundantSchemaTagIdentifier": "warning",
-          "returnEffectInGen": "warning",
-          "runEffectInsideEffect": "warning",
-          "runOfExitToRunExit": "warning",
-          "schemaNumber": "warning",
-          "schemaStructWithTag": "warning",
-          "schemaSyncInEffect": "warning",
-          "syncToSucceed": "warning",
-          "timeoutCatchTagToTimeoutOrElse": "warning",
-          "tryCatchInEffectGen": "warning",
-          "unnecessaryEffectGen": "warning",
-          "unnecessaryFailYieldableError": "warning",
-          "unnecessaryPipe": "warning",
-          "unnecessaryPipeChain": "warning",
-          "unnecessaryTypeofType": "warning"
-        }
-      }
-    ]
+    // scripts/*.ts run through Node's type stripping, which accepts erasable syntax only.
+    "erasableSyntaxOnly": true
   },
   "include": ["src", "scripts", "tests", "*.config.ts"],
-  "exclude": ["node_modules", ".output", ".repos"]
+  "exclude": ["node_modules", "dist"]
 }

@@ -3,15 +3,7 @@
 import { readFileSync } from 'node:fs'
 import { IMAGES } from './images.ts'
 
-const PINNED_COPIES = [
-  'compose.yaml',
-  'deploy/compose.smoke.yaml',
-  'deploy/compose.production.yaml',
-  '.github/compose.ci.yaml',
-  '.github/workflows/ci.yml',
-  'Dockerfile',
-  '.agents/evals/Dockerfile',
-]
+const PINNED_COPIES = ['.github/compose.ci.yaml', '.github/workflows/ci.yml']
 
 /** Each pinned reference with a pattern for `<name>:<tag>[@sha256:...]` of the same image. */
 const PATTERNS = Object.values(IMAGES).map((ref) => {

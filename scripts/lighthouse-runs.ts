@@ -2,7 +2,7 @@
 // reads from their reports: scores, metric medians, failing audits and the median run.
 import { copyFileSync, existsSync, readFileSync, statfsSync } from 'node:fs'
 import { computeMedianRun } from 'lighthouse/core/lib/median-run.js'
-import { xSync } from 'tinyexec'
+import { x } from 'tinyexec'
 import { type Category, type FormFactor, type Measured, type Metric, median, REPORTED } from './lighthouse-policy.ts'
 
 /** The parts of a Lighthouse report (LHR) the gate reads. */
@@ -56,15 +56,15 @@ export const SHM_BYTES = sharedMemoryBytes()
 export const SMALL_SHM = SHM_BYTES < 1024 ** 3
 
 /**
- * Chrome's flags. `edgeCertificateSpki`: Chrome trusts exactly the key of the edge's local certificate (not every
- * certificate error), so the page is a secure https origin as in production, and best-practices audits see what
- * users would see. `http1`: HTTP/1.1 only, to compare with HTTP/2.
+ * Chrome's flags. `certificateSpki`: Chrome trusts exactly the key of the local server's self-signed certificate (not
+ * every certificate error), so the page is a secure https origin as in production, and best-practices audits see
+ * what users would see. `http1`: HTTP/1.1 only, to compare with HTTP/2.
  */
-export const chromeFlags = (options: { edgeCertificateSpki?: string; http1: boolean }): string[] => [
+export const chromeFlags = (options: { certificateSpki: string | undefined; http1: boolean }): string[] => [
   '--headless=new',
   '--no-sandbox',
   ...(SMALL_SHM ? ['--disable-dev-shm-usage'] : []),
-  ...(options.edgeCertificateSpki ? [`--ignore-certificate-errors-spki-list=${options.edgeCertificateSpki}`] : []),
+  ...(options.certificateSpki ? [`--ignore-certificate-errors-spki-list=${options.certificateSpki}`] : []),
   ...(options.http1 ? ['--disable-http2', '--disable-quic'] : []),
 ]
 
@@ -75,20 +75,22 @@ type LighthouseRun = {
   formFactor: FormFactor
   /** Where the reports go: `<outputBase>.report.{json,html}`. */
   outputBase: string
-  cookie: string | undefined
   chrome: Chrome
 }
 
-/** One Lighthouse run of every REPORTED category; returns its report. */
-export const runLighthouse = (run: LighthouseRun): Lhr => {
+/**
+ * One Lighthouse run of every REPORTED category; returns its report. Asynchronous, so the preview server in this
+ * process keeps serving the page while Lighthouse loads it.
+ */
+export const runLighthouse = async (run: LighthouseRun): Promise<Lhr> => {
   const args = ['exec', 'lighthouse', run.url, '--output=json', '--output=html', `--output-path=${run.outputBase}`]
     .concat([`--only-categories=${REPORTED.join(',')}`, `--chrome-flags=${run.chrome.flags.join(' ')}`, '--quiet'])
     .concat(run.formFactor === 'desktop' ? ['--preset=desktop'] : [])
-    .concat(run.cookie ? [`--extra-headers=${JSON.stringify({ cookie: run.cookie })}`] : [])
-  const lighthouse = xSync('pnpm', args, {
+  const lighthouse = x('pnpm', args, {
     timeout: 180_000,
     nodeOptions: { stdio: 'inherit', env: { CHROME_PATH: run.chrome.path } },
   })
+  await lighthouse
   if (lighthouse.exitCode !== 0)
     throw new Error(
       `lighthouse failed for ${run.url} (${run.formFactor}): exit ${lighthouse.exitCode ?? lighthouse.signalCode}, ` +

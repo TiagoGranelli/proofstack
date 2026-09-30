@@ -2,16 +2,15 @@
 // records every Tab stop with its accessible name and whether its focus is visible.
 import { AxeBuilder } from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
-import { APP_NAME } from '#/config/app.ts'
 
 /** WCAG 2.0, 2.1 and 2.2 at levels A and AA, plus axe's best practices. */
 const AXE_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice']
 
 /**
  * Scans the page as it is now and fails on any violation, listing each rule with the offending selectors.
- * `state` names the UI state in the failure message and in the attached report, e.g. 'dashboard, editing'.
+ * `state` names the UI state in the failure message and in the attached report, e.g. 'home, with text'.
  */
-export async function expectAccessible(page: Page, state: string) {
+export async function expectAccessible(page: Page, state: string): Promise<void> {
   // Scan the state as it settles, not a frame of a transition: a button that becomes enabled fades in from
   // `disabled:opacity-50`, and its colors fail contrast until the fade ends. Infinite animations (a loading
   // pulse) never finish and are part of the state, so they are not waited for.
@@ -36,7 +35,7 @@ export async function expectAccessible(page: Page, state: string) {
 }
 
 export type TabStop = {
-  /** Role and accessible name, e.g. `button "Sign out"`, from Playwright's ARIA snapshot. */
+  /** Role and accessible name, e.g. `button "Clear"`, from Playwright's ARIA snapshot. */
   name: string
   /** The element shows a focus indicator: a non-zero outline or a box-shadow ring. */
   visibleFocus: boolean
@@ -53,7 +52,7 @@ export type TabStop = {
  * Playwright keeps focus on the last control and `document.hasFocus()` stays true, which looks exactly like
  * a trap. Focus that reaches the sentinel has left every control in the page's own order, in every engine.
  */
-export async function tabThrough(page: Page, options: { backwards?: boolean; max?: number } = {}): Promise<TabStop[]> {
+async function tabThrough(page: Page, options: { backwards?: boolean; max?: number } = {}): Promise<TabStop[]> {
   const { backwards = false, max = 40 } = options
   await page.evaluate((atStart) => {
     const sentinel = Object.assign(document.createElement('span'), { tabIndex: 0, id: 'tab-walk-end' })
@@ -87,7 +86,7 @@ const focusedStop = async (page: Page): Promise<TabStop | 'sentinel' | 'lost'> =
   if ((await focused.count()) === 0) return 'lost'
   if (await focused.evaluate((element) => element.id === 'tab-walk-end')) return 'sentinel'
   const snapshot = await focused.ariaSnapshot()
-  // `- button "Sign out"`, or YAML-quoted when the name has a colon: `- 'button "Edit post: First"'`.
+  // `- button "Clear"`, or YAML-quoted when the name has a colon: `- 'button "Delete: First"'`.
   const [, role, label] = /^- '?([\w-]+)(?: "((?:[^"\\]|\\.)*)")?/.exec(snapshot) ?? []
   const visibleFocus = await focused.evaluate((element) => {
     const style = getComputedStyle(element)
@@ -101,7 +100,7 @@ const focusedStop = async (page: Page): Promise<TabStop | 'sentinel' | 'lost'> =
  * Tab stops from the top of the page. Focus starts on a temporary, untabbable element before everything
  * else (blurring would not do: the browser resumes Tab from the last focused element).
  */
-export async function tabOrder(page: Page, max?: number) {
+export async function tabOrder(page: Page, max?: number): Promise<TabStop[]> {
   await page.evaluate(() => {
     const start = Object.assign(document.createElement('span'), { tabIndex: -1, id: 'tab-order-start' })
     document.body.prepend(start)
@@ -114,32 +113,12 @@ export async function tabOrder(page: Page, max?: number) {
   }
 }
 
-const ACCOUNT_LINKS = {
-  'signed out': `
-    - link "Sign in"`,
-  'signed in': `
-    - text: /\\S/
-    - link "Dashboard"
-    - link "Account"
-    - button "Sign out"`,
-}
-
 /**
- * What every page starts with, as an ARIA snapshot: the skip link, then the site header with the main
- * navigation, whose account links depend on `session`; the page's own `main` follows.
+ * What every page starts with, as an ARIA snapshot: the site header with the main navigation. The page's own `main`
+ * follows.
  */
-export const siteHeader = (session: keyof typeof ACCOUNT_LINKS) => `
-- link "Skip to content"
+export const SITE_HEADER = `
 - banner:
   - navigation "Main":
-    - link "${APP_NAME}"
-    - link "About"${ACCOUNT_LINKS[session]}`
-
-/** The footer every page ends with: what the app is and the theme choice. */
-export const SITE_FOOTER = `
-- contentinfo:
-  - paragraph
-  - group "Theme":
-    - radio "System"
-    - radio "Light"
-    - radio "Dark"`
+    - link "Word counter"
+    - link "About"`

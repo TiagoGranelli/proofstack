@@ -9,24 +9,20 @@ describe('pagePath', () => {
     ['about.tsx', '/about'],
     ['_authed/dashboard.tsx', '/dashboard'],
     ['(marketing)/pricing/index.tsx', '/pricing'],
-    ['posts/$id.tsx', '/posts/$id'],
+    ['articles/$id.tsx', '/articles/$id'],
   ])('%s is the page %s', (file, path) => {
     expect(pagePath(file)).toBe(path)
   })
 
-  it.each(['__root.tsx', '_authed.tsx', 'api/$.ts', 'api/auth/$.ts', '-private/helper.tsx'])(
-    '%s is no page',
-    (file) => {
-      expect(pagePath(file)).toBeUndefined()
-    },
-  )
+  it.each(['__root.tsx', '_authed.tsx', '-private/helper.tsx'])('%s is no page', (file) => {
+    expect(pagePath(file)).toBeUndefined()
+  })
 })
 
 describe('reachedPaths', () => {
-  it('reads visited paths without their query, and the helpers that reach a page', () => {
-    const block = `visit(page, '/verify-email?token=x'); visit(page, '/about'); visit(page, '/')
-      await navigateWithApiResponse(page, '/api/me', { status: 503, json: {} })`
-    expect([...reachedPaths(block)].toSorted()).toEqual(['/', '/about', '/dashboard', '/verify-email'])
+  it('reads visited paths without their query or fragment', () => {
+    const block = `visit(page, '/verify-email?token=x'); visit(page, '/about#team'); visit(page, '/')`
+    expect([...reachedPaths(block)].toSorted()).toEqual(['/', '/about', '/verify-email'])
   })
 })
 
