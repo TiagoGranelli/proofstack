@@ -1,12 +1,12 @@
-// Deleting one of the author's posts (MyPost with DeletePostButton): the dialog that asks first, where focus goes,
-// the pending state and every failure branch.
+// Deleting one of the author's posts (MyPost with ConfirmDeleteButton): where focus goes, the pending state and every
+// failure branch. The dialog that asks first is tested on its own in confirm-delete-button.test.tsx.
 import { HttpResponse } from 'msw'
 import { describe, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
 import { getMyPostsQueryOptions } from '#/features/posts/api/get-my-posts.ts'
 import { getPublicPostsQueryOptions } from '#/features/posts/api/get-public-posts.ts'
 import { MyPost } from '#/features/posts/components/my-post.tsx'
-import { api, apiError, apiFailure, held, post, postPage, postPages, worker } from './api-mocks.ts'
+import { api, apiError, apiFailure, held, post, listPage, listPages, worker } from './api-mocks.ts'
 import { afterRendering, renderInApp } from './test-utils.tsx'
 
 const original = post({ body: 'The original body' })
@@ -14,7 +14,6 @@ const editButton = () => page.getByRole('button', { name: /^Edit/ })
 const deleteButton = () => page.getByRole('button', { name: /^Delete post/ })
 const field = () => page.getByLabelText('Edit post')
 const dialog = () => page.getByRole('alertdialog', { name: 'Delete this post?' })
-const keepIt = () => dialog().getByRole('button', { name: 'Keep it' })
 const confirmDelete = () => dialog().getByRole('button', { name: 'Delete', exact: true })
 const card = () =>
   page.elementLocator(
@@ -33,6 +32,8 @@ const deletePost = async () => {
 /** Opens the dialog and confirms from the keyboard (Enter on its Delete). */
 const confirmWithKeyboard = async () => {
   await deleteButton().click()
+  // The dialog loads on first use: wait for it before reaching into it.
+  await expect.element(confirmDelete()).toBeVisible()
   ;(confirmDelete().element() as HTMLElement).focus()
   await userEvent.keyboard('{Enter}')
 }
@@ -52,27 +53,6 @@ const heldFailingDelete = () => {
 }
 
 describe('deleting a post', () => {
-  it('asks first, with focus on Keep it; Keep it or Escape sends nothing and puts focus back on Delete', async () => {
-    // No handler: a request would fail the test (setup.ts).
-    await renderInApp(<MyPost post={original} />)
-    ;(deleteButton().element() as HTMLElement).focus()
-    await userEvent.keyboard('{Enter}')
-    await expect
-      .element(dialog())
-      .toHaveAccessibleDescription('It will be gone for good, from your posts and from the public list.')
-    await expect.element(dialog().getByText('The original body')).toBeVisible()
-    await expect.element(keepIt()).toHaveFocus()
-    await userEvent.keyboard('{Enter}')
-    await expect.element(dialog()).not.toBeInTheDocument()
-    await expect.element(deleteButton()).toHaveFocus()
-
-    await userEvent.keyboard('{Enter}')
-    await expect.element(keepIt()).toHaveFocus()
-    await userEvent.keyboard('{Escape}')
-    await expect.element(dialog()).not.toBeInTheDocument()
-    await expect.element(deleteButton()).toHaveFocus()
-  })
-
   it('confirming gives focus back to Delete, which keeps it while the request runs and after it fails', async () => {
     const request = heldFailingDelete()
     await renderInApp(<MyPost post={original} />)
@@ -114,7 +94,7 @@ describe('deleting a post', () => {
     )
     const onDeleted = vi.fn<() => void>()
     const { queryClient } = await renderInApp(<MyPost post={original} onDeleted={onDeleted} />)
-    queryClient.setQueryData(getMyPostsQueryOptions().queryKey, postPages(postPage([original])))
+    queryClient.setQueryData(getMyPostsQueryOptions().queryKey, listPages(listPage([original])))
     await deletePost()
     await expect.element(deleteButton()).toBeDisabled()
     await expect.element(editButton()).toBeDisabled()
@@ -122,14 +102,14 @@ describe('deleting a post', () => {
 
     response.release()
     await expect.poll(() => onDeleted.mock.calls.length).toBe(1)
-    expect(queryClient.getQueryData(getMyPostsQueryOptions().queryKey)).toEqual(postPages(postPage([])))
+    expect(queryClient.getQueryData(getMyPostsQueryOptions().queryKey)).toEqual(listPages(listPage([])))
   })
 
   it('stays quiet when the post was already deleted elsewhere, and refreshes the lists', async () => {
     worker.use(apiError('myPostsRemove', 404, { _tag: 'PostNotFound', id: original.id }))
     const onDeleted = vi.fn<() => void>()
     const { queryClient } = await renderInApp(<MyPost post={original} onDeleted={onDeleted} />)
-    queryClient.setQueryData(getPublicPostsQueryOptions().queryKey, postPages(postPage([original])))
+    queryClient.setQueryData(getPublicPostsQueryOptions().queryKey, listPages(listPage([original])))
     await deletePost()
     await expect.poll(() => queryClient.getQueryState(getPublicPostsQueryOptions().queryKey)?.isInvalidated).toBe(true)
     await expect.element(deleteButton()).toBeEnabled()

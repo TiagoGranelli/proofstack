@@ -62,8 +62,7 @@ statements (Oxlint `max-statements`; a `describe` has no length limit) and four 
   through `webHandler(options?)` as raw `Request`s. `database-down.test.ts` sends every contract operation with
   the database down and expects its documented failure, and `public-operations.test.ts` sends each one without a
   session and expects 401 unless `PUBLIC_OPERATIONS` lists it, so a new endpoint is checked without edits.
-  The project sets dummy env values (`vitest.config.ts`) because `src/server/env.ts` validates at import;
-  nothing connects to them.
+  Dummy env values (`vitest.config.ts`) pass the import-time check of `src/server/env.ts`; nothing uses them.
 - **db.** `tests/db` runs against a real, migrated database of its own (`tests/db/global-setup.ts`). A new
   repository method gets a query budget in its feature's `tests/db/<feature>-query-budget.test.ts` (as
   `posts-query-budget.test.ts`; shared services in `query-budget.test.ts`): `withBudget(name, n, effect)`

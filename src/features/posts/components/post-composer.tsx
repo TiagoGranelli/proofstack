@@ -1,14 +1,15 @@
 import { revalidateLogic, useForm } from '@tanstack/react-form'
 import { useRef } from 'react'
 import { ApiErrorAlert } from '#/components/errors/api-error-alert.tsx'
+import { CharacterCount, isTooLong } from '#/components/form/character-count.tsx'
 import { FieldError } from '#/components/form/field-error.tsx'
 import { describedBy, fieldErrorMessage } from '#/components/form/field-messages.ts'
 import { loadOnInteraction, useSchemaSubmit } from '#/components/form/lazy-schema.ts'
 import { Button } from '#/components/ui/button.tsx'
 import { Label } from '#/components/ui/label.tsx'
 import { Textarea } from '#/components/ui/textarea.tsx'
+import { POST_MAX_LENGTH } from '#/contract/limits.ts'
 import { useCreatePost } from '#/features/posts/api/create-post.ts'
-import { CharacterCount, isTooLong } from '#/features/posts/components/character-count.tsx'
 import { postDraftSchema } from '#/features/posts/utils/post-draft-schema.ts'
 import { fieldIssue } from '#/lib/api-error.ts'
 
@@ -72,11 +73,11 @@ export function PostComposer(props: { onPublished?: () => void }) {
                   formError && 'post-error',
                   schemaError && 'post-schema-error',
                 )}
-                aria-invalid={isTooLong(body) || Boolean(error) || undefined}
+                aria-invalid={isTooLong(body, POST_MAX_LENGTH) || Boolean(error) || undefined}
                 required
               />
               <div className="flex items-center justify-between gap-2">
-                <CharacterCount id="post-body-count" value={body} />
+                <CharacterCount id="post-body-count" value={body} max={POST_MAX_LENGTH} />
                 {/* Only aria-disabled while pending: a disabled button loses focus, and a keyboard user would be left
                     on <body> when publishing fails. */}
                 <Button type="submit" disabled={body.trim().length === 0} aria-disabled={create.isPending || undefined}>

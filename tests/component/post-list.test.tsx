@@ -6,7 +6,7 @@ import { page, userEvent } from 'vitest/browser'
 import { getPublicPostsQueryOptions } from '#/features/posts/api/get-public-posts.ts'
 import { PostList } from '#/features/posts/components/post-list.tsx'
 import type { PostPage } from '#/sdk/types.gen.ts'
-import { api, apiError, held, post, postPage, postPages, worker } from './api-mocks.ts'
+import { api, apiError, held, post, listPage, listPages, worker } from './api-mocks.ts'
 import { pressAndKeepFocus, renderInApp, testQueryClient } from './test-utils.tsx'
 
 /** The public list as src/routes/index.tsx renders it. */
@@ -18,7 +18,7 @@ function PublicPosts() {
 /** Renders the list with `first` already loaded, as the route loader leaves it. */
 const renderList = (first: PostPage) => {
   const queryClient = testQueryClient()
-  queryClient.setQueryData(getPublicPostsQueryOptions().queryKey, postPages(first))
+  queryClient.setQueryData(getPublicPostsQueryOptions().queryKey, listPages(first))
   return renderInApp(<PublicPosts />, { queryClient })
 }
 
@@ -26,8 +26,8 @@ const loadMore = () => page.getByRole('button', { name: /^Load(ing)? more posts/
 const items = () => page.getByRole('listitem')
 
 const CURSOR = 'cursor-after-page-1'
-const firstPage = postPage([post({ body: 'newest' }), post({ body: 'newer' })], CURSOR)
-const secondPage = postPage([post({ body: 'older' }), post({ body: 'oldest' })])
+const firstPage = listPage([post({ body: 'newest' }), post({ body: 'newer' })], CURSOR)
+const secondPage = listPage([post({ body: 'older' }), post({ body: 'oldest' })])
 
 /** Answers the request for the page after CURSOR with `respond`; records every cursor requested. */
 const nextPage = (respond: () => Promise<Response> | Response) => {
@@ -43,14 +43,14 @@ const nextPage = (respond: () => Promise<Response> | Response) => {
 
 describe('PostList', () => {
   it('shows the empty message in place of the list', async () => {
-    await renderList(postPage([]))
+    await renderList(listPage([]))
     await expect.element(page.getByTestId('public-posts')).toHaveTextContent('No posts yet.')
     await expect.element(page.getByRole('list')).not.toBeInTheDocument()
     expect(page.getByRole('button').elements()).toHaveLength(0)
   })
 
   it('lists posts in the given order as read-only cards, without Load more on the last page', async () => {
-    await renderList(postPage([post({ body: 'newer' }), post({ body: 'older', authorName: 'Other Author' })]))
+    await renderList(listPage([post({ body: 'newer' }), post({ body: 'older', authorName: 'Other Author' })]))
     await expect.element(items().nth(0)).toHaveTextContent('newerTest Author · Jan 2, 2026')
     await expect.element(items().nth(1)).toHaveTextContent('olderOther Author · Jan 2, 2026')
     expect(items().elements()).toHaveLength(2)

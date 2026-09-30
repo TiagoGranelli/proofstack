@@ -1,8 +1,8 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { ConfirmDeleteButton } from '#/components/confirm-delete/confirm-delete-button.tsx'
 import { ApiErrorAlert } from '#/components/errors/api-error-alert.tsx'
 import { Button } from '#/components/ui/button.tsx'
 import { isPostNotFound, useDeletePost } from '#/features/posts/api/delete-post.ts'
-import { DeletePostButton } from '#/features/posts/components/delete-post-button.tsx'
 import { PostCard } from '#/features/posts/components/post-card.tsx'
 import type { Post } from '#/sdk/types.gen.ts'
 
@@ -18,7 +18,7 @@ const preloadEditor = () => {
 
 /**
  * One of the author's posts, with Edit and Delete. Edit swaps the body for a form; focus moves into the
- * textarea and returns to the Edit button on Save or Cancel. Delete asks first (DeletePostButton).
+ * textarea and returns to the Edit button on Save or Cancel. Delete asks first (ConfirmDeleteButton).
  */
 export function MyPost(props: { post: Post; onUpdated?: () => void; onDeleted?: () => void }) {
   const { post } = props
@@ -69,8 +69,12 @@ export function MyPost(props: { post: Post; onUpdated?: () => void; onDeleted?: 
           >
             Edit<span className="sr-only"> post: {post.body.slice(0, 40)}</span>
           </Button>
-          <DeletePostButton
-            body={post.body}
+          <ConfirmDeleteButton
+            target={{
+              noun: 'post',
+              text: post.body,
+              consequence: 'It will be gone for good, from your posts and from the public list.',
+            }}
             pending={remove.isPending}
             onConfirm={() => remove.mutate({ path: { id: post.id } })}
           />

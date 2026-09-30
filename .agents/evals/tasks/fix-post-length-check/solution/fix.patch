@@ -1,15 +1,13 @@
-diff --git b/src/features/posts/components/character-count.tsx a/src/features/posts/components/character-count.tsx
-index 0bbf9fe..d2e3fd4 100644
---- b/src/features/posts/components/character-count.tsx
-+++ a/src/features/posts/components/character-count.tsx
-@@ -1,8 +1,8 @@
- import { POST_MAX_LENGTH } from '#/contract/limits.ts'
+diff --git a/src/components/form/character-count.tsx b/src/components/form/character-count.tsx
+--- a/src/components/form/character-count.tsx
++++ b/src/components/form/character-count.tsx
+@@ -1,7 +1,7 @@
  import { cn } from '#/lib/utils.ts'
  
 -/** Whether a draft is over the limit the API enforces. */
--export const isTooLong = (value: string) => value.length > POST_MAX_LENGTH
-+/** The API rejects untrimmed bodies, so the forms send `body.trim()`; the limit applies to that. */
-+export const isTooLong = (value: string) => value.trim().length > POST_MAX_LENGTH
+-export const isTooLong = (value: string, max: number) => value.length > max
++/** The API rejects untrimmed text, so the forms send `value.trim()`; the limit applies to that. */
++export const isTooLong = (value: string, max: number) => value.trim().length > max
  
  /**
-  * "123/280" counter, referenced by the textarea's aria-describedby. The count itself is not a live region
+  * "123/280" counter of a text field with a length limit, referenced by the field's aria-describedby. The count

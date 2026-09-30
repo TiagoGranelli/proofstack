@@ -5,7 +5,7 @@ import { page, userEvent } from 'vitest/browser'
 import { POST_MAX_LENGTH } from '#/contract/limits.ts'
 import { getMyPostsQueryOptions } from '#/features/posts/api/get-my-posts.ts'
 import { MyPost } from '#/features/posts/components/my-post.tsx'
-import { api, apiError, apiFailure, held, post, postPage, postPages, worker } from './api-mocks.ts'
+import { api, apiError, apiFailure, held, post, listPage, listPages, worker } from './api-mocks.ts'
 import { afterRendering, pressAndKeepFocus, renderInApp } from './test-utils.tsx'
 
 const original = post({ body: 'The original body' })
@@ -96,7 +96,7 @@ describe('MyPost', () => {
     )
     const onUpdated = vi.fn<() => void>()
     const { queryClient } = await renderInApp(<MyPost post={original} onUpdated={onUpdated} />)
-    queryClient.setQueryData(getMyPostsQueryOptions().queryKey, postPages(postPage([original])))
+    queryClient.setQueryData(getMyPostsQueryOptions().queryKey, listPages(listPage([original])))
     await saveEdit('  The new body \n')
     await expect.element(save()).toBeDisabled()
     await expect.poll(() => sent).toEqual([{ id: original.id, body: 'The new body' }])

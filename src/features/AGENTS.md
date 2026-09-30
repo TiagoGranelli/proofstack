@@ -16,6 +16,10 @@ Read this before you add or change a feature. The root `AGENTS.md` still applies
 - Components call these hooks, never a generated `*Mutation()` directly, and component files export only
   components.
 - Forms, buttons with behavior and lists live in `components/`; pure helpers in `utils/`.
+- A list of items reuses the shared pieces instead of copying the posts ones (the dupes gate fails on a copy):
+  `LoadMoreList` (`src/components/lists/`, pages read with `firstPage`/`nextPage` from `src/lib/infinite-pages.ts`),
+  `RelativeTime` (`src/components/time/`), `ConfirmDeleteButton` (`src/components/confirm-delete/`) and
+  `CharacterCount` (`src/components/form/`). The server side has its own: see the `add-feature` skill.
 - Forms use `useAppForm` (`src/components/form/app-form.ts`; a form that renders none of its field components, as
   the post composer, uses TanStack's `useForm`, so its page does not preload them) with
   `validationLogic: revalidateLogic()` and the

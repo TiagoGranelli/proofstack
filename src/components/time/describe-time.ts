@@ -23,15 +23,15 @@ const relative = (elapsed: number): string | undefined => {
 }
 
 /**
- * How a post's time reads: `label` on the page, `title` (the full date and time) on hover. With a `clock` it is
+ * How a time reads: `label` on the page, `title` (the full date and time) on hover. With a `clock` it is
  * local and relative when recent ("just now", "5 minutes ago", "yesterday", then "Sep 20, 2026"). Without one,
  * during SSR and hydration, it is the date in UTC, which the server and every browser render alike, so hydration
- * never mismatches; the browser switches to its clock right after (PostTime). A time ahead of the clock (a clock
- * running behind the server's) reads "just now".
+ * never mismatches; the browser switches to its clock right after (RelativeTime). A time ahead of the clock (a
+ * clock running behind the server's) reads "just now".
  *
- * @example describePostTime('2026-09-27T12:00:00.000Z', { now: Date.parse('2026-09-27T12:05:00Z') }).label // '5 minutes ago'
+ * @example describeTime('2026-09-27T12:00:00.000Z', { now: Date.parse('2026-09-27T12:05:00Z') }).label // '5 minutes ago'
  */
-export function describePostTime(iso: string, clock: Clock | null): { label: string; title: string } {
+export function describeTime(iso: string, clock: Clock | null): { label: string; title: string } {
   const time = new Date(iso)
   const timeZone = clock ? clock.timeZone : 'UTC'
   const date = new Intl.DateTimeFormat(LOCALE, { dateStyle: 'medium', timeZone })

@@ -13,7 +13,7 @@ changes to the contract, database, auth, or UI flows.
 | `src/server/` | Server-only: Effect handlers (`api/`), Better Auth (`auth.ts`), Drizzle (`db/`), repositories, `env.ts`, shutdown `lifecycle.ts`. Read [src/server/AGENTS.md](src/server/AGENTS.md) before changing it | contract, sdk |
 | `src/sdk/` | Hey API client and TanStack Query options (generated) | nothing |
 | `src/lib/` | Shared plumbing: `api-client.ts` (isomorphic SDK client), `api-error.ts`, `utils.ts`. `*.functions.ts` are server functions (`createServerFn`): `session.functions.ts` (route guards), `auth.functions.ts` (every account action) | contract, sdk. The server adapters (`*.functions.ts`, `api-client.ts`) also import server and lib |
-| `src/components/` | Shared UI that knows no feature: `ui/` (shadcn primitives, Radix, style `radix-nova`), `errors/` (router error and not-found states, `SectionErrorBoundary`, `ApiErrorAlert`), `layouts/` (site header, pending state) | lib, contract, sdk |
+| `src/components/` | Shared UI that knows no feature: `ui/` (shadcn primitives, Radix, style `radix-nova`), `errors/` (router error and not-found states, `SectionErrorBoundary`, `ApiErrorAlert`), `layouts/` (site header, pending state), `form/`, `lists/`, `time/`, `confirm-delete/` | lib, contract, sdk |
 | `src/features/<name>/` | One feature each (`posts`, `auth`): `api/` (query options and mutation hooks), `components/`, `utils/` | components, lib, server adapters, contract, sdk. Never another feature |
 | `src/routes/`, `router.tsx`, `start.ts`, `styles/` | The app layer. Page routes define the route (loader, guards, head) and compose features. `api/$.ts` hands requests to the Effect API; `api/auth/$.ts` to Better Auth | Page routes: features, components, lib, server adapters, contract, sdk. `api/**` is a server adapter: server, contract, sdk, lib |
 
@@ -33,8 +33,8 @@ layer. Imports flow one way: `components` → `features` → app (`routes/`).
 
 - Feature code: `src/features/<name>/`. Read [src/features/AGENTS.md](src/features/AGENTS.md) before adding or
   changing one: it holds the data-access and mutation-hook conventions.
-- UI shared by several features and free of feature knowledge: `src/components/` (`ui/`, `errors/`,
-  `layouts/`); shadcn primitives go in `components/ui/` through `pnpm exec shadcn add`.
+- UI shared by several features and free of feature knowledge: `src/components/` (table above); shadcn
+  primitives go in `components/ui/` through `pnpm exec shadcn add`.
 - Route files hold the route definition and a small page component that composes features (skill `add-page`).
 - Naming: files and folders are kebab-case (Oxlint `unicorn/filename-case`; folders by
   `tests/unit/repo-policy.test.ts`). TanStack route names keep their prefixes (`__root.tsx`, `_authed.tsx`,

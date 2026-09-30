@@ -5,7 +5,7 @@ import { page, userEvent } from 'vitest/browser'
 import { POST_MAX_LENGTH } from '#/contract/limits.ts'
 import { getPublicPostsQueryOptions } from '#/features/posts/api/get-public-posts.ts'
 import { PostComposer } from '#/features/posts/components/post-composer.tsx'
-import { api, apiError, apiFailure, held, post, postPage, postPages, worker } from './api-mocks.ts'
+import { api, apiError, apiFailure, held, post, listPage, listPages, worker } from './api-mocks.ts'
 import { pressAndKeepFocus, renderInApp } from './test-utils.tsx'
 
 const field = () => page.getByLabelText('New post')
@@ -64,7 +64,7 @@ describe('PostComposer', () => {
     )
     const onPublished = vi.fn<() => void>()
     const { queryClient } = await renderInApp(<PostComposer onPublished={onPublished} />)
-    queryClient.setQueryData(getPublicPostsQueryOptions().queryKey, postPages(postPage([])))
+    queryClient.setQueryData(getPublicPostsQueryOptions().queryKey, listPages(listPage([])))
 
     await publishDraft('  hello \n')
     await expect.element(publish()).toBeDisabled()

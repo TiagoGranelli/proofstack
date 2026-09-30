@@ -15,7 +15,6 @@ import type {
   MyPostsRemoveErrors,
   MyPostsUpdateErrors,
   Post,
-  PostPage,
   PublicPostsListErrors,
   SystemReadyErrors,
 } from '#/sdk/types.gen.ts'
@@ -78,14 +77,14 @@ export const post = (overrides: Partial<Post> = {}): Post => ({
   ...overrides,
 })
 
-/** One page of a posts list; `nextCursor` defaults to null (the last page). */
-export const postPage = (items: Post[], nextCursor: string | null = null): PostPage => ({ items, nextCursor })
+/** One page of a list (a `PostPage`, or any `{ items, nextCursor }` page); `nextCursor` defaults to null (the last page). */
+export const listPage = <Item>(items: Item[], nextCursor: string | null = null) => ({ items, nextCursor })
 
 /**
- * A posts list as the infinite query caches it, e.g. to seed `getMyPostsQueryOptions().queryKey`. Each page
- * was requested with the previous page's `nextCursor` (the first with `{}`, see src/features/posts/api/post-pages.ts).
+ * A list as the infinite query caches it, e.g. to seed `getMyPostsQueryOptions().queryKey`. Each page was
+ * requested with the previous page's `nextCursor` (the first with `{}`, `firstPage` in src/lib/infinite-pages.ts).
  */
-export const postPages = (...pages: PostPage[]): InfiniteData<PostPage> => ({
+export const listPages = <Page extends { nextCursor: string | null }>(...pages: Page[]): InfiniteData<Page> => ({
   pages,
   pageParams: pages.map((_, index) => (index === 0 ? {} : pages[index - 1]!.nextCursor)),
 })

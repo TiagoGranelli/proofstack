@@ -1,6 +1,6 @@
 import { infiniteQueryOptions, type SkipToken } from '@tanstack/react-query'
-import { firstPage, nextPage } from '#/features/posts/api/post-pages.ts'
 import { apiClient } from '#/lib/api-client.ts'
+import { firstPage, nextPage } from '#/lib/infinite-pages.ts'
 import { publicPostsListInfiniteOptions } from '#/sdk/@tanstack/react-query.gen.ts'
 
 /**

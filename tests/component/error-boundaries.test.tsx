@@ -8,7 +8,7 @@ import { MyPostList } from '#/features/posts/components/my-post-list.tsx'
 import { PostComposer } from '#/features/posts/components/post-composer.tsx'
 import { Route as AccountRoute } from '#/routes/_authed/account.tsx'
 import { Route as DashboardRoute } from '#/routes/_authed/dashboard.tsx'
-import { api, apiError, apiFailure, authFunction, post, postPage, worker } from './api-mocks.ts'
+import { api, apiError, apiFailure, authFunction, post, listPage, worker } from './api-mocks.ts'
 import { renderInApp } from './test-utils.tsx'
 
 const tryAgain = () => page.getByRole('button', { name: 'Try again' })
@@ -92,7 +92,7 @@ describe('SectionErrorBoundary', () => {
     await page.getByLabelText('New post').fill('Still writing')
     await expect.element(page.getByRole('button', { name: 'Publish' })).toBeEnabled()
 
-    worker.use(api.myPostsList({ body: postPage([post({ body: 'Back again' })]) }))
+    worker.use(api.myPostsList({ body: listPage([post({ body: 'Back again' })]) }))
     await tryAgain().click()
     await expect.element(page.getByTestId('my-posts').getByText('Back again', { exact: true })).toBeVisible()
     await expect.element(page.getByLabelText('New post')).toHaveValue('Still writing')

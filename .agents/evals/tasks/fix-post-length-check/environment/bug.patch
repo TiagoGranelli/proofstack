@@ -1,23 +1,20 @@
-diff --git a/src/features/posts/components/character-count.tsx b/src/features/posts/components/character-count.tsx
-index d2e3fd4..0bbf9fe 100644
---- a/src/features/posts/components/character-count.tsx
-+++ b/src/features/posts/components/character-count.tsx
-@@ -1,8 +1,8 @@
- import { POST_MAX_LENGTH } from '#/contract/limits.ts'
+diff --git a/src/components/form/character-count.tsx b/src/components/form/character-count.tsx
+--- a/src/components/form/character-count.tsx
++++ b/src/components/form/character-count.tsx
+@@ -1,7 +1,7 @@
  import { cn } from '#/lib/utils.ts'
  
--/** The API rejects untrimmed bodies, so the forms send `body.trim()`; the limit applies to that. */
--export const isTooLong = (value: string) => value.trim().length > POST_MAX_LENGTH
+-/** The API rejects untrimmed text, so the forms send `value.trim()`; the limit applies to that. */
+-export const isTooLong = (value: string, max: number) => value.trim().length > max
 +/** Whether a draft is over the limit the API enforces. */
-+export const isTooLong = (value: string) => value.length > POST_MAX_LENGTH
++export const isTooLong = (value: string, max: number) => value.length > max
  
  /**
-  * "123/280" counter, referenced by the textarea's aria-describedby. The count itself is not a live region
+  * "123/280" counter of a text field with a length limit, referenced by the field's aria-describedby. The count
 diff --git a/tests/component/post-composer.test.tsx b/tests/component/post-composer.test.tsx
-index 75fb694..f8f18fa 100644
 --- a/tests/component/post-composer.test.tsx
 +++ b/tests/component/post-composer.test.tsx
-@@ -30,7 +30,7 @@ describe('PostComposer', () => {
+@@ -35,7 +35,7 @@
      await renderInApp(<PostComposer />)
      await expect.element(field()).toHaveAccessibleDescription(`0/${POST_MAX_LENGTH} characters.`)
  
@@ -26,3 +23,28 @@ index 75fb694..f8f18fa 100644
      await expect.element(count()).toHaveTextContent(`${POST_MAX_LENGTH}/${POST_MAX_LENGTH} characters.`)
      await expect.element(field()).not.toHaveAttribute('aria-invalid')
      await expect.element(count()).not.toHaveClass('text-destructive')
+diff --git a/tests/component/character-count.test.tsx b/tests/component/character-count.test.tsx
+--- a/tests/component/character-count.test.tsx
++++ b/tests/component/character-count.test.tsx
+@@ -8,8 +8,8 @@
+ const count = () => page.getByText(/^\d+\/10/)
+ 
+ describe('CharacterCount', () => {
+-  it('counts the trimmed text, so spaces around it never go over the limit', async () => {
+-    await renderInApp(<CharacterCount id="count" value={`  ${'x'.repeat(10)} \n`} max={10} />)
++  it('counts the text against the limit', async () => {
++    await renderInApp(<CharacterCount id="count" value={'x'.repeat(10)} max={10} />)
+     await expect.element(count()).toHaveTextContent('10/10 characters.')
+     await expect.element(count()).not.toHaveClass('text-destructive')
+     await expect.element(page.getByText(/Over the/)).not.toBeInTheDocument()
+@@ -22,8 +22,8 @@
+     await expect.element(page.getByText('Over the 10-character limit.')).toHaveAttribute('aria-live', 'polite')
+   })
+ 
+-  it('applies the limit to the trimmed text', () => {
+-    expect(isTooLong(` ${'x'.repeat(10)} `, 10)).toBe(false)
++  it('applies the limit', () => {
++    expect(isTooLong('x'.repeat(10), 10)).toBe(false)
+     expect(isTooLong('x'.repeat(11), 10)).toBe(true)
+   })
+ })

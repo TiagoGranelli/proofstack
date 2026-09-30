@@ -1,14 +1,15 @@
 import { revalidateLogic, useForm } from '@tanstack/react-form'
 import { useEffect, useRef } from 'react'
 import { ApiErrorAlert } from '#/components/errors/api-error-alert.tsx'
+import { CharacterCount, isTooLong } from '#/components/form/character-count.tsx'
 import { FieldError } from '#/components/form/field-error.tsx'
 import { describedBy, fieldErrorMessage } from '#/components/form/field-messages.ts'
 import { loadOnInteraction, useSchemaSubmit } from '#/components/form/lazy-schema.ts'
 import { Button } from '#/components/ui/button.tsx'
 import { Label } from '#/components/ui/label.tsx'
 import { Textarea } from '#/components/ui/textarea.tsx'
+import { POST_MAX_LENGTH } from '#/contract/limits.ts'
 import { useUpdatePost } from '#/features/posts/api/update-post.ts'
-import { CharacterCount, isTooLong } from '#/features/posts/components/character-count.tsx'
 import { PostCard } from '#/features/posts/components/post-card.tsx'
 import { postDraftSchema } from '#/features/posts/utils/post-draft-schema.ts'
 import { fieldIssue } from '#/lib/api-error.ts'
@@ -43,7 +44,7 @@ function useEditPost(props: EditPostProps) {
 function EditPostActions(props: { countId: string; draft: string; saving: boolean; onCancel: () => void }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-2">
-      <CharacterCount id={props.countId} value={props.draft} />
+      <CharacterCount id={props.countId} value={props.draft} max={POST_MAX_LENGTH} />
       <div className="flex gap-2">
         <Button type="button" variant="outline" onClick={props.onCancel}>
           Cancel
@@ -115,7 +116,7 @@ export function EditPostForm(props: EditPostProps) {
                     formError && `${fieldId}-alert`,
                     schemaError && `${fieldId}-schema-error`,
                   )}
-                  aria-invalid={isTooLong(draft) || Boolean(error) || undefined}
+                  aria-invalid={isTooLong(draft, POST_MAX_LENGTH) || Boolean(error) || undefined}
                   required
                 />
                 <EditPostActions

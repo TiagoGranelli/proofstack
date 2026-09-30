@@ -1,6 +1,6 @@
 import type { ReactElement, ReactNode } from 'react'
+import { RelativeTime } from '#/components/time/relative-time.tsx'
 import { Card, CardContent, CardDescription } from '#/components/ui/card.tsx'
-import { PostTime } from '#/features/posts/components/post-time.tsx'
 import type { Post } from '#/sdk/types.gen.ts'
 
 /**
@@ -21,7 +21,7 @@ export function PostCard(props: {
         {props.children ?? <p className="break-words whitespace-pre-wrap">{post.body}</p>}
         <div className="flex flex-wrap items-center justify-between gap-2">
           <CardDescription>
-            {post.authorName} · <PostTime iso={post.createdAt} />
+            {post.authorName} · <RelativeTime iso={post.createdAt} />
             {post.updatedAt === post.createdAt ? null : ' · edited'}
           </CardDescription>
           {props.actions ? <div className="flex gap-1">{props.actions}</div> : null}
