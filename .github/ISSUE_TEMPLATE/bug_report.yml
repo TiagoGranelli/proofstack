@@ -1,5 +1,5 @@
 name: Bug report
-description: Something in the template does not work as documented.
+description: A gate, script or config on this branch does not work as documented.
 labels: [bug]
 body:
   - type: markdown
@@ -19,7 +19,7 @@ body:
       label: Steps to reproduce
       description: From a fresh clone if you can. Commands, requests or clicks, in order.
       placeholder: |
-        1. pnpm install && pnpm bootstrap
+        1. pnpm install && pnpm check
         2. ...
     validations:
       required: true
@@ -27,7 +27,7 @@ body:
     id: output
     attributes:
       label: Output
-      description: The failing gate's output, the error, or the relevant log lines (test-results/app-server*.log). Redact secrets.
+      description: The failing gate's output or the error. Redact secrets.
       render: text
   - type: input
     id: version
@@ -40,13 +40,13 @@ body:
     id: environment
     attributes:
       label: Environment
-      description: OS, Node and pnpm versions, Docker version if it matters.
+      description: OS (macOS, Linux, Windows), Node and pnpm versions, Docker version if it matters.
   - type: dropdown
     id: adopted
     attributes:
       label: Where
       options:
         - In this repository, unchanged
-        - In an app created from the template
+        - In a project that copied these files
     validations:
       required: true

@@ -5,12 +5,11 @@
 ## Gates run
 
 - [ ] `pnpm check`
-- [ ] `pnpm check:drift`
-- [ ] `pnpm build && pnpm verify:app` (contract, database, auth or UI changes)
+- [ ] `pnpm test:e2e` (anything a user can see)
 - [ ] `pnpm build && pnpm lighthouse` (pages, styles or anything that ships to the browser)
 
 ## Checklist
 
-- [ ] Generated files (`openapi.json`, `src/sdk/`, `drizzle/`) are regenerated and committed with their source.
+- [ ] `src/routeTree.gen.ts` is regenerated and committed with its routes.
 - [ ] Any gate exception is a visible edit next to its reason.
-- [ ] CHANGELOG.md has a line under `## [Unreleased]`, with upgrade notes if adopters must act.
+- [ ] A gate change that `main` shares went to `main` first, or says why it only applies here.
