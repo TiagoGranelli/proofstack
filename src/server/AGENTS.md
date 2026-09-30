@@ -25,12 +25,12 @@ shutdown (`lifecycle.ts`). Read this before you change anything here. The root `
   `Database.transaction(effect)` (`db/client.ts`, proven in `tests/db/transaction.test.ts`).
 - A repository method sends a fixed number of statements, whatever the page size: every new one gets a query
   budget in `tests/db/<feature>-query-budget.test.ts` (see `tests/AGENTS.md`).
-- The Effect API (`api/`, `posts/`) gets what it needs from Layers (`Database`, `PostsRepo`, `RateLimitStore`,
-  `SessionLookup`), so `tests/api` can provide fakes; it never imports Better Auth's `auth`, `db`, `pool` or a
-  driver (Oxlint `no-restricted-imports`). `env` and `log` are the process-wide exceptions. A third-party library
-  is imported by the module that owns it: `pg` by `db/client.ts`, `nodemailer` by `mail/smtp-mailer.ts` behind
-  `Mailer`, Better Auth by `auth*.ts` and `http/`. React, TanStack and Effect are frameworks: follow their
-  conventions instead of wrapping them.
+- The Effect API (`api/`, `<feature>/repo.ts`) gets what it needs from Layers (`Database`, `PostsRepo`,
+  `RateLimitStore`, `SessionLookup`), so `tests/api` can provide fakes; it never imports Better Auth's `auth`,
+  `db`, `pool` or a driver (Oxlint `no-restricted-imports`). `env` and `log` are the process-wide exceptions. A
+  third-party library is imported by the module that owns it: `pg` by `db/client.ts`, `nodemailer` by
+  `mail/smtp-mailer.ts` behind `Mailer`, Better Auth by `auth*.ts` and `http/`. React, TanStack and Effect are
+  frameworks: follow their conventions instead of wrapping them.
 - Read settings through `env.ts`, which validates them at import. A new setting goes there, in `.env.example`,
   and in `tests/unit/env.test.ts` (`env.ts` is in the coverage gate). `import.meta.env.VITE_*` ships to the
   browser; a lint rule rejects it.

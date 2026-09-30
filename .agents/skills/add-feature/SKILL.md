@@ -22,8 +22,8 @@ A new feature usually touches every layer, in this order. Each step names the sk
    `Database.transaction(effect)` (`src/server/db/client.ts`, proven in `tests/db/transaction.test.ts`).
    Provide the repository's Layer in `src/server/api/web-handler.ts` and an in-memory one in `apiLayer`
    (`tests/api/harness.ts`), built like `tests/api/posts-repo.ts` on `memoryPage` and `memoryClock`
-   (`tests/api/memory-keyset.ts`). Add the repository's folder to the `no-restricted-imports` override of
-   `src/server/posts/**` in `.oxlintrc.json`.
+   (`tests/api/memory-keyset.ts`). Name it `src/server/<feature>/repo.ts`: Oxlint keeps drivers and
+   singletons out of that path.
 4. `pnpm codegen`.
 5. **Errors:** map every new error tag to a message in `src/lib/api-error.ts`. `pnpm typecheck` fails until
    `describeApiError` handles it.

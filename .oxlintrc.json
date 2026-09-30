@@ -298,9 +298,10 @@
     },
     {
       // The Effect API takes its dependencies from Layers (Database, PostsRepo, RateLimitStore, SessionLookup), so
-      // tests/api can provide fakes. Module singletons and drivers stay out of it. No later override may set
+      // tests/api can provide fakes. Module singletons and drivers stay out of it. A feature's repository is
+      // `src/server/<feature>/repo.ts`, so a new one is covered as it is. No later override may set
       // no-restricted-imports on these paths: it would replace this list.
-      "files": ["src/server/api/**", "src/server/posts/**"],
+      "files": ["src/server/api/**", "src/server/*/repo.ts"],
       "rules": {
         "no-restricted-imports": [
           "error",
