@@ -24,7 +24,7 @@ The browser reaches Better Auth only through server functions; which surface an 
    `src/features/auth/utils/describe-auth-failure.ts` (in the 100% coverage gate) gives it a message.
 5. Mail goes through `authMail` (`src/server/mail/`); its text lives in `auth-messages.ts`.
 6. Tests: component tests through `authFunction(name, answer)` and `authCalls(name)`, integration tests through
-   `callAuthFunction(name, ...)` on a throwaway account (read `tests/AGENTS.md`).
+   `callAuthFunction(name, ...)` on a throwaway account (read `tests/integration/AGENTS.md`).
 
 ## Auth config change
 

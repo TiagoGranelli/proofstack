@@ -103,7 +103,7 @@ in and how each layer's harness works.
 | `pnpm format`, `pnpm lint:fix` | Autofixes |
 | `pnpm check:drift [contract\|migrations\|auth\|database]` | Generated files match their sources, and the auth schema holds what Better Auth writes; `database` needs Postgres |
 | `pnpm test [filter ...]`, `pnpm test:e2e [filter ...]` | The integration or E2E layer against the built app; each starts its own servers on a throwaway database. Needs `pnpm build`, Postgres and Mailpit (`pnpm mail:up`) |
-| `pnpm build && pnpm verify:app` | The `db`, integration and E2E layers and contract coverage, one after another |
+| `pnpm build && pnpm verify:app` | The `db`, integration and E2E layers and contract coverage. Run it, and `test:e2e`, through the `verifier` subagent |
 | `pnpm build && pnpm lighthouse [--page=<name>]` | The Lighthouse gate behind the Caddy edge (needs Docker) |
 | `pnpm ci:local [job ...]` | The CI jobs in the Playwright Ubuntu container (needs Docker) |
 

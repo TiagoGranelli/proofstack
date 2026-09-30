@@ -29,7 +29,7 @@ description: Add or change a page (route) in this repo's UI, with its accessibil
    - a landmark snapshot in the `landmarks` block of `tests/e2e/landmarks.spec.ts`;
    - a row in the tab-order table of `tests/e2e/keyboard.spec.ts` if the page has controls.
 7. **Component tests** for pending, disabled, error and limit states: `renderInApp(ui, { route })` mounts the
-   real route file (read `tests/AGENTS.md`).
+   real route file (read `tests/component/AGENTS.md` and `tests/e2e/AGENTS.md`).
 8. **Lighthouse:** a page users land on goes in `PAGES` in `scripts/lighthouse-policy.ts` (SEO off for noindex
    pages). Accessibility, best practices and SEO must score 100, performance a median of 99; the policy is in
    [docs/agents/gates.md](../../../docs/agents/gates.md#lighthouse-policy).

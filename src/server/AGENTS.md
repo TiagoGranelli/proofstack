@@ -24,7 +24,7 @@ shutdown (`lifecycle.ts`). Read this before you change anything here. The root `
   `Database.client`, and pages a list with `db/keyset.ts`; a write of several statements runs in
   `Database.transaction(effect)` (`db/client.ts`, proven in `tests/db/transaction.test.ts`).
 - A repository method sends a fixed number of statements, whatever the page size: every new one gets a query
-  budget in `tests/db/<feature>-query-budget.test.ts` (see `tests/AGENTS.md`).
+  budget in `tests/db/<feature>-query-budget.test.ts` (see `tests/db/AGENTS.md`).
 - The Effect API (`api/`, `<feature>/repo.ts`) gets what it needs from Layers (`Database`, `PostsRepo`,
   `RateLimitStore`, `SessionLookup`), so `tests/api` can provide fakes; it never imports Better Auth's `auth`,
   `db`, `pool` or a driver (Oxlint `no-restricted-imports`). `env` and `log` are the process-wide exceptions. A

@@ -145,11 +145,11 @@ Tests:
   `` `${siteHeader('signed in')}\n- main:\n  - heading "Dashboard" [level=1]\n  - paragraph` ``;
   `error page` uses `navigateWithApiResponse(page, '/api/me', { status: 503, json: {} })`; drop the
   `dashboard, delete dialog open` snapshot.
-- `tests/e2e/keyboard.spec.ts`: the `home` rows expect `[...SIGNED_OUT, ...FOOTER]`; the `error page` row
-  navigates with `'/api/me'`; the `dashboard` rows visit `/dashboard` signed in and expect
-  `[...SIGNED_IN, ...FOOTER]` (with `radio "Dark"` for the dark one); drop the `editing from the keyboard` block,
-  the publishing and deleting announcements and the delete dialog test; after the skip link, Tab reaches the
-  footer's `radio "System"`.
+- `tests/e2e/keyboard.spec.ts`: the `home` rows become `{ header: SIGNED_OUT, controls: [] }`; the `error page`
+  row navigates with `'/api/me'`; the `dashboard` rows visit `/dashboard` signed in and expect
+  `{ header: SIGNED_IN, controls: [] }` (with `radio "Dark"` in `footer` for the dark one); after the skip link,
+  Tab reaches the footer's `radio "System"`. In `tests/e2e/keyboard-actions.spec.ts`, drop the `editing from the
+  keyboard` block and the publishing and deleting announcements; the failed sign-in and sign-out tests stay.
 
 ## Add
 

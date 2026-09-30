@@ -1,4 +1,4 @@
-// Every page route in src/routes must be covered by the accessibility suites (tests/AGENTS.md, "Accessibility"): at
+// Every page route in src/routes must be covered by the accessibility suites (tests/e2e/AGENTS.md, "Accessibility"): at
 // least one axe state in STATES (tests/e2e/a11y.spec.ts), a landmark snapshot in the `landmarks` block of
 // tests/e2e/landmarks.spec.ts, and a row in the tab-order table of tests/e2e/keyboard.spec.ts. Reads the files only
 // (no browser, well under 0.1 s), so it runs in `pnpm check`: a new page cannot ship without them.
