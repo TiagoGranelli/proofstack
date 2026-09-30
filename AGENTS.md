@@ -1,78 +1,61 @@
 # AGENTS.md
 
-Slopproof is a full-stack template built around a verifiable API contract. `src/contract` generates
-`openapi.json`, which generates `src/sdk`; the running API and the tests must agree with all three. A
-change is done when `pnpm check` passes, plus `pnpm check:drift` and `pnpm build && pnpm verify:app` for
-changes to the contract, database, auth, or UI flows.
+This branch of Slopproof is a small React app, a word counter with two routes, that carries the template's quality
+gates. The app is a stand-in: the gates are the product. A change is done when `pnpm check` passes, plus
+`pnpm test:e2e` for anything a user can see, and `pnpm build && pnpm lighthouse` for anything that ships to the
+browser.
 
-## Architecture map
+## Where code goes
 
 | Path | Role | May import |
 | --- | --- | --- |
-| `src/contract/` | Effect `HttpApi` contract: schemas, endpoints, tagged errors, middleware tags | `effect` and other `src/contract` modules only |
-| `src/server/` | Server-only: Effect handlers (`api/`), Better Auth (`auth.ts`), Drizzle (`db/`), repositories, `env.ts`, shutdown `lifecycle.ts`. Read [src/server/AGENTS.md](src/server/AGENTS.md) before changing it | contract, sdk |
-| `src/sdk/` | Hey API client and TanStack Query options (generated) | nothing |
-| `src/lib/` | Shared plumbing: `api-client.ts` (isomorphic SDK client), `api-error.ts`, `utils.ts`. `*.functions.ts` are server functions (`createServerFn`): `session.functions.ts` (route guards), `auth.functions.ts` (every account action) | contract, sdk. The server adapters (`*.functions.ts`, `api-client.ts`) also import server and lib |
-| `src/components/` | Shared UI that knows no feature: `ui/` (shadcn primitives, Radix, style `radix-nova`), `errors/` (router error and not-found states, `SectionErrorBoundary`, `ApiErrorAlert`), `layouts/` (site header, pending state) | lib, contract, sdk |
-| `src/features/<name>/` | One feature each (`posts`, `auth`): `api/` (query options and mutation hooks), `components/`, `utils/` | components, lib, server adapters, contract, sdk. Never another feature |
-| `src/routes/`, `router.tsx`, `start.ts`, `styles/` | The app layer. Page routes define the route (loader, guards, head) and compose features. `api/$.ts` hands requests to the Effect API; `api/auth/$.ts` to Better Auth | Page routes: features, components, lib, server adapters, contract, sdk. `api/**` is a server adapter: server, contract, sdk, lib |
+| `src/lib/` | Pure functions: no React, no app code | nothing in `src` |
+| `src/components/` | UI that knows no route | `lib` |
+| `src/routes/`, `src/main.tsx`, `index.html`, `src/styles/` | The app layer: TanStack Router file routes (client-side only), the router's entry, Tailwind | `components`, `lib` |
 
-- UI and page routes reach data only through the SDK (`#/sdk/...`) or a server function in
-  `#/lib/*.functions.ts`. `src/server`, `drizzle-orm`, `pg` and `better-auth` (its client included) stay behind
-  those: account actions are server functions that run Better Auth's router in-process (`callAuthEndpoint`),
-  so rate limits and the endpoint allowlist apply. Authorization happens in the Effect `Authentication`
-  middleware; the `_authed` route guard is only a UX redirect.
-- Boundaries are enforced by Fallow zones in `.fallowrc.json` and by `no-restricted-imports` in
-  `.oxlintrc.json`. A new top-level `src/` directory needs a zone before it can be used.
-- Imports use the `#/` alias (`package.json#imports`) with explicit `.ts` or `.tsx` extensions.
-
-### Where code goes
-
-The UI follows [Bulletproof React](https://github.com/alan2207/bulletproof-react), with `src/routes/` as the app
-layer. Imports flow one way: `components` → `features` → app (`routes/`).
-
-- Feature code: `src/features/<name>/`. Read [src/features/AGENTS.md](src/features/AGENTS.md) before adding or
-  changing one: it holds the data-access and mutation-hook conventions.
-- UI shared by several features and free of feature knowledge: `src/components/` (`ui/`, `errors/`,
-  `layouts/`); shadcn primitives go in `components/ui/` through `pnpm exec shadcn add`.
-- Route files hold the route definition and a small page component that composes features (skill `add-page`).
+- Boundaries are Fallow zones in `.fallowrc.json`. A new top-level `src/` directory needs a zone before it can be
+  used.
+- Imports use relative paths with explicit `.ts` or `.tsx` extensions (Oxlint `import/extensions`).
 - Naming: files and folders are kebab-case (Oxlint `unicorn/filename-case`; folders by
-  `tests/unit/repo-policy.test.ts`). TanStack route names keep their prefixes (`__root.tsx`, `_authed.tsx`,
-  `$.ts`, `-private/`, `(group)/`). `src/sdk/` is generated and exempt.
+  `tests/unit/repo-policy.test.ts`). TanStack route names keep their prefixes (`__root.tsx`, `_layout.tsx`, `$id.tsx`,
+  `-private/`, `(group)/`).
 - Import the file that defines a symbol. Barrel files (`index.ts` re-exporting a folder) fail Oxlint
-  `oxc/no-barrel-file`; the only one is `src/server/db/schema/index.ts`, Drizzle's schema entry.
+  `oxc/no-barrel-file`.
+- A new page is a file in `src/routes/` with its title in `head()`, plus an axe state, a landmark snapshot and a
+  tab-order row in `tests/e2e/` (`tests/unit/route-coverage.test.ts` fails without them), and a Lighthouse entry in
+  `PAGES` (`scripts/lighthouse-policy.ts`).
 
 ## Code style
 
 Code is read by agents one file at a time: a module fits one read, a name greps to its definition, and a
 failure says what was wrong. Oxlint (`.oxlintrc.json`) enforces the numbers; the rest is for review. Tests:
-[tests/AGENTS.md](tests/AGENTS.md); dependencies of the Effect API: [src/server/AGENTS.md](src/server/AGENTS.md).
+[tests/AGENTS.md](tests/AGENTS.md).
 
 - **Size.** Functions up to 20 lines, components (`.tsx`) up to 80, files up to 300, blank and comment lines not
   counted (`max-lines-per-function`, `max-lines`). Over a limit, split by responsibility, not by moving lines:
-  a component extracts a child component, a Layer moves its methods into functions that take the service
-  (`listPublic(db, page)`), a switch that maps codes to text becomes a table.
+  a component extracts a child component, a long function becomes named steps, a switch that maps codes to text
+  becomes a table.
 - **Nesting.** At most two nested blocks per function (`max-depth`), three nested callbacks
   (`max-nested-callbacks`), JSX four elements deep (`react/jsx-max-depth`), three parameters, more go in an
   options object (`max-params`). Return early; no nested ternaries (`no-nested-ternary`).
 - **Names.** A name says what the value is, specifically enough that `rg -w <name>` finds its definition and its
-  uses: `outcome`, `listed`, `lintRun`, never `result`, `info`, `item`, `tmp` (`id-denylist`). `data` and
-  `handler` are keys TanStack and Effect impose: keep them as keys, destructure into a specific name
-  (`({ data: credentials })`), and never declare your own. Name a module after what it does, never
-  `utils.ts` or `helpers.ts` (`src/lib/utils.ts` is shadcn's).
+  uses: `outcome`, `listed`, `lintRun`, never `result`, `info`, `item`, `tmp` (`id-denylist`). When a library
+  imposes a vague key such as `data`, keep it as the key and destructure into a specific name
+  (`({ data: credentials })`). Name a module after what it does, never `utils.ts` or `helpers.ts`.
 - **Types.** No `any` (`no-explicit-any`, `no-unsafe-*`): read an untyped library value as `unknown` and narrow
-  it. Exports of `src/server`, `src/lib`, `src/contract` and `scripts` declare their return type
-  (`explicit-module-boundary-types`); components and hooks infer theirs.
+  it. Exports of `src/lib` and `scripts` declare their return type (`explicit-module-boundary-types`); components
+  and hooks infer theirs.
 - **Errors.** A message names the offending value and the shape expected:
   `` `${name} must be an integer between ${min} and ${max} (got "${raw}")` `` (`unicorn/error-message` only
-  rejects an empty one). Never echo a secret, a password or user content: give its length, scheme or path. Across
-  a trust boundary the client gets a generic message and `log` gets the cause (`src/lib/server-function-errors.ts`).
+  rejects an empty one). Never echo a secret, a password or user content: give its length, scheme or path.
 - **Comments.** Say why, not what. Keep them when you refactor, update them when the reason changes. A line that
-  exists because of an upstream bug or limit links the issue (`better-auth#9920`) and says when to remove it.
-  Exports of `src/server`, `src/lib` and `features/*/{api,utils}` get a JSDoc sentence on intent, plus a
-  one-line example when the types do not make the call obvious.
-- **Logging.** Server code logs through `log` (`src/server/log.ts`), one JSON object per line; `console` is for
-  scripts (`no-console`).
+  exists because of an upstream bug or limit links the issue (`oxc#23695`) and says when to remove it.
+  Exports of `src/lib` get a JSDoc sentence on intent, plus a one-line example when the types do not make the call
+  obvious.
+- **React.** The React Compiler memoizes components ([ADR 0006](docs/decisions/0006-react-compiler-babel-preset.md)):
+  write no `useMemo`, `useCallback` or `memo` for performance. Oxlint's React Compiler rules (`react/todo`,
+  `react/unsupported-syntax` and the rest) fail on code the compiler cannot optimize.
+- **Logging.** `console` is for scripts (`no-console`).
 
 ## Workflows
 
@@ -80,105 +63,73 @@ Each multi-step workflow is a project skill in `.agents/skills/` (linked into `.
 
 | Task | Skill |
 | --- | --- |
-| Endpoint, schema or typed error in `src/contract` | `api-change` |
-| Table, column, index or migration | `database-change` |
-| A feature across database, API and UI | `add-feature` |
-| Account action, Better Auth config, creating users | `auth-change` |
-| New page, form or UI state | `add-page` |
-| Any dependency bump, above all the pre-release pins | `upgrade-prerelease-deps` |
+| Any dependency bump, a Renovate PR, `pnpm audit:check`, a failed install | `upgrade-deps` |
 
-**First setup.** Run `pnpm install && pnpm bootstrap`. This creates `.env` with a secret, starts Postgres and
-Mailpit (`pnpm mail:up`, the local inbox for account emails), and applies migrations.
+**First setup.** `pnpm install` (it downloads the pinned Node and installs the pre-commit hook), then
+`pnpm exec playwright install chromium`.
 
 ## Verify
 
 Read [tests/AGENTS.md](tests/AGENTS.md) before you write or change a test: it says which layer a behavior belongs
-in and how each layer's harness works.
+in and how each layer works.
 
 | Command | Covers |
 | --- | --- |
-| `pnpm check` | Every gate that needs no database and no build (format, type-aware lint, typecheck, Effect diagnostics, dead code, complexity, duplication, security sinks, unit/api/component tests with coverage, drift, migration lint, licenses), about 16 s. Run it before every hand-off; the lefthook pre-commit hook runs the jobs your staged files touch |
-| `pnpm test:unit\|test:api\|test:component [filter ...]` | One fast layer; `pnpm test:fast` runs all three with coverage |
-| `pnpm test:db [filter ...]` | The `db` layer on a throwaway Postgres database. Needs Postgres, no build |
+| `pnpm check` | Every gate that needs no build (format, type-aware lint, typecheck, dead code, boundaries, complexity, duplication, security sinks, unit and component tests with coverage, route coverage, repository rules), about 5 s. Run it before every hand-off; the lefthook pre-commit hook runs the jobs your staged files touch |
+| `pnpm test:unit\|test:component [filter ...]` | One fast layer; `pnpm test:fast` runs both with coverage |
 | `pnpm format`, `pnpm lint:fix` | Autofixes |
-| `pnpm check:drift [contract\|migrations\|auth\|database]` | Generated files match their sources, and the auth schema holds what Better Auth writes; `database` needs Postgres |
-| `pnpm test [filter ...]`, `pnpm test:e2e [filter ...]` | The integration or E2E layer against the built app; each starts its own servers on a throwaway database. Needs `pnpm build`, Postgres and Mailpit (`pnpm mail:up`) |
-| `pnpm build && pnpm verify:app` | The `db`, integration and E2E layers and contract coverage, one after another |
-| `pnpm build && pnpm lighthouse [--page=<name>]` | The Lighthouse gate behind the Caddy edge (needs Docker) |
+| `pnpm test:e2e [filter ...]` | Builds the app, serves it with `vite preview` on port 4173, and runs the Playwright tests in Chromium: flows, axe, landmarks, tab order |
+| `pnpm build && pnpm lighthouse [--page=<name>]` | The Lighthouse gate over HTTPS and HTTP/2 (`scripts/lighthouse-policy.ts`) |
 | `pnpm ci:local [job ...]` | The CI jobs in the Playwright Ubuntu container (needs Docker) |
 
 Every gate's failure message says how to fix it. What each gate covers, how to make a reviewed exception, the
-Lighthouse policy and the less common commands (`audit:check`, `sbom:release`) are in
-[docs/agents/gates.md](docs/agents/gates.md).
+Lighthouse policy and the less common commands (`audit:check`) are in [docs/agents/gates.md](docs/agents/gates.md).
 
 ## Memory safety
 
 A misconfigured lint once used 17 GB of memory.
 
 - To check a few files, pass explicit paths: `pnpm lint src/x.ts`, `pnpm exec oxfmt --check src/x.ts`.
-- Keep `node_modules/**`, `.output/**`, and `.repos/**` out of every tool's scope. `.oxlintrc.json` and
-  `.oxfmtrc.json` list all three in `ignorePatterns`, `tsconfig.json` includes only `src`, `scripts`,
-  `tests`, and `*.config.ts` (and excludes `node_modules`, `.output`, and `.repos`), and `.fallowrc.json`
-  lists all three in `ignorePatterns`. A new tool or config needs the same exclusions.
-- Run heavy commands one at a time (`pnpm build`, type-aware lint, `verify:app`, `lighthouse`); on Linux
-  under a memory cap, see [docs/operations.md](docs/operations.md#linux-memory-caps).
-- Read upstream code with `gh api` or a sparse clone of the listed paths into `.repos/`
-  ([dependency-sources.md](docs/agents/dependency-sources.md)), never a full clone.
+- Keep `node_modules/**` and build output (`dist/**`) out of every tool's scope. `.oxlintrc.json`, `.oxfmtrc.json`
+  and `.fallowrc.json` list both in `ignorePatterns`, and `tsconfig.json` includes only `src`, `scripts`, `tests` and
+  `*.config.ts`. A new tool or config needs the same exclusions.
+- Run heavy commands one at a time (`pnpm build`, type-aware lint, `pnpm test:e2e`, `pnpm lighthouse`). On Linux,
+  a memory cap keeps a runaway tool from taking the machine down:
+  `systemd-run --user --scope -p MemoryMax=6G -p MemorySwapMax=0 -- pnpm check`.
 
-## Generated and vendored files
+## Generated files
 
-Regenerate these files; edit their sources instead. Claude Code refuses edits to them (`.claude/settings.json`):
-a refused edit means change the source and run the command.
+Regenerate these files; edit their sources instead. Claude Code refuses edits to the route tree
+(`.claude/settings.json`): a refused edit means change the source and run the command.
 
-- `src/sdk/**` and `openapi.json`: `pnpm codegen`
-- `src/routeTree.gen.ts`: `pnpm dev` or `pnpm build`
-- `drizzle/**`: `pnpm db:generate` (only the new SQL file may be adjusted by hand, before it is committed;
-  `tests/unit/repo-policy.test.ts` rejects edits to migrations already in the journal)
-- `.agents/skills/shadcn/**` and `skills-lock.json`: the `skills` CLI ([docs/agents/skills.md](docs/agents/skills.md)).
-  The other skills in `.agents/skills/` are this repo's own and are edited by hand.
-- `.repos/**`: the sparse clones in [dependency-sources.md](docs/agents/dependency-sources.md)
+- `src/routeTree.gen.ts`: written by the router's Vite plugin on `pnpm dev` and `pnpm build`, from `src/routes/`.
+- `pnpm-lock.yaml`: `pnpm install`, `pnpm add`, `pnpm remove`.
 
 ## Version policy
 
-Dependencies are pinned exactly, fresh releases are quarantined for a day, and the pre-release packages
-(`effect`, `@effect/vitest`, `nitro`, `@tanstack/react-start`, `oxfmt`, `@hey-api/openapi-ts`) are upgraded one
-per PR with `check`, `check:drift` and `verify:app` passing. The `upgrade-prerelease-deps` skill holds the full
-policy; load it before changing `package.json` or `pnpm-workspace.yaml`.
+Dependencies are pinned exactly, fresh releases are quarantined for a day, and `oxfmt` (0.x) is upgraded on its own
+with `pnpm check` passing. The `upgrade-deps` skill holds the full policy; load it before changing `package.json` or
+`pnpm-workspace.yaml`.
 
 ## Sharp edges
 
-- **Effect v4 RC.** `effect@latest` on npm is still v3, so most examples on the web use the wrong API. Before
-  writing Effect code, read `node_modules/effect/AGENTS.md` in full; look up APIs in `node_modules/effect/src`.
-- **TypeScript.** The project has one TypeScript, 7.0.2 (no JS compiler API). Hey API stays on its `next`
-  snapshot; 0.99.0 crashes on TS 7 ([ADR 0002](docs/decisions/0002-typescript-7.md)). `scripts/*.ts` run through
-  Node's type stripping, so use erasable syntax only (no enums, namespaces, or constructor parameter
-  properties). The TanStack lint plugins run without type information under Oxlint
-  (`pnpm-workspace.yaml` explains the peer rule).
-- **CSP.** No policy allows `'unsafe-inline'` ([ADR 0010](docs/decisions/0010-content-security-policy.md)): style
-  with classes, and put head scripts and styles through the route's `head()` so the router adds the nonce.
-- **Tailwind.** Keep `@import "tailwindcss" source("../")` in `src/styles/app.css`. Without it, Tailwind scans
-  `.output`, SSR and client CSS hashes diverge, and the CSS returns 404 in production (guarded by
-  `tests/integration/assets.test.ts` and `tests/unit/repo-policy.test.ts`).
-- **Origin.** `APP_URL` must be the public origin. SSR uses it as the SDK base URL, and a mismatch changes
-  TanStack Query keys and causes a refetch after hydration. `src/start.ts` rejects state-changing requests from
-  any other origin.
-- **Prerender.** Nitro, the deployment layer, prerenders the routes in `vite.config.ts` and writes each page's
-  hash-based CSP in its `prerender:generate` hook ([ADR 0004](docs/decisions/0004-prerender-via-nitro.md)).
+- **TypeScript.** The project pins TypeScript 7.0.2, and `tsconfig.json` uses no setting only 7 knows, so
+  TypeScript 6 checks it too ([ADR 0002](docs/decisions/0002-typescript-7.md)). `scripts/*.ts` run through Node's
+  type stripping, so use erasable syntax only (no enums, namespaces, or constructor parameter properties). The
+  TanStack Router lint plugin runs without type information under Oxlint (`pnpm-workspace.yaml` explains the peer
+  rule).
+- **Titles.** `index.html` has no `<title>`: the router's `HeadContent` renders each route's `head()` title, and
+  React 19 moves it into `<head>`. A second `<title>` in `index.html` would win and every page would share it.
 
 ## Library docs and skills
 
-- **TanStack Start and Router:** run `pnpm dlx @tanstack/intent@0.4.0 list`, then
+- **TanStack Router:** run `pnpm dlx @tanstack/intent@0.4.0 list`, then
   `pnpm dlx @tanstack/intent@0.4.0 load <package>#<skill>` for the matching skill (for example,
-  `@tanstack/start-client-core#start-core/execution-model`). The `Load:` lines that `intent list` prints
-  use `@tanstack/intent@latest`; replace `@latest` with `@0.4.0`.
-- **shadcn/ui:** the skill in `.agents/skills/shadcn` loads automatically. Run the pinned CLI with
-  `pnpm exec shadcn …` wherever the skill says `npx shadcn@latest`.
-- **Better Auth, Fallow, and Playwright traces:** see [docs/agents/skills.md](docs/agents/skills.md).
-- **Upstream docs or source not in `node_modules`:** see [docs/agents/dependency-sources.md](docs/agents/dependency-sources.md).
-  Snapshots in `.repos/` are read-only reference material.
+  `@tanstack/router-core#router-core/code-splitting`). The `Load:` lines that `intent list` prints use
+  `@tanstack/intent@latest`; replace `@latest` with `@0.4.0`.
+- **Fallow and Playwright traces:** see [docs/agents/skills.md](docs/agents/skills.md).
 
 ## Decisions
 
-Architecture decisions are recorded in [docs/decisions/](docs/decisions/README.md). Read the relevant ADR
-before reversing a choice, for example adding tRPC or Zod, moving prerendering, or upgrading Drizzle to
-1.0.
+Architecture decisions are recorded in [docs/decisions/](docs/decisions/README.md). Read the relevant ADR before
+reversing a choice, for example moving the React Compiler to its Rust path or measuring Lighthouse over plain HTTP.

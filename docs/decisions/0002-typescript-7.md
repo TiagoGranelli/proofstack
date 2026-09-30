@@ -1,43 +1,39 @@
-# 0002: TypeScript 7 only, with the Hey API snapshot that no longer needs the TypeScript API
+# 0002: TypeScript 7, with a configuration TypeScript 6 also accepts
 
-Status: Accepted (2026-09-27)
+Status: Accepted (2026-09-27; amended for the `minimal` branch 2026-09-30)
 
 ## Context
 
-TypeScript 7 (the native Go port) ships no JS compiler API. Hey API 0.99.0, the latest stable release, uses
-that API to print code and crashes on TS 7 (hey-api/openapi-ts#4235, still open). Keeping TS 6 installed
-under a `typescript` alias would let 0.99.0 run, at the cost of two TypeScript versions in one project. Hey
-API's own printer, which removes the TypeScript dependency, is merged upstream (PRs #4163 and #4166) and
-published on the `next` dist-tag, but is not yet in a stable release.
+TypeScript 7 (the native Go port) typechecks this project in a fraction of a second, which keeps `pnpm check`
+fast enough for every commit. It ships no JavaScript compiler API, so a tool that loads `typescript` as a library
+does not work on it. On `main` that was Hey API's code generator, which the `minimal` branch does not have.
+
+The `minimal` branch is for projects that bring their own stack, and many of them are still on TypeScript 6. The
+gates should not force the upgrade.
 
 ## Decision
 
-- `typescript` is `7.0.2`: one TypeScript in the project, used by `tsc` (`pnpm typecheck`).
-- `@hey-api/openapi-ts` is pinned exactly to `0.0.0-next-20260824173136` (the `next` dist-tag), which has no
-  `typescript` dependency or peer.
-- Renovate follows the `next` dist-tag for `@hey-api/openapi-ts` (`.github/renovate.json`): it would otherwise
-  propose `0.99.0`, which sorts higher but crashes on TS 7. It does not report a stable release either;
-  `npm view @hey-api/openapi-ts dist-tags` shows one.
+- `typescript` is pinned to `7.0.2`, used by `tsc` (`pnpm typecheck`).
+- `tsconfig.json` uses no setting that only TypeScript 7 knows, so a project on TypeScript 6 can copy it. It names
+  every setting whose default changed in 6 (`strict`, `types`, `module`, `target`), so both versions read it the
+  same way.
+- The other gates do not load the project's TypeScript: Oxlint's type-aware rules run on `oxlint-tsgolint`, and
+  Fallow brings its own parser. They work the same on a TypeScript 6 project.
+- The TanStack Router lint plugin brings typescript-eslint, whose packages declare `typescript <6.1` as a peer.
+  Oxlint gives JS plugins no type information, so that code path never runs; `pnpm-workspace.yaml` allows the peer
+  and says when to remove the rule (typescript-eslint/typescript-eslint#10940).
 
-## Evidence (2026-09-27)
+## Evidence (2026-09-30)
 
-- With the snapshot, `pnpm codegen` produces the same six files as 0.99.0 (types, SDK, TanStack Query
-  options including the infinite queries, MSW handlers). Only indentation differs: `git diff -w` on `src/sdk`
-  is empty. Two runs are byte-identical.
-- `pnpm check` (TS 7 typecheck, lint, 250+ fast tests), `pnpm check:drift`, `pnpm build` and
-  `pnpm verify:app` (109 integration, 139 E2E) pass.
-- The other packages that mention `typescript` accept TS 7 or don't need it: `cosmiconfig` and `msw` (optional
-  peers), Fallow (bundles its own TS 7), shadcn (uses ts-morph, which bundles TypeScript; `shadcn add --dry-run`
-  works).
+- `pnpm check` passes with TypeScript 7.0.2.
+- `pnpm --package=typescript@6 dlx tsc --noEmit` (TypeScript 6.0.3) checks the same files and reports no error.
 
 ## Consequences
 
-A snapshot build carries more risk than a stable release, so it is pinned exactly, regenerated output is
-checked by `pnpm check:drift contract`, and the integration suite exercises the whole SDK on every change.
-Editors use the TS 7 language service (`.vscode/settings.json` sets `"js/ts.experimental.useTsgo": true`).
+Editors use the TypeScript 7 language service (`.vscode/settings.json` sets `"js/ts.experimental.useTsgo": true`).
 Scripts run through Node's type stripping, so they use erasable syntax only (`erasableSyntaxOnly`).
 
 ## Revisit when
 
-Hey API publishes a stable release that includes the TypeScript-free printer: switch to it (expect an
-indentation-only diff in `src/sdk`) and drop the `followTag` rule in `.github/renovate.json`.
+A setting only TypeScript 7 has would catch real bugs here: then decide whether TypeScript 6 compatibility is still
+worth it, and say so in the README.
