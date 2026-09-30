@@ -6,7 +6,7 @@ import tailwindcss from '@tailwindcss/vite'
 import react, { reactCompilerPreset } from '@vitejs/plugin-react'
 import { playwright } from '@vitest/browser-playwright'
 import type { Plugin } from 'vite'
-import { defineConfig } from 'vitest/config'
+import { configDefaults, defineConfig } from 'vitest/config'
 
 // Separate from vite.config.ts so tests do not load the Start/Nitro plugins.
 // Projects (select with `vitest run --project <name>`):
@@ -75,14 +75,21 @@ const mswWorkerScript = (): Plugin => ({
   },
 })
 
+// A run nobody watches live (an agent, a pipe) prints only its failures and the totals, Vitest's `agent` reporter:
+// agents read the whole output, and every passing file is context they pay for. At a terminal and in CI, Vitest's
+// own reporters. The coverage summary prints in CI only: locally a threshold that fails names the module and the
+// metric, and coverage/index.html has the rest.
+const watched = Boolean(process.env.CI) || process.stdout.isTTY
+
 export default defineConfig({
   test: {
+    reporters: watched ? configDefaults.reporters : ['agent'],
     coverage: {
       provider: 'v8',
       include: ['src/**/*.{ts,tsx}'],
       // Generated code and vendored shadcn primitives.
       exclude: ['src/sdk/**', 'src/routeTree.gen.ts', 'src/components/ui/**', 'src/server/db/schema/auth.ts'],
-      reporter: ['text-summary', 'html'],
+      reporter: process.env.CI ? ['text-summary', 'html'] : ['html'],
       thresholds: {
         ...COVERAGE_FLOOR,
         ...Object.fromEntries(COVERAGE_GATE.map((file) => [file, { lines: 100, branches: 100 }])),

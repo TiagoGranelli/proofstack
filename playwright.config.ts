@@ -46,6 +46,11 @@ if (unknown.length)
     `PW_PROJECTS: unknown project(s) ${unknown.join(', ')}; expected all or ${PROJECTS.map((p) => p.name).join(', ')}`,
   )
 
+// Locally a passing run is a count and a failing one its failures, each with its error, code and trace path. `line`
+// redraws one line at a terminal; into a pipe or an agent's log it would print every test, so there `dot` prints a
+// character per test. CI keeps GitHub's annotations and the HTML report.
+const LOCAL_REPORTER = process.stdout.isTTY ? 'line' : 'dot'
+
 export default defineConfig({
   testDir: 'tests/e2e',
   globalSetup: './tests/e2e/global-setup.ts',
@@ -62,7 +67,7 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   failOnFlakyTests: !!process.env.CI,
   timeout: 30_000,
-  reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
+  reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : LOCAL_REPORTER,
   use: {
     baseURL,
     trace: 'retain-on-failure',

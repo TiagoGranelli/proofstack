@@ -3,7 +3,9 @@
 // (scripts/app-server.ts), so any of them also runs alone: `pnpm test:db`, `pnpm test`, `pnpm test:e2e [filter]`.
 // Every step runs even after a failure, and a summary follows. Last, the contract-coverage check compares the
 // statuses openapi.json declares with those the suites saw: the app servers' request logs, and the api layer,
-// which runs first with its recorder on.
+// which runs first with its recorder on. When nobody watches live, each runner prints only its failures and
+// totals (vitest.config.ts, playwright.config.ts), and the summary names the command that reruns a failed layer
+// alone, so fixing one failure does not mean running every layer again.
 // Usage: pnpm build && pnpm verify:app   (env: PW_PROJECTS, TEST_EDGE=1, KEEP_TEST_DB=1, ALLOW_STALE_BUILD=1)
 import { mkdirSync, readdirSync, rmSync } from 'node:fs'
 import { xSync } from 'tinyexec'
@@ -17,15 +19,23 @@ const serverLogs = () =>
     .filter((name) => isServerLog(name))
     .map((name) => `test-results/${name}`)
 
-type Step = { name: string; command: () => string[]; env?: NodeJS.ProcessEnv }
+/** A layer, and the command that reruns it alone once it is fixed (a filter narrows it further). */
+type Step = { name: string; command: () => string[]; alone: string; env?: NodeJS.ProcessEnv }
 const STEPS: Step[] = [
-  { name: 'api (recorded)', command: () => ['vitest', 'run', '--project', 'api'], env: { CONTRACT_OBSERVATIONS } },
-  { name: 'db', command: () => ['vitest', 'run', '--project', 'db'] },
-  { name: 'integration', command: () => ['vitest', 'run', '--project', 'integration'] },
-  { name: 'e2e', command: () => ['playwright', 'test'] },
+  {
+    name: 'api (recorded)',
+    command: () => ['vitest', 'run', '--project', 'api'],
+    alone: 'pnpm test:api [filter]',
+    env: { CONTRACT_OBSERVATIONS },
+  },
+  { name: 'db', command: () => ['vitest', 'run', '--project', 'db'], alone: 'pnpm test:db [filter]' },
+  { name: 'integration', command: () => ['vitest', 'run', '--project', 'integration'], alone: 'pnpm test [filter]' },
+  { name: 'e2e', command: () => ['playwright', 'test'], alone: 'pnpm test:e2e [filter]' },
   {
     name: 'contract coverage',
     command: () => [process.execPath, 'scripts/contract-coverage.ts', CONTRACT_OBSERVATIONS, ...serverLogs()],
+    // It reads what every other layer recorded, so only a full run checks it.
+    alone: 'pnpm verify:app',
   },
 ]
 
@@ -40,7 +50,7 @@ const run = (step: Step): { name: string; ok: boolean; detail: string } => {
   return {
     name: step.name,
     ok: exitCode === 0,
-    detail: exitCode === 0 ? seconds : `exit ${exitCode ?? signalCode}, ${seconds}`,
+    detail: exitCode === 0 ? seconds : `exit ${exitCode ?? signalCode}, ${seconds}; rerun alone: ${step.alone}`,
   }
 }
 
