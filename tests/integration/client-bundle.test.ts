@@ -7,7 +7,7 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { beforeAll, describe, expect, it } from 'vitest'
-import { clientIps, signIn, users } from './helpers.ts'
+import { clientIps, signIn, sharedUsers } from './helpers.ts'
 
 const ASSETS = '.output/public/assets'
 
@@ -62,7 +62,7 @@ describe('client bundle', () => {
   describe('signed in', () => {
     let cookie: string
     beforeAll(async () => {
-      cookie = await signIn(users.author, nextIp())
+      cookie = await signIn(sharedUsers.author, nextIp())
     })
 
     it.each(SIGNED_IN_PAGES)('loads and preloads no Effect runtime on %s before an interaction', async (path) => {

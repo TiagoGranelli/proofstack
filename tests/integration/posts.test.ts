@@ -3,15 +3,19 @@
 import { beforeAll, describe, expect, it } from 'vitest'
 import { createClient } from '#/sdk/client/index.ts'
 import { myPostsCreate, myPostsList, myPostsRemove, myPostsUpdate, publicPostsList } from '#/sdk/sdk.gen.ts'
-import { appUrl, clientIps, sdkClient, signIn, users } from './helpers.ts'
+import { appUrl, clientIps, createUser, sdkClient, signIn } from './helpers.ts'
 
 const nextIp = clientIps('100.64.7')
 const anonymous = sdkClient()
 let author: ReturnType<typeof sdkClient>
 let other: ReturnType<typeof sdkClient>
 let authorCookie: string
+// This file's own accounts: other files run in parallel, and their posts would show up in what these two own.
+let users: { author: Awaited<ReturnType<typeof createUser>>; other: Awaited<ReturnType<typeof createUser>> }
 
 beforeAll(async () => {
+  const [authorAccount, otherAccount] = await Promise.all([createUser('posts-author'), createUser('posts-other')])
+  users = { author: authorAccount, other: otherAccount }
   authorCookie = await signIn(users.author, nextIp())
   author = sdkClient(authorCookie)
   other = sdkClient(await signIn(users.other, nextIp()))

@@ -3,7 +3,7 @@
 // Error pages are covered by tests/integration/db-failure.test.ts, which needs its own server.
 import { describe, expect, it } from 'vitest'
 import { inlineSourceHashes } from '#/server/nitro/prerender-csp.ts'
-import { appUrl, clientIps, signIn, users } from './helpers.ts'
+import { appUrl, clientIps, signIn, sharedUsers } from './helpers.ts'
 
 const nextIp = clientIps('100.64.0')
 
@@ -51,7 +51,7 @@ describe('content security policy', () => {
   })
 
   it('gives signed-in SSR pages the nonce policy too', async () => {
-    const cookie = await signIn(users.author, nextIp())
+    const cookie = await signIn(sharedUsers.author, nextIp())
     const res = await fetch(`${appUrl}/dashboard`, { headers: { cookie } })
     expect(res.status).toBe(200)
     const csp = expectStrictPolicy(res, '/dashboard')

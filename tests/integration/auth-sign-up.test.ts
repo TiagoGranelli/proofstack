@@ -1,7 +1,7 @@
 // The sign-up policy (AUTH_SIGN_UP). The main server runs `open`, the second one the default `closed`. The UI
 // signs up through the signUp server function; /api/auth/sign-up/email is not exposed in either mode.
 import { describe, expect, it } from 'vitest'
-import { appUrl, clientIps, closedAppUrl, postSignIn, users } from './helpers.ts'
+import { appUrl, clientIps, closedAppUrl, postSignIn, sharedUsers } from './helpers.ts'
 import { callAuthFunction } from './server-functions.ts'
 
 const nextIp = clientIps('100.64.3')
@@ -59,7 +59,7 @@ describe('open sign-up', () => {
 
   it('answers a sign-up for an existing address like any other (no account enumeration)', async () => {
     const fresh = await signUp(appUrl, newAccount(), nextIp())
-    const taken = await signUp(appUrl, { ...newAccount(), email: users.other.email }, nextIp())
+    const taken = await signUp(appUrl, { ...newAccount(), email: sharedUsers.other.email }, nextIp())
     expect([fresh.response.status, taken.response.status]).toEqual([200, 200])
     expect(taken.value).toEqual(fresh.value)
     expect(await taken.response.text()).toBe(await fresh.response.text())

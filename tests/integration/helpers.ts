@@ -13,7 +13,12 @@ export const closedAppUrl = servers.closedAppUrl
 /** The database both servers use, for tests that read or arrange rows directly. */
 export const databaseUrl = servers.databaseUrl
 
-export const users = { author: servers.user, other: servers.otherUser }
+/**
+ * The two accounts every file shares, for reading only: signing in, the session, `/api/me`. Files run in
+ * parallel, so a file that writes rows (posts, account changes) signs in as accounts of its own from
+ * `createUser`: an assertion on what an author owns then sees only what this file wrote.
+ */
+export const sharedUsers = { author: servers.user, other: servers.otherUser }
 
 /**
  * Client IPs for one test file. The open server has loopback in TRUSTED_PROXIES, so the
@@ -63,8 +68,8 @@ const CREATE_USER = fileURLToPath(new URL('../../scripts/create-user.ts', import
 
 /**
  * A throwaway verified account, created through scripts/create-user.ts (the operator path) with the app's
- * environment (setup.ts), named after `label`. For tests that change or delete an
- * account, or write more than the shared `users` can absorb under the per-user write limit.
+ * environment (setup.ts), named after `label`. For every file that writes: its rows, its write limit and its
+ * account changes are then its own.
  */
 export const createUser = async (label: string) => {
   const account = {

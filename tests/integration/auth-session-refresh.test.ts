@@ -3,7 +3,7 @@
 // (/api/me) and Better Auth's own /get-session.
 import { Pool } from 'pg'
 import { afterAll, describe, expect, it } from 'vitest'
-import { appUrl, databaseUrl, clientIps, sessionCookie, signIn, users } from './helpers.ts'
+import { appUrl, databaseUrl, clientIps, sessionCookie, signIn, sharedUsers } from './helpers.ts'
 
 const nextIp = clientIps('100.64.4')
 const pool = new Pool({ connectionString: databaseUrl })
@@ -14,7 +14,7 @@ const tokenOf = (cookie: string) => decodeURIComponent(cookie.slice(cookie.index
 
 /** A fresh session, aged: it expires in one hour, so more than updateAge has passed since it was renewed. */
 const agedSession = async () => {
-  const cookie = await signIn(users.author, nextIp())
+  const cookie = await signIn(sharedUsers.author, nextIp())
   const { rowCount } = await pool.query(
     `update session set expires_at = now() + interval '1 hour', updated_at = now() - interval '6 days' where token = $1`,
     [tokenOf(cookie)],
@@ -54,7 +54,7 @@ describe('session refresh', () => {
   })
 
   it('leaves a recent session alone', async () => {
-    const cookie = await signIn(users.author, nextIp())
+    const cookie = await signIn(sharedUsers.author, nextIp())
     const before = await expiresAt(cookie)
     const res = await fetch(`${appUrl}/api/me`, { headers: { cookie } })
     expect(res.status).toBe(200)

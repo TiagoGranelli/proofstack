@@ -2,10 +2,10 @@
 // trusts loopback, so the X-Forwarded-For the test process sends is believed. The closed-sign-up server trusts
 // only 10.0.0.0/8: the same header from 127.0.0.1 must be ignored, in the session and in the rate limit.
 import { describe, expect, it } from 'vitest'
-import { appUrl, closedAppUrl, postSignIn, sessionCookie, users } from './helpers.ts'
+import { appUrl, closedAppUrl, postSignIn, sessionCookie, sharedUsers } from './helpers.ts'
 import { callAuthFunction } from './server-functions.ts'
 
-const { email, password } = users.author
+const { email, password } = sharedUsers.author
 
 /** The client IP Better Auth stored on the session the cookie belongs to, as the account page lists it. */
 const sessionIp = async (baseUrl: string, cookie: string) => {
@@ -16,13 +16,13 @@ const sessionIp = async (baseUrl: string, cookie: string) => {
 
 describe('client IP behind a trusted proxy', () => {
   it('is the last X-Forwarded-For hop the trusted peer vouches for', async () => {
-    const res = await postSignIn(users.author, { 'x-forwarded-for': '203.0.113.50, 100.64.1.7' })
+    const res = await postSignIn(sharedUsers.author, { 'x-forwarded-for': '203.0.113.50, 100.64.1.7' })
     expect(res.status).toBe(200)
     expect(await sessionIp(appUrl, sessionCookie(res)!)).toBe('100.64.1.7')
   })
 
   it('is an IPv6 client’s /64 network, which is also its rate-limit bucket', async () => {
-    const res = await postSignIn(users.author, { 'x-forwarded-for': '2001:db8:64:1:aaaa:bbbb:cccc:dddd' })
+    const res = await postSignIn(sharedUsers.author, { 'x-forwarded-for': '2001:db8:64:1:aaaa:bbbb:cccc:dddd' })
     expect(res.status).toBe(200)
     expect(await sessionIp(appUrl, sessionCookie(res)!)).toBe('2001:db8:64:1::/64')
 

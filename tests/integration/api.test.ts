@@ -4,14 +4,14 @@ import { readFileSync } from 'node:fs'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { createClient } from '#/sdk/client/index.ts'
 import { meGet, systemHealth, systemReady } from '#/sdk/sdk.gen.ts'
-import { appUrl, clientIps, sdkClient, signIn, users } from './helpers.ts'
+import { appUrl, clientIps, sdkClient, signIn, sharedUsers } from './helpers.ts'
 
 const nextIp = clientIps('192.0.2')
 const anonymous = sdkClient()
 let authorCookie: string
 
 beforeAll(async () => {
-  authorCookie = await signIn(users.author, nextIp())
+  authorCookie = await signIn(sharedUsers.author, nextIp())
 })
 
 describe('contract', () => {
@@ -31,7 +31,7 @@ describe('me', () => {
     const { data, response } = await meGet({ client: sdkClient(authorCookie) })
     expect(response?.status).toBe(200)
     expect(Object.keys(data ?? {}).toSorted()).toEqual(['email', 'id', 'name'])
-    expect(data).toMatchObject({ name: users.author.name, email: users.author.email })
+    expect(data).toMatchObject({ name: sharedUsers.author.name, email: sharedUsers.author.email })
     expect(response?.headers.get('cache-control')).toBe('no-store')
   })
 

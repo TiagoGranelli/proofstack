@@ -1,17 +1,17 @@
 // Security behavior of the running app: headers and CSP, CSRF, the Better Auth surface, sessions,
 // request limits and sign-in rate limiting, against the production build (global-setup.ts).
 import { beforeAll, describe, expect, it } from 'vitest'
-import { appUrl, clientIps, postSignIn, sessionCookie, signIn, users } from './helpers.ts'
+import { appUrl, clientIps, postSignIn, sessionCookie, signIn, sharedUsers } from './helpers.ts'
 
 const nextIp = clientIps('198.51.100')
-const { email, password } = users.author
+const { email, password } = sharedUsers.author
 
 const me = (cookie: string) => fetch(`${appUrl}/api/me`, { headers: { cookie } })
 
 let cookie: string
 
 beforeAll(async () => {
-  cookie = await signIn(users.author, nextIp())
+  cookie = await signIn(sharedUsers.author, nextIp())
 })
 
 describe('headers', () => {
@@ -235,7 +235,7 @@ describe('sessions', () => {
   })
 
   it('ends the session on sign-out', async () => {
-    const session = await signIn(users.author, nextIp())
+    const session = await signIn(sharedUsers.author, nextIp())
     expect((await me(session)).status).toBe(200)
     const out = await fetch(`${appUrl}/api/auth/sign-out`, {
       method: 'POST',

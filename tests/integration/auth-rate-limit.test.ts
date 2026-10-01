@@ -3,7 +3,7 @@
 // Production only.
 import { Pool } from 'pg'
 import { afterAll, describe, expect, it } from 'vitest'
-import { appUrl, databaseUrl, clientIps, postSignIn, users } from './helpers.ts'
+import { appUrl, databaseUrl, clientIps, postSignIn, sharedUsers } from './helpers.ts'
 
 const nextIp = clientIps('100.64.2')
 const pool = new Pool({ connectionString: databaseUrl })
@@ -22,7 +22,7 @@ describe('auth rate limit', () => {
     const ip = nextIp()
     const attempts = await Promise.all(
       Array.from({ length: 10 }, () =>
-        postSignIn({ email: users.author.email, password: 'wrong-password-123' }, { 'x-forwarded-for': ip }),
+        postSignIn({ email: sharedUsers.author.email, password: 'wrong-password-123' }, { 'x-forwarded-for': ip }),
       ),
     )
     const statuses = attempts.map((res) => res.status).toSorted((a, b) => a - b)
