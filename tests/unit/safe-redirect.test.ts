@@ -136,11 +136,23 @@ describe('safeRedirect properties', () => {
 
   it('is idempotent: a returned path is accepted as it is', () => {
     fc.assert(
-      fc.property(fc.oneof(inputs, nearTheLimit), (input) => {
+      fc.property(inputs, (input) => {
         const target = safeRedirect(input)
         expect(safeRedirect(target)).toBe(target)
       }),
       { numRuns: 2000 },
+    )
+  })
+
+  // Its own property with fewer runs: fast-check builds each of these 2,000-character strings one character at a
+  // time, and 1,000 of them took 6 s on a Windows CI runner, past the test timeout.
+  it('is idempotent near the length limit, where encoding makes a path longer', () => {
+    fc.assert(
+      fc.property(nearTheLimit, (input) => {
+        const target = safeRedirect(input)
+        expect(safeRedirect(target)).toBe(target)
+      }),
+      { numRuns: 300 },
     )
   })
 })
