@@ -5,7 +5,12 @@ Status: Accepted (2026-09-26)
 ## Context
 
 On 2026-09-27, npm `latest` for Drizzle ORM is `0.45.3`, and `rc` is `1.0.0-rc.4`, with rc.5 snapshots
-being published. Drizzle 1.0's Effect integration targets Effect v3, and this project uses Effect v4.
+being published. 1.0 is still a release candidate.
+
+Corrected on 2026-10-01: this record first said that Drizzle 1.0's Effect integration targets Effect v3. It
+does not. `drizzle-orm@1.0.0-rc.4` declares the peer `effect >=4.0.0-beta.83` and exports
+`drizzle-orm/effect-postgres`; the v3 package is `@effect/sql-drizzle`. The decision rests on 1.0 being a
+release candidate.
 
 ## Decision
 
@@ -27,4 +32,5 @@ whichever Drizzle version is in use.
 
 ## Revisit when
 
-Drizzle 1.0 is tagged `latest`, or an Effect v4 integration ships.
+Drizzle 1.0 is tagged `latest`. Its `drizzle-orm/effect-postgres` would then replace the `Effect.tryPromise`
+wrappers and the transaction bridge in `src/server/db/client.ts`.
