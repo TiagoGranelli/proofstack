@@ -1,7 +1,16 @@
 import type { Page } from '@playwright/test'
 import { APP_NAME } from '#/config/app.ts'
 import { signInWithForm } from './support/accounts.ts'
-import { type Author, expect, failServerFunctionPosts, seedPost, signIn, test, visit } from './support/app.ts'
+import {
+  type Author,
+  expect,
+  expectHydrated,
+  failServerFunctionPosts,
+  seedPost,
+  signIn,
+  test,
+  visit,
+} from './support/app.ts'
 
 /**
  * On the dashboard, hydrated and rendered. Leaving a page before that (a `goto`, cleared cookies) races with
@@ -11,7 +20,7 @@ import { type Author, expect, failServerFunctionPosts, seedPost, signIn, test, v
  */
 const expectDashboard = async (page: Page) => {
   await expect(page).toHaveURL(/\/dashboard$/)
-  await expect(page.locator('body[data-hydrated="true"]')).toBeAttached()
+  await expectHydrated(page)
   await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible()
 }
 
@@ -100,7 +109,7 @@ const signOutFromDashboard = async (page: Page) => {
   await expect(page.getByTestId('flash')).toHaveText('You are signed out.')
   await expect(navLink(page, 'Sign in')).toBeVisible()
   await page.reload()
-  await expect(page.locator('body[data-hydrated="true"]')).toBeAttached()
+  await expectHydrated(page)
   await expect(page.getByTestId('flash')).toHaveCount(0)
   await page.goto('/dashboard')
   await expect(page).toHaveURL(/\/login\?redirect=%2Fdashboard$/)
@@ -187,7 +196,7 @@ test('before hydration, a form never posts credentials to the page itself', asyn
 test('private routes redirect anonymous visitors to login and back after sign-in', async ({ page, author }) => {
   await page.goto('/dashboard')
   await expect(page).toHaveURL(/\/login\?redirect=%2Fdashboard$/)
-  await expect(page.locator('body[data-hydrated="true"]')).toBeAttached()
+  await expectHydrated(page)
   await signInWithForm(page, author)
   await expectDashboard(page)
 })

@@ -26,6 +26,9 @@ import { test as base, expect } from '../fixtures.ts'
 /** Same default as playwright.config.ts. */
 const appUrl = process.env.APP_URL ?? 'http://localhost:3000'
 
+/** Half the test timeout (playwright.config.ts): a page that needs longer to hydrate is broken, not busy. */
+const HYDRATION_TIMEOUT = 15_000
+
 export type Author = { email: string; name: string; password: string }
 
 const CREATE_USER = fileURLToPath(new URL('../../../scripts/create-user.ts', import.meta.url))
@@ -77,10 +80,19 @@ export const test = base.extend<object, { author: Author }>({
 })
 export { expect }
 
+/**
+ * Waits until the page on screen has hydrated (`Page` sets the marker): input before that is lost. This is a
+ * readiness wait, not a speed check (Lighthouse measures speed), so it gets half the test timeout instead of
+ * the 5 s of an assertion: with every worker's browser starting at once, a page took longer than that to
+ * hydrate and the test failed before it began.
+ */
+export const expectHydrated = (page: Page) =>
+  expect(page.locator('body[data-hydrated="true"]')).toBeAttached({ timeout: HYDRATION_TIMEOUT })
+
 /** Loads a page and waits for hydration (input before it is lost). Returns the document's response. */
 export const visit = async (page: Page, path: string) => {
   const response = await page.goto(path)
-  await expect(page.locator('body[data-hydrated="true"]')).toBeAttached()
+  await expectHydrated(page)
   return response
 }
 
@@ -97,7 +109,7 @@ export const expectFlash = async (page: Page, url: RegExp, message: string) => {
 export const followLink = async (page: Page, name: string, url: RegExp) => {
   await page.getByRole('main').getByRole('link', { name }).click()
   await expect(page).toHaveURL(url)
-  await expect(page.locator('body[data-hydrated="true"]')).toBeAttached()
+  await expectHydrated(page)
   // The URL changes before the new page renders; its heading takes focus once it has (RouteAnnouncer). Filling a
   // field before that could fill the old page's field of the same name.
   await expect(page.getByRole('heading', { level: 1 })).toBeFocused()

@@ -13,8 +13,9 @@ The E2E layer. [tests/AGENTS.md](../AGENTS.md) still applies.
   `navigateWithApiResponse(page, '/api/posts' | '/api/me/posts', response)` (`tests/e2e/support/app.ts`)
   reaches empty and failure states by answering the browser's API call on a client-side navigation; build
   list bodies with `lastPage(...)` so they match the contract's `PostPage`.
-- **E2E hydration and CSP.** Wait for `body[data-hydrated="true"]` (set by `Page`) before interacting: input
-  before hydration is lost. Import `test` and `expect` from `tests/e2e/fixtures.ts`, not `@playwright/test`: it
+- **E2E hydration and CSP.** Wait for hydration before interacting, with `visit`, `followLink` or
+  `expectHydrated(page)` (`support/app.ts`; `Page` sets `body[data-hydrated="true"]`): input before hydration is
+  lost, and a bare `expect(...)` gives a busy machine only 5 s. Import `test` and `expect` from `tests/e2e/fixtures.ts`, not `@playwright/test`: it
   fails the test on any Content-Security-Policy violation.
 - **E2E isolation.** Specs run in parallel on one database and never depend on each other's data. Import
   `test` from `tests/e2e/support/app.ts`: every worker gets its own `author` (created verified through
