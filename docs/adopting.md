@@ -34,7 +34,7 @@ It fits less well when:
    remove it with [removing-the-example.md](removing-the-example.md) when you no longer need it.
 
    The `minimal` branch is something else: only the gates, on a small client-side React app, for projects
-   that keep their own stack ([README](../README.md#other-stacks)).
+   that keep their own stack ([method.md](method.md#react-and-typescript-on-another-stack)).
 2. Install and start what the app needs (pnpm 12 and Docker; `pnpm install` downloads the pinned Node):
 
    ```sh

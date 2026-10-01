@@ -6,7 +6,7 @@ result passes `pnpm check`, `pnpm check:drift` and `pnpm verify:app`; the measur
 does.
 
 This is not what the `minimal` branch is. `minimal` keeps only the gates, for React and TypeScript projects on
-another stack ([README](../README.md#other-stacks)).
+another stack ([method.md](method.md#react-and-typescript-on-another-stack)).
 
 ## Delete
 
