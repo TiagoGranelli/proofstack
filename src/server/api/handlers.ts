@@ -3,6 +3,7 @@ import { Effect, Layer } from 'effect'
 import { HttpApiBuilder } from 'effect/http-api'
 import { Api } from '#/contract/api.ts'
 import { ServiceUnavailable } from '#/contract/errors.ts'
+import type { PostId } from '#/contract/ids.ts'
 import { CurrentUser } from '#/contract/middleware.ts'
 import { PostNotFound } from '#/contract/posts.ts'
 import { DatabaseHealth } from '../db/health.ts'
@@ -51,7 +52,7 @@ const PublicPostsHandlers = HttpApiBuilder.group(
 type Repo = PostsRepo['Service']
 
 /** Edits one of the signed-in author's posts; another author's post is as missing as a deleted one (404). */
-const updateOwnPost = (repo: Repo, id: string, body: string) =>
+const updateOwnPost = (repo: Repo, id: PostId, body: string) =>
   Effect.gen(function* () {
     const author = yield* CurrentUser
     const updated = yield* repo.update(author, id, body).pipe(Effect.orDie)
@@ -60,7 +61,7 @@ const updateOwnPost = (repo: Repo, id: string, body: string) =>
   })
 
 /** Deletes one of the signed-in author's posts, with the same 404 as `updateOwnPost`. */
-const removeOwnPost = (repo: Repo, id: string) =>
+const removeOwnPost = (repo: Repo, id: PostId) =>
   Effect.gen(function* () {
     const author = yield* CurrentUser
     const removed = yield* repo.remove(author, id).pipe(Effect.orDie)

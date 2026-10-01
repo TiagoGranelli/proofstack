@@ -475,6 +475,39 @@
       }
     },
     {
+      // An id is a string to the API and a brand to the compiler (src/contract/ids.ts).
+      "files": ["src/contract/**"],
+      "rules": {
+        "eslint-js/no-restricted-syntax": [
+          "error",
+          {
+            "selector": "CallExpression:matches([callee.name=/^(spawn|spawnSync|execFile|execFileSync)$/], [callee.property.name=/^(spawn|spawnSync|execFile|execFileSync)$/])[arguments.0.value=/^(pnpm|npm|npx|yarn)$|^node_modules/]",
+            "message": "Start pnpm, npm or a node_modules/.bin tool with `xSync` or `x` from tinyexec, not node:child_process: on Windows it is a `.cmd` shim, which Node refuses to start without a shell (CVE-2024-27980)."
+          },
+          {
+            "selector": "TSAsExpression > TSAsExpression.expression[typeAnnotation.type='TSUnknownKeyword']",
+            "message": "`as unknown as` switches the type checker off. Decode the value with Effect Schema, or fix the type where it comes from."
+          },
+          {
+            "selector": "Literal[value=/access-control-allow-origin/i], TemplateElement[value.raw=/access-control-allow-origin/i]",
+            "message": "CORS does not belong in application code: the app is same-origin (src/start.ts rejects other origins). Serving other origins is a reviewed edge decision in deploy/Caddyfile."
+          },
+          {
+            "selector": "MemberExpression[object.object.type='MetaProperty'][object.property.name='env'][property.name=/^VITE_/]",
+            "message": "import.meta.env.VITE_* is compiled into the browser bundle, so its value is public. Read server configuration through src/server/env.ts."
+          },
+          {
+            "selector": "CallExpression[callee.property.name=/^(inputValidator|validator)$/]:not([arguments.0.callee.object.name='Schema'][arguments.0.callee.property.name='toStandardSchemaV1'])",
+            "message": "A server function's validator is the only check between the network and its handler. Decode with Effect Schema: `.validator(Schema.toStandardSchemaV1(Schema.Struct({ ... })))`."
+          },
+          {
+            "selector": "Property[key.name=/^(id|[a-z][A-Za-z]*Id)$/] > MemberExpression.value[object.name='Schema'][property.name='String']",
+            "message": "An id in the contract is branded, so the compiler refuses one kind of id where another is expected. Use the brand from src/contract/ids.ts (`PostId`, `UserId`), or add one there for a new table."
+          }
+        ]
+      }
+    },
+    {
       // Only the two raw routes below serve HTTP themselves; everything else goes through the API contract.
       "files": ["src/routes/**"],
       "rules": {

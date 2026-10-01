@@ -15,6 +15,7 @@ import {
 } from 'effect/http'
 import { HttpApiBuilder, HttpApiClient, HttpApiMiddleware } from 'effect/http-api'
 import { Api } from '#/contract/api.ts'
+import { UserId } from '#/contract/ids.ts'
 import { Authentication } from '#/contract/middleware.ts'
 import { ApiHandlers } from '#/server/api/handlers.ts'
 import { AuthenticationLive, RequestValidationLive } from '#/server/api/middleware.ts'
@@ -26,9 +27,9 @@ import { memoryPostsRepo } from './posts-repo.ts'
 
 /** The authors the fake session store knows, keyed by session token. */
 export const authors = {
-  alice: { id: 'user-alice', name: 'Alice', email: 'alice@example.test' },
-  bob: { id: 'user-bob', name: 'Bob', email: 'bob@example.test' },
-} as const
+  alice: { id: UserId.make('user-alice'), name: 'Alice', email: 'alice@example.test' },
+  bob: { id: UserId.make('user-bob'), name: 'Bob', email: 'bob@example.test' },
+}
 type AuthorName = keyof typeof authors
 
 const memoryDatabaseHealth = (options: RepoOptions) =>

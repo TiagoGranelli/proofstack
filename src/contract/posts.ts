@@ -1,12 +1,13 @@
 import { Schema } from 'effect'
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from 'effect/http-api'
+import { PostId } from './ids.ts'
 import { WRITE_WINDOW_SECONDS, WRITES_PER_WINDOW } from './limits.ts'
 import { Authentication, RequestValidation, WriteRateLimit } from './middleware.ts'
 import { PageQuery, pageOf } from './pages.ts'
 import { PostInput } from './post-input.ts'
 
 const Post = Schema.Struct({
-  id: Schema.String,
+  id: PostId,
   body: Schema.String,
   authorName: Schema.String,
   createdAt: Schema.String,
@@ -19,7 +20,7 @@ export type Post = typeof Post.Type
 // instead, so the 201 response points at the one `Post` component.
 const Created = Schema.suspend(() => Post).pipe(HttpApiSchema.status(201))
 
-const PostPath = { id: Schema.String }
+const PostPath = { id: PostId }
 
 const PostPage = pageOf(Post).annotate({
   identifier: 'PostPage',
@@ -29,7 +30,7 @@ export type PostPage = typeof PostPage.Type
 
 export class PostNotFound extends Schema.TaggedError<PostNotFound>()(
   'PostNotFound',
-  { id: Schema.String },
+  { id: PostId },
   { httpApiStatus: 404 },
 ) {}
 

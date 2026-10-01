@@ -14,7 +14,9 @@ together and must agree; the running API and the tests must agree with all three
    `httpApiStatus`). Constants the UI also needs (limits, lengths) go in `src/contract/limits.ts`, which stays
    free of Effect so client bundles do not pull in the schema runtime. A user-supplied string that is stored
    or looked up in Postgres starts its checks with `isFreeOfNul` (`src/contract/stored-text.ts`): Postgres text
-   cannot hold U+0000, and without the check a NUL answers 500 instead of 400.
+   cannot hold U+0000, and without the check a NUL answers 500 instead of 400. An id is a brand from
+   `src/contract/ids.ts` (`PostId`, `UserId`), never `Schema.String`: a lint rule rejects that, and the compiler
+   then refuses one kind of id where another is expected. A new table adds its brand there.
 2. Put a new endpoint that needs a session in a group behind the `Authentication` middleware (as `MyPosts` in
    `src/contract/posts.ts`), with a path under `/api/me/` (a comment on a post is `POST /api/me/posts/{postId}/comments`,
    not `POST /api/posts/{postId}/comments`): `tests/unit/openapi-rules.test.ts` fails otherwise. A public endpoint is a deliberate edit to `PUBLIC_OPERATIONS` in

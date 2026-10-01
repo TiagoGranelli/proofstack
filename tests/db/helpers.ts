@@ -3,6 +3,7 @@ import { drizzle } from 'drizzle-orm/node-postgres'
 import { Effect, Layer } from 'effect'
 import { Client } from 'pg'
 import { expect, vi } from 'vitest'
+import { UserId } from '#/contract/ids.ts'
 import { auth } from '#/server/auth.ts'
 import { Database, pool } from '#/server/db/client.ts'
 import * as schema from '#/server/db/schema/index.ts'
@@ -61,5 +62,5 @@ export const createAccount = async (label: string) => {
     accountId: created.id,
     password: await context.password.hash(password),
   })
-  return { id: created.id, name: created.name, email: created.email, password }
+  return { id: UserId.make(created.id), name: created.name, email: created.email, password }
 }

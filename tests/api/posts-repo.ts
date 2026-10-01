@@ -1,12 +1,13 @@
 // PostsRepo in memory for the api layer (./harness.ts), with the real repository's contract.
 import { Layer } from 'effect'
+import { PostId, type UserId } from '#/contract/ids.ts'
 import type { Post } from '#/contract/posts.ts'
 import { PostsRepo } from '#/server/posts/repo.ts'
 import { memoryQuery, type RepoOptions } from './memory-db.ts'
 import { memoryClock, memoryPage } from './memory-keyset.ts'
 
 /** A stored post: the public fields, its owner, and its sort key at Postgres's microsecond precision. */
-type StoredPost = Post & { readonly authorId: string; readonly cursorAt: string }
+type StoredPost = Post & { readonly authorId: UserId; readonly cursorAt: string }
 
 const view = ({ id, body, authorName, createdAt, updatedAt }: StoredPost): Post => ({
   id,
@@ -41,7 +42,7 @@ export const memoryPostsRepo = (options: RepoOptions) => {
         db(() => {
           const now = tick()
           const post: StoredPost = {
-            id: crypto.randomUUID(),
+            id: PostId.make(crypto.randomUUID()),
             body,
             authorName: author.name,
             authorId: author.id,

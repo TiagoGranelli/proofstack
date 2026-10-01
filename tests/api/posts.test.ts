@@ -3,12 +3,13 @@
 // clause, rate limits, CSRF) is covered by tests/integration against the running app.
 import { assert, describe, it } from '@effect/vitest'
 import { Effect } from 'effect'
+import { PostId } from '#/contract/ids.ts'
 import { WRITE_WINDOW_SECONDS, WRITES_PER_WINDOW, POSTS_PAGE_DEFAULT, POSTS_PAGE_MAX } from '#/contract/limits.ts'
 import type { PageCursor } from '#/contract/pages.ts'
 import type { PostPage } from '#/contract/posts.ts'
 import { apiLayer, authors, clientAs } from './harness.ts'
 
-const MISSING_ID = '00000000-0000-4000-8000-000000000000'
+const MISSING_ID = PostId.make('00000000-0000-4000-8000-000000000000')
 /** A list request without `cursor` or `limit`: the first page at the default size. */
 const firstPage = { query: {} }
 
@@ -74,7 +75,7 @@ describe('myPosts', () => {
       const [alice, bob] = [yield* clientAs('alice'), yield* clientAs('bob')]
       const bobs = yield* bob.myPosts.create({ payload: { body: 'bob only' } })
 
-      for (const id of [bobs.id, MISSING_ID, 'not-a-uuid']) {
+      for (const id of [bobs.id, MISSING_ID, PostId.make('not-a-uuid')]) {
         for (const [call, response] of [
           [
             'update',

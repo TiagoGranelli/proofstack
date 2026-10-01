@@ -1,9 +1,10 @@
 import { Schema } from 'effect'
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from 'effect/http-api'
+import { UserId } from './ids.ts'
 import { Authentication } from './middleware.ts'
 
 const User = Schema.Struct({
-  id: Schema.String,
+  id: UserId,
   name: Schema.String,
   email: Schema.String,
 }).annotate({ identifier: 'User', description: 'The signed-in user, without credentials or session data.' })

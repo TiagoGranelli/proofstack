@@ -3,6 +3,7 @@ import { Cause, Effect, Layer, SchemaIssue } from 'effect'
 import { HttpRouter, HttpServer, HttpServerRequest, HttpServerResponse } from 'effect/http'
 import { HttpApiBuilder, HttpApiError } from 'effect/http-api'
 import { Api } from '#/contract/api.ts'
+import { UserId } from '#/contract/ids.ts'
 import { Database } from '../db/client.ts'
 import { DatabaseHealth } from '../db/health.ts'
 import { requestSession } from '../http/request-session.ts'
@@ -57,13 +58,13 @@ const ServerMiddleware = HttpRouter.middleware(
 )
 
 // Better Auth's session of the request's cookie, looked up once per incoming request (requestSession). Only the
-// fields CurrentUser declares reach the handlers.
+// fields CurrentUser declares reach the handlers. This is where Better Auth's plain string becomes a UserId.
 const SessionLookupLive = Layer.succeed(SessionLookup, {
   userOf: (headers) =>
     Effect.tryPromise(() => requestSession(headers)).pipe(
       Effect.orDie,
       Effect.map((session) =>
-        session ? { id: session.user.id, name: session.user.name, email: session.user.email } : null,
+        session ? { id: UserId.make(session.user.id), name: session.user.name, email: session.user.email } : null,
       ),
     ),
 })

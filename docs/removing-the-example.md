@@ -46,6 +46,8 @@ Application code:
 
 - `src/contract/api.ts`: drop `.add(PublicPosts)`, `.add(MyPosts)` and their import.
 - `src/contract/limits.ts`: drop `POST_MAX_LENGTH`.
+- `src/contract/ids.ts`: drop `PostId`. Delete `tests/unit/id-brands.test.ts` with it, and write it again when
+  your first table adds a second brand: it proves that two kinds of id do not mix.
 - `src/lib/api-error.ts`: drop the `PostNotFound` case. The `ValidationError` and `RateLimited` cases stay:
   they are always part of the union (`MiddlewareError`).
 - `src/server/api/handlers.ts`: drop `PublicPostsHandlers`, `MyPostsHandlers` (also from `ApiHandlers`), and

@@ -48,7 +48,8 @@ gate files to review:
   commented in `.oxlintrc.json`.
 - **Repository syntax rules** (`eslint-js/no-restricted-syntax` selectors in `.oxlintrc.json`, each message says
   what to do instead): in `src/`, `as unknown as`, a CORS header, `import.meta.env.VITE_*` (compiled into the
-  browser bundle) and a server function validator that is not `Schema.toStandardSchemaV1(...)`; in `src/routes/`,
+  browser bundle) and a server function validator that is not `Schema.toStandardSchemaV1(...)`; in `src/contract/`,
+  an id declared as `Schema.String` instead of a brand from `ids.ts`; in `src/routes/`,
   a raw server route (`server.handlers`) outside `api/$.ts` and `api/auth/$.ts`; in `tests/`, `expect(<literal>)`;
   in component, integration and E2E tests, `setTimeout` and `sleep`. The same comment-and-disable takes an
   exception for one line. A later override replaces the whole selector list of an earlier one, so each override

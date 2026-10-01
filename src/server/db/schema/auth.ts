@@ -4,11 +4,12 @@
 // every other table; `auth generate` would emit `timestamp` without time zone (better-auth#9920).
 import { relations } from 'drizzle-orm'
 import { boolean, index, pgTable, text, timestamp } from 'drizzle-orm/pg-core'
+import type { UserId } from '../../../contract/ids.ts'
 
 const timestamptz = (name: string) => timestamp(name, { withTimezone: true })
 
 export const user = pgTable('user', {
-  id: text('id').primaryKey(),
+  id: text('id').primaryKey().$type<UserId>(),
   name: text('name').notNull(),
   email: text('email').notNull().unique(),
   emailVerified: boolean('email_verified').default(false).notNull(),

@@ -1,13 +1,14 @@
 import '@tanstack/react-start/server-only'
 import { and, eq } from 'drizzle-orm'
 import { Context, Effect, Layer } from 'effect'
+import type { PostId, UserId } from '#/contract/ids.ts'
 import type { Post, PostPage } from '#/contract/posts.ts'
 import { Database, type Db } from '../db/client.ts'
 import { keyset, toPage, type PageRequest } from '../db/keyset.ts'
 import { type DbError, isUuid, query } from '../db/query.ts'
 import { post, user } from '../db/schema/index.ts'
 
-const toPost = (row: { id: string; body: string; createdAt: Date; updatedAt: Date }, authorName: string): Post => ({
+const toPost = (row: { id: PostId; body: string; createdAt: Date; updatedAt: Date }, authorName: string): Post => ({
   id: row.id,
   body: row.body,
   authorName,
@@ -26,7 +27,7 @@ const pageColumns = {
 }
 
 interface Author {
-  readonly id: string
+  readonly id: UserId
   readonly name: string
 }
 
@@ -64,7 +65,7 @@ const create = Effect.fn('PostsRepo.create')(function* (own: Db, author: Author,
 
 /** A new body for the post `id`. */
 interface Edit {
-  readonly id: string
+  readonly id: PostId
   readonly body: string
 }
 
@@ -81,7 +82,7 @@ const update = Effect.fn('PostsRepo.update')(function* (own: Db, author: Author,
   return row ? toPost(row, author.name) : undefined
 })
 
-const remove = Effect.fn('PostsRepo.remove')(function* (own: Db, author: Author, id: string) {
+const remove = Effect.fn('PostsRepo.remove')(function* (own: Db, author: Author, id: PostId) {
   if (!isUuid(id)) return false
   const rows = yield* query(own, (db) =>
     db
@@ -99,8 +100,8 @@ export class PostsRepo extends Context.Service<
     readonly listPublic: (page: PageRequest) => Effect.Effect<PostPage, DbError>
     readonly listByAuthor: (author: Author, page: PageRequest) => Effect.Effect<PostPage, DbError>
     readonly create: (author: Author, body: string) => Effect.Effect<Post, DbError>
-    readonly update: (author: Author, id: string, body: string) => Effect.Effect<Post | undefined, DbError>
-    readonly remove: (author: Author, id: string) => Effect.Effect<boolean, DbError>
+    readonly update: (author: Author, id: PostId, body: string) => Effect.Effect<Post | undefined, DbError>
+    readonly remove: (author: Author, id: PostId) => Effect.Effect<boolean, DbError>
   }
 >()('app/PostsRepo') {
   static readonly layer = Layer.effect(

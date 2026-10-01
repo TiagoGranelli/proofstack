@@ -1,4 +1,5 @@
 import { index, pgTable, text } from 'drizzle-orm/pg-core'
+import type { PostId } from '../../../contract/ids.ts'
 import { POST_MAX_LENGTH } from '../../../contract/limits.ts'
 import { authorId, createdAt, trimmedTextCheck, updatedAt, uuidv7Id } from './columns.ts'
 
@@ -6,7 +7,7 @@ export const post = pgTable(
   'post',
   {
     // Rows from before 0007 keep their random (v4) ids.
-    id: uuidv7Id(),
+    id: uuidv7Id().$type<PostId>(),
     authorId: authorId(),
     body: text('body').notNull(),
     createdAt: createdAt(),

@@ -4,6 +4,7 @@
 import { drizzle } from 'drizzle-orm/node-postgres'
 import { Cause, Data, Deferred, Effect, Exit, Fiber, Layer } from 'effect'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import type { UserId } from '#/contract/ids.ts'
 import { Database, pool } from '#/server/db/client.ts'
 import * as schema from '#/server/db/schema/index.ts'
 import { PostsRepo } from '#/server/posts/repo.ts'
@@ -19,7 +20,7 @@ const run = <A, E>(effect: Effect.Effect<A, E, PostsRepo | Database>) =>
 
 class Refused extends Data.TaggedError('Refused')<{ readonly reason: string }> {}
 
-let author: { id: string; name: string }
+let author: { id: UserId; name: string }
 beforeAll(async () => {
   author = await createAccount('transaction')
 })

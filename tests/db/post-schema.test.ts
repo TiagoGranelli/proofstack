@@ -6,6 +6,7 @@ import { Effect, Exit, Layer, Schema } from 'effect'
 import * as fc from 'fast-check'
 import type { DatabaseError } from 'pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import type { UserId } from '#/contract/ids.ts'
 import { POST_MAX_LENGTH } from '#/contract/limits.ts'
 import { PostInput } from '#/contract/post-input.ts'
 import { Database, pool } from '#/server/db/client.ts'
@@ -44,7 +45,7 @@ const planOf = async (statement: { query: string; params: unknown[] }) => {
   return nodesOf(rows[0]!['QUERY PLAN'][0].Plan)
 }
 
-let author: { id: string; name: string }
+let author: { id: UserId; name: string }
 beforeAll(async () => {
   author = await createAccount('schema')
   // 10,000 posts one second apart by 100 authors (`author` is the first), so the planner sees a table and an

@@ -8,6 +8,7 @@ import { PgDialect, getTableConfig, pgTable, text } from 'drizzle-orm/pg-core'
 import { Effect } from 'effect'
 import type { DatabaseError } from 'pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import type { UserId } from '#/contract/ids.ts'
 import type { PageCursor } from '#/contract/pages.ts'
 import { db, pool } from '#/server/db/client.ts'
 import { keyset, toPage } from '#/server/db/keyset.ts'
@@ -35,7 +36,7 @@ const checkSql = () => {
   return new PgDialect().sqlToQuery(bodyCheck!.value).sql
 }
 
-let author: { id: string }
+let author: { id: UserId }
 beforeAll(async () => {
   author = await createAccount('keyset')
   await pool.query(`create table keyset_test_note (

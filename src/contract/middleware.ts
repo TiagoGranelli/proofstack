@@ -1,9 +1,10 @@
 import { Context } from 'effect'
 import { HttpApiMiddleware, HttpApiSecurity, OpenApi } from 'effect/http-api'
 import { RateLimited, Unauthorized, ValidationError } from './errors.ts'
+import type { UserId } from './ids.ts'
 
 interface SessionUser {
-  readonly id: string
+  readonly id: UserId
   readonly name: string
   readonly email: string
 }

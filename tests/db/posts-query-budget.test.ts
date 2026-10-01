@@ -1,6 +1,7 @@
 // Query budgets of the example's repository (see query-budget.test.ts): a list sends one statement for 1 row or 50.
 import { Effect, Layer } from 'effect'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { PostId, type UserId } from '#/contract/ids.ts'
 import type { PageCursor } from '#/contract/pages.ts'
 import type { PostPage } from '#/contract/posts.ts'
 import { pool } from '#/server/db/client.ts'
@@ -23,7 +24,7 @@ const withBudget = <A, E>(what: string, n: number, call: (repo: Repo) => Effect.
     }).pipe(Effect.provide(repoLayer)),
   )
 
-type Author = { id: string; name: string }
+type Author = { id: UserId; name: string }
 let few: Author
 let many: Author
 beforeAll(async () => {
@@ -71,8 +72,12 @@ describe('PostsRepo', () => {
     // Another author's post: the same single statement finds nothing.
     expect(await withBudget('update (not the owner)', 1, (repo) => repo.update(many, created.id, 'x'))).toBeUndefined()
     // A malformed id never reaches Postgres.
-    expect(await withBudget('update (malformed id)', 0, (repo) => repo.update(few, 'not-a-uuid', 'x'))).toBeUndefined()
-    expect(await withBudget('remove (malformed id)', 0, (repo) => repo.remove(few, 'not-a-uuid'))).toBe(false)
+    expect(
+      await withBudget('update (malformed id)', 0, (repo) => repo.update(few, PostId.make('not-a-uuid'), 'x')),
+    ).toBeUndefined()
+    expect(await withBudget('remove (malformed id)', 0, (repo) => repo.remove(few, PostId.make('not-a-uuid')))).toBe(
+      false,
+    )
     expect(await withBudget('remove', 1, (repo) => repo.remove(few, created.id))).toBe(true)
     expect(await withBudget('remove (gone)', 1, (repo) => repo.remove(few, created.id))).toBe(false)
   })

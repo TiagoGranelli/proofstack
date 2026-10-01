@@ -8,7 +8,9 @@ description: Change the Postgres schema of this repo with Drizzle. Use when addi
 ## Steps
 
 1. Edit `src/server/db/schema/*.ts`. `src/server/db/schema/auth.ts` is application code: edit it by hand and
-   keep timestamps `timestamptz` (the `auth-change` skill says how to find what Better Auth needs).
+   keep timestamps `timestamptz` (the `auth-change` skill says how to find what Better Auth needs). An id column
+   carries its brand from `src/contract/ids.ts`: `uuidv7Id().$type<PostId>()` for the table's own id, and
+   `authorId()` is already a `UserId`. A foreign key to another table gets `.$type<ThatId>()` too.
 2. Run `pnpm db:generate --name <slug>`. It writes a new SQL file and updates `drizzle/meta/`.
 3. Review the new SQL in `drizzle/`. Only this new file may be adjusted by hand, and only before it is
    committed. A type change that must convert data gets its `USING` clause there, as in

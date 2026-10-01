@@ -2,6 +2,7 @@
 // declares only what is its own. Not a table: index.ts does not export it, and drizzle-kit reads no DDL from it.
 import { sql } from 'drizzle-orm'
 import { type AnyPgColumn, check, text, timestamp, uuid } from 'drizzle-orm/pg-core'
+import type { UserId } from '../../../contract/ids.ts'
 import { user } from './auth.ts'
 
 /**
@@ -18,6 +19,7 @@ export const authorId = () =>
   text('author_id')
     .notNull()
     .references(() => user.id, { onDelete: 'cascade' })
+    .$type<UserId>()
 
 /** When the row was written, by the database's clock: the keyset lists sort by it (src/server/db/keyset.ts). */
 export const createdAt = () => timestamp('created_at', { withTimezone: true }).defaultNow().notNull()
