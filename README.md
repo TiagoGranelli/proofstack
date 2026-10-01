@@ -166,7 +166,7 @@ The project is early, and a tagged release is coming. CI runs every job in `pnpm
 against Postgres, the integration and end-to-end tests in five browser projects, contract coverage, Lighthouse,
 and the Docker image build and scan.
 
-Some dependencies are pre-release. Effect 4 is a release candidate, Nitro 3 is a beta, Hey API is a `next`
+Some dependencies are pre-release. Nitro 3 is a beta, Hey API is a `next`
 snapshot, TanStack Start still calls itself a release candidate, and the project runs on TypeScript 7 and
 Node 26. Upgrades are pinned and gated, one per pull request, but expect some to need work.
 

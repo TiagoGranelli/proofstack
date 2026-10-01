@@ -511,9 +511,9 @@ other auth endpoints 100 per minute. `/get-session` is not limited. A limited re
 `X-Retry-After` (the UI says how many seconds to wait). Server functions go through the same limits.
 
 The counters live in the `rate_limit` table, so every instance shares them. Each request is one atomic
-`INSERT ... ON CONFLICT DO UPDATE` on its `key` (`src/server/auth-rate-limit.ts`): Better Auth's own database
-storage lets concurrent requests past the limit on Postgres (Drizzle adapter 1.7.6), so it is replaced through
-`rateLimit.customStorage`. Rows idle for 10 minutes are deleted in the background. Requests for endpoints
+`INSERT ... ON CONFLICT DO UPDATE` on its `key` (`src/server/auth-rate-limit.ts`), given to Better Auth through
+`rateLimit.customStorage` so its limits and the business API's write limit share one table and one statement.
+Rows idle for 10 minutes are deleted in the background. Requests for endpoints
 outside the allowlist are not counted and write nothing.
 
 The table is `UNLOGGED`: its writes (one per rate-limited request) skip the WAL, and it is not replicated to

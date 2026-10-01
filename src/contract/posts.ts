@@ -1,5 +1,5 @@
 import { Schema } from 'effect'
-import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from 'effect/unstable/httpapi'
+import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from 'effect/http-api'
 import { WRITE_WINDOW_SECONDS, WRITES_PER_WINDOW } from './limits.ts'
 import { Authentication, RequestValidation, WriteRateLimit } from './middleware.ts'
 import { PageQuery, pageOf } from './pages.ts'

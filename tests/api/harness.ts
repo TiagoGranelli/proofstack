@@ -12,8 +12,8 @@ import {
   HttpServer,
   HttpServerRequest,
   HttpServerResponse,
-} from 'effect/unstable/http'
-import { HttpApiBuilder, HttpApiClient, HttpApiMiddleware } from 'effect/unstable/httpapi'
+} from 'effect/http'
+import { HttpApiBuilder, HttpApiClient, HttpApiMiddleware } from 'effect/http-api'
 import { Api } from '#/contract/api.ts'
 import { Authentication } from '#/contract/middleware.ts'
 import { ApiHandlers } from '#/server/api/handlers.ts'

@@ -435,61 +435,6 @@
   },
   "components": {
     "schemas": {
-      "Health": {
-        "type": "object",
-        "properties": {
-          "status": {
-            "type": "string",
-            "enum": [
-              "ok"
-            ]
-          }
-        },
-        "required": [
-          "status"
-        ],
-        "additionalProperties": false
-      },
-      "ServiceUnavailableEncoded": {
-        "type": "object",
-        "properties": {
-          "_tag": {
-            "type": "string",
-            "enum": [
-              "ServiceUnavailable"
-            ]
-          },
-          "message": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "_tag",
-          "message"
-        ],
-        "additionalProperties": false
-      },
-      "User": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "email": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "name",
-          "email"
-        ],
-        "additionalProperties": false,
-        "description": "The signed-in user, without credentials or session data."
-      },
       "UnauthorizedEncoded": {
         "type": "object",
         "properties": {
@@ -506,130 +451,6 @@
         "required": [
           "_tag",
           "message"
-        ],
-        "additionalProperties": false
-      },
-      "PageCursor": {
-        "type": "string",
-        "description": "Opaque cursor from `nextCursor` of the previous page. Omit it for the first page."
-      },
-      "Post": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "body": {
-            "type": "string"
-          },
-          "authorName": {
-            "type": "string"
-          },
-          "createdAt": {
-            "type": "string"
-          },
-          "updatedAt": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "body",
-          "authorName",
-          "createdAt",
-          "updatedAt"
-        ],
-        "additionalProperties": false
-      },
-      "PostPage": {
-        "type": "object",
-        "properties": {
-          "items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Post"
-            }
-          },
-          "nextCursor": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/PageCursor"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "required": [
-          "items",
-          "nextCursor"
-        ],
-        "additionalProperties": false,
-        "description": "One page of posts, newest first. `nextCursor` is null on the last page."
-      },
-      "ValidationIssue": {
-        "type": "object",
-        "properties": {
-          "path": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "message": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "path",
-          "message"
-        ],
-        "additionalProperties": false
-      },
-      "ValidationErrorEncoded": {
-        "type": "object",
-        "properties": {
-          "_tag": {
-            "type": "string",
-            "enum": [
-              "ValidationError"
-            ]
-          },
-          "message": {
-            "type": "string"
-          },
-          "issues": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ValidationIssue"
-            }
-          }
-        },
-        "required": [
-          "_tag",
-          "message",
-          "issues"
-        ],
-        "additionalProperties": false
-      },
-      "PostInput": {
-        "type": "object",
-        "properties": {
-          "body": {
-            "type": "string",
-            "pattern": "^[^\\u0000]*$",
-            "allOf": [
-              {
-                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
-              }
-            ],
-            "minLength": 1,
-            "maxLength": 280
-          }
-        },
-        "required": [
-          "body"
         ],
         "additionalProperties": false
       },
@@ -673,6 +494,185 @@
         "required": [
           "_tag",
           "id"
+        ],
+        "additionalProperties": false
+      },
+      "ValidationErrorEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "ValidationError"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "issues": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ValidationIssue"
+            }
+          }
+        },
+        "required": [
+          "_tag",
+          "message",
+          "issues"
+        ],
+        "additionalProperties": false
+      },
+      "ValidationIssue": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "Post": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "authorName": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "body",
+          "authorName",
+          "createdAt",
+          "updatedAt"
+        ],
+        "additionalProperties": false
+      },
+      "PostInput": {
+        "type": "object",
+        "properties": {
+          "body": {
+            "type": "string",
+            "pattern": "^[^\\u0000]*$",
+            "allOf": [
+              {
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$"
+              }
+            ],
+            "minLength": 1,
+            "maxLength": 280
+          }
+        },
+        "required": [
+          "body"
+        ],
+        "additionalProperties": false
+      },
+      "PostPage": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Post"
+            }
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PageCursor"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "additionalProperties": false,
+        "description": "One page of posts, newest first. `nextCursor` is null on the last page."
+      },
+      "PageCursor": {
+        "type": "string",
+        "description": "Opaque cursor from `nextCursor` of the previous page. Omit it for the first page."
+      },
+      "User": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "email"
+        ],
+        "additionalProperties": false,
+        "description": "The signed-in user, without credentials or session data."
+      },
+      "ServiceUnavailableEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": [
+              "ServiceUnavailable"
+            ]
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "_tag",
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "Health": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok"
+            ]
+          }
+        },
+        "required": [
+          "status"
         ],
         "additionalProperties": false
       }

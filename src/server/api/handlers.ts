@@ -1,6 +1,6 @@
 import '@tanstack/react-start/server-only'
 import { Effect, Layer } from 'effect'
-import { HttpApiBuilder } from 'effect/unstable/httpapi'
+import { HttpApiBuilder } from 'effect/http-api'
 import { Api } from '#/contract/api.ts'
 import { ServiceUnavailable } from '#/contract/errors.ts'
 import { CurrentUser } from '#/contract/middleware.ts'

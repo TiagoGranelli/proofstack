@@ -35,13 +35,12 @@ shutdown (`lifecycle.ts`). Read this before you change anything here. The root `
   and in `tests/unit/env.test.ts` (`env.ts` is in the coverage gate). `import.meta.env.VITE_*` ships to the
   browser; a lint rule rejects it.
 
-## Effect v4 RC
+## Effect v4
 
-`effect@latest` on npm is still v3, so most examples on the web use the wrong API. Read
+v4 became stable in October 2026, so most examples on the web still use the v3 API. Read
 `node_modules/effect/AGENTS.md` in full before writing Effect code, and look up APIs in `node_modules/effect/src`.
-`effect/unstable/*` imports are confined to `src/contract`, `src/server/api`, and `scripts/openapi.ts`. Core
-`effect` is also imported by `src/server/posts` and `src/server/db`. The coming rename of those paths is
-covered by the `upgrade-prerelease-deps` skill.
+`effect/http-api` and `effect/http` imports are confined to `src/contract`, `src/server/api`, and
+`scripts/openapi.ts`. Core `effect` is also imported by `src/server/posts` and `src/server/db`.
 
 ## Better Auth
 

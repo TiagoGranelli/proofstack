@@ -18,7 +18,7 @@ Slopproof fits when:
 
 It fits less well when:
 
-- You need production-stable dependencies today. Effect 4 is a release candidate, Nitro 3 a beta, Hey API
+- You need production-stable dependencies today. Nitro 3 is a beta, Hey API
   a `next` snapshot, TanStack Start calls itself a release candidate, and the stack runs on TypeScript 7
   and Node 26. [stack.md](stack.md) lists the risk of each piece; each upgrade is gated but may need work.
 - You want a public API for third parties with its own versioning, a mobile client with token auth, or

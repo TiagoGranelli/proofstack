@@ -1,6 +1,6 @@
 // The business API contract. Shared by the server, OpenAPI generation and tests.
 // Must stay free of server-only imports (enforced by .fallowrc.json boundaries).
-import { HttpApi, OpenApi } from 'effect/unstable/httpapi'
+import { HttpApi, OpenApi } from 'effect/http-api'
 import { APP_NAME } from '#/config/app.ts'
 import { Me } from './me.ts'
 import { MyPosts, PublicPosts } from './posts.ts'

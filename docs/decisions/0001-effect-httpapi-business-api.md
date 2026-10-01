@@ -35,14 +35,11 @@ database directly, the contract would no longer describe them.
   `pnpm check:drift contract` enforces this.
 - `APP_URL` must equal the public origin. Otherwise the SSR and browser query keys differ, and the page
   refetches after hydration.
-- Effect v4 is a weekly RC. `effect/unstable/*` imports are confined to `src/contract`,
-  `src/server/api`, and `scripts/openapi.ts`; core `effect` is also imported by `src/server/posts` and
-  `src/server/db/client.ts`. The release after rc.117 moves `effect/unstable/httpapi` to
-  `effect/http-api` and `effect/unstable/http` to `effect/http`, with no compatibility exports and with
-  renamed service keys (Effect PRs #8354 and #8365).
+- The decision was made on Effect v4 release candidates; the project moved to the stable 4.0.0 on 2026-10-01,
+  when `effect/unstable/httpapi` became `effect/http-api` and `effect/unstable/http` became `effect/http`.
+  Those imports are confined to `src/contract`, `src/server/api`, and `scripts/openapi.ts`; core `effect` is
+  also imported by `src/server/posts` and `src/server/db/client.ts`.
 
 ## Revisit when
 
-Effect v4 goes stable (pin a stable version and drop the RC caveats); the path change lands (update the
-imports and review the `openapi.json` diff); or the API needs subscriptions or streaming that `HttpApi`
-cannot express.
+The API needs subscriptions or streaming that `HttpApi` cannot express.

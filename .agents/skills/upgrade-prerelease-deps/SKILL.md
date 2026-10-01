@@ -1,6 +1,6 @@
 ---
 name: upgrade-prerelease-deps
-description: Upgrade dependencies in this repo, above all the pinned pre-release ones (effect, @effect/vitest, nitro, @tanstack/react-start, oxfmt, @hey-api/openapi-ts). Use when bumping any package version, reviewing a Renovate PR, acting on pnpm audit:check, or when an install fails the release quarantine.
+description: Upgrade dependencies in this repo, above all the pinned pre-release ones (nitro, @tanstack/react-start, oxfmt, @hey-api/openapi-ts). Use when bumping any package version, reviewing a Renovate PR, acting on pnpm audit:check, or when an install fails the release quarantine.
 ---
 
 # Upgrade dependencies
@@ -18,24 +18,22 @@ description: Upgrade dependencies in this repo, above all the pinned pre-release
   the lockfile). An advisory that cannot apply here goes in `auditConfig.ignoreGhsas` in
   `pnpm-workspace.yaml`, with a comment giving the reason and a review date (write it by hand; `pnpm audit
   --ignore` adds the id without the comment). `pnpm audit:check` is the gate; Renovate's OSV alerts open fix PRs.
-- Pre-release packages, pinned exactly: `effect` and `@effect/vitest` (4.0.0 RCs from the `rc` dist-tag; npm
-  `latest` is v3), `nitro` (its npm `latest` is a `-beta` build), `@tanstack/react-start` (npm `latest` is a 1.x
-  release, but Start's docs still call it a Release Candidate), `oxfmt` (0.x, announced as beta) and
-  `@hey-api/openapi-ts` (a `next` snapshot, below).
+- Pre-release packages, pinned exactly: `nitro` (its npm `latest` is a `-beta` build), `@tanstack/react-start`
+  (npm `latest` is a 1.x release, but Start's docs still call it a Release Candidate), `oxfmt` (0.x, announced
+  as beta) and `@hey-api/openapi-ts` (a `next` snapshot, below).
 - Skills are pinned to a commit (`skills-lock.json`); update the shadcn skill in the PR that bumps `shadcn`
   ([docs/agents/skills.md](../../../docs/agents/skills.md)). Docs shipped inside packages are pinned by the
   lockfile.
 
 ## Steps
 
-1. Renovate (`.github/renovate.json`) opens the PRs, a week after each release; it follows the `rc` dist-tag for
-   Effect and `next` for Hey API. By hand, `pnpm outdated` lists what is newer.
+1. Renovate (`.github/renovate.json`) opens the PRs, a week after each release; it follows the `next` dist-tag for
+   Hey API. By hand, `pnpm outdated` lists what is newer.
 2. Upgrade one pre-release package per PR: `pnpm add --save-exact <name>@<version>`.
 3. Package-specific work:
-   - **Effect:** starting with the next RC after `4.0.0-rc.117`, `effect/unstable/httpapi` becomes
-     `effect/http-api` and `effect/unstable/http` becomes `effect/http`, with no compatibility exports (Effect
-     PRs #8354 and #8365). Rewrite the imports in `src/contract`, `src/server/api` and `scripts/openapi.ts`, run
-     `pnpm codegen`, and review the `openapi.json` diff. Upgrade `@effect/vitest` with it.
+   - **Effect** (stable since 4.0.0): upgrade `@effect/vitest` with it, run `pnpm codegen`, and review the
+     `openapi.json` diff. A check the document lost is a reason to stop: 4.0.0 exports a `Schema.isPattern` only
+     when its RegExp has the `u` flag.
    - **Hey API:** stays on the `next` snapshot `0.0.0-next-20260824173136`. The stable 0.99.0 needs the JS
      compiler API that TypeScript 7 no longer has, and crashes; Renovate follows `next` only
      ([ADR 0002](../../../docs/decisions/0002-typescript-7.md)). After any bump, run `pnpm codegen` and review

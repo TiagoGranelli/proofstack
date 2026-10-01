@@ -1,5 +1,5 @@
 import { Context } from 'effect'
-import { HttpApiMiddleware, HttpApiSecurity, OpenApi } from 'effect/unstable/httpapi'
+import { HttpApiMiddleware, HttpApiSecurity, OpenApi } from 'effect/http-api'
 import { RateLimited, Unauthorized, ValidationError } from './errors.ts'
 
 interface SessionUser {

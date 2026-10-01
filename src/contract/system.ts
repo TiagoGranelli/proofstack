@@ -1,5 +1,5 @@
 import { Schema } from 'effect'
-import { HttpApiEndpoint, HttpApiGroup } from 'effect/unstable/httpapi'
+import { HttpApiEndpoint, HttpApiGroup } from 'effect/http-api'
 import { ServiceUnavailable } from './errors.ts'
 
 const Health = Schema.Struct({ status: Schema.Literal('ok') }).annotate({ identifier: 'Health' })

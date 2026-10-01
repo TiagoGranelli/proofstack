@@ -25,11 +25,10 @@ const pruneIdleRows = (now: number): void => {
  * Auth's own storages: a window starts at the first request and restarts once `window` seconds passed since the
  * last admitted one. `count` counts every request in the window, so it passes `max` exactly when one is refused.
  *
- * Better Auth's `storage: 'database'` is not atomic on Postgres with the Drizzle adapter (1.7.6): its
- * `incrementOne` updates `WHERE id IN (SELECT id ... WHERE count < max)`, and Postgres does not re-evaluate that
- * subquery after waiting for the row lock, so 20 concurrent sign-ins passed a limit of 3 about 10 times in a
- * reproduction (better-auth#10557; the fix, better-auth#11331, repeats the guard on the UPDATE). Remove this storage
- * once a release ships #11331: switch to `storage: 'database'` and give the table back Better Auth's `id` column.
+ * Written when Better Auth's `storage: 'database'` was not atomic on Postgres with the Drizzle adapter
+ * (better-auth#10557, fixed in 1.7.7 by #11331). It stays because the business API's write limit needs the same
+ * upsert on the same table: with `storage: 'database'` Better Auth would own the table (an `id` column, its own
+ * queries) and the API would keep this statement anyway.
  */
 export const postgresRateLimitStorage: RateLimitStorage = {
   async consume(key, rule) {

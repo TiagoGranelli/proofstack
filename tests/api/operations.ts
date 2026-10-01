@@ -1,7 +1,7 @@
 // Every operation of the contract, read from it with HttpApi.reflect, and a valid request for each: the tests that
 // check all operations alike (./database-down.test.ts, ./public-operations.test.ts) cover a new endpoint without an
 // edit.
-import { HttpApi } from 'effect/unstable/httpapi'
+import { HttpApi } from 'effect/http-api'
 import { Api } from '#/contract/api.ts'
 
 interface Operation {

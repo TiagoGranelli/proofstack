@@ -11,7 +11,7 @@ What each piece is, why the template uses it, and what could go wrong with it. V
 | Nitro 3 | The deployment layer: the production server, graceful shutdown, prerendered static pages ([ADR 0004](decisions/0004-prerender-via-nitro.md)) | Medium: beta |
 | React 19 with the React Compiler | Memoization without hand-written `useMemo`, through the stable Babel preset ([ADR 0006](decisions/0006-react-compiler-babel-preset.md)) | Low |
 | Tailwind 4, shadcn/ui on Radix | Accessible primitives copied into `src/components/ui/`, styled with classes only, which the CSP requires ([ADR 0010](decisions/0010-content-security-policy.md)) | Low |
-| Effect 4 `HttpApi` | The API contract: schemas, endpoints and typed errors in `src/contract`, the OpenAPI document generated from it, and handlers tested without a database ([ADR 0001](decisions/0001-effect-httpapi-business-api.md), [ADR 0007](decisions/0007-no-trpc-no-zod.md)) | High: release candidate, and the import paths change after rc.117 |
+| Effect 4 `HttpApi` | The API contract: schemas, endpoints and typed errors in `src/contract`, the OpenAPI document generated from it, and handlers tested without a database ([ADR 0001](decisions/0001-effect-httpapi-business-api.md), [ADR 0007](decisions/0007-no-trpc-no-zod.md)) | Medium: 4.0.0 is the first stable release of v4, and most published examples are still v3 |
 | Hey API, TanStack Query | The client generated from `openapi.json`: fetch functions, query options and MSW handlers | Medium: a `next` snapshot until a stable release supports TS 7 |
 | TanStack Form with Effect Schema | Forms validate with the same schemas the server checks, loaded on the first interaction | Low |
 | Better Auth | Email and password sessions, verification, reset and session management. Account actions run through server functions, and rate limits are counted in Postgres ([ADR 0003](decisions/0003-sign-up-policy.md), [ADR 0013](decisions/0013-three-request-surfaces.md)) | Medium: several workarounds, listed below |
@@ -21,9 +21,9 @@ What each piece is, why the template uses it, and what could go wrong with it. V
 | Lighthouse behind Caddy | Page performance measured over HTTPS and HTTP/2, as in production ([ADR 0011](decisions/0011-lighthouse-over-https-http2.md)) | Medium: GitHub's runners score an unchanged page 99 on mobile |
 | lefthook, Renovate, gitleaks, grype, zizmor | Pre-commit jobs, dependency and image-digest updates, secret scanning, image scanning and workflow linting | Low |
 
-The pre-release pieces (Effect, TanStack Start, Nitro, Oxfmt, Hey API) are upgraded one per pull request with
-every gate passing (skill `upgrade-prerelease-deps`). Most of the churn stays in a few files:
-`effect/unstable/*` imports, for example, appear only in `src/contract`, `src/server/api` and
+The pre-release pieces (TanStack Start, Nitro, Oxfmt, Hey API) are upgraded one per pull request with
+every gate passing (skill `upgrade-prerelease-deps`). Most of the churn stays in a few files: the Effect HTTP
+imports (`effect/http-api`, `effect/http`), for example, appear only in `src/contract`, `src/server/api` and
 `scripts/openapi.ts`.
 
 ## Upstream issues we track
@@ -33,10 +33,8 @@ that change something here when they are fixed:
 
 | Upstream | What changes here |
 | --- | --- |
-| Effect PRs #8354 and #8365 (the release after 4.0.0-rc.117) | Rewrite the `effect/unstable/*` imports to `effect/http-api` and `effect/http` |
 | hey-api/openapi-ts#4235 | Leave the `next` snapshot for a stable release ([ADR 0002](decisions/0002-typescript-7.md)) |
 | typescript-eslint/typescript-eslint#10940 | Drop the peer rule for the TanStack lint plugins in `pnpm-workspace.yaml` |
-| better-auth/better-auth#10557, fixed by #11331 | Once #11331 is released, replace the custom rate-limit storage (`src/server/auth-rate-limit.ts`) with `storage: 'database'` |
 | better-auth/better-auth#11078 | Replace the endpoint allowlist plugin (`src/server/http/auth-endpoints.ts`) with `enabledPaths` |
 | better-auth/better-auth#11433 | Lower the `/revoke-other-sessions` budget in `tests/db/query-budget.test.ts` to a constant |
 | better-auth/better-auth#9920 | Generate the auth schema instead of maintaining `src/server/db/schema/auth.ts` by hand |

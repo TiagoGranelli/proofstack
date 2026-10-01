@@ -32,7 +32,7 @@ at the installed versions (snapshot: files and size of the checked-out tree; tra
 
 | Name | Repo (license) | Tag (`<v>`: the installed version) | Sparse paths | Commit | Snapshot | Transfer | Adds beyond `node_modules` |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `effect` | Effect-TS/effect (MIT) | `effect@<v>` of `effect` | `/packages/effect/test/unstable/httpapi/ /packages/effect/test/unstable/http/ /packages/effect/test/schema/ /LICENSE` | `14a3f140095f` | 97 files, 1.6 MB | 0.9 MB | HttpApi, Http, and Schema tests as usage examples |
+| `effect` | Effect-TS/effect (MIT) | `effect@<v>` of `effect` | `/packages/effect/test/httpapi/ /packages/effect/test/http/ /packages/effect/test/schema/ /LICENSE` | `14a3f140095f` | 97 files, 1.6 MB | 0.9 MB | HttpApi, Http, and Schema tests as usage examples |
 | `tanstack-start` | TanStack/router (MIT) | `@tanstack/react-start@<v>` | `/docs/start/framework/react/ /docs/router/guide/ /docs/router/routing/ /docs/router/api/ /LICENSE` | `ddad69a4a4b1` | 166 files, 1.1 MB | 2.6 MB | Start (React) and Router prose docs |
 | `better-auth` | better-auth/better-auth (MIT) | `v<v>` of `better-auth` | `/docs/content/docs/ /LICENSE.md` | `229a02a65218` | 198 files, 1.9 MB | 1.0 MB | Docs for options, plugins, and adapters |
 | `hey-api` | hey-api/openapi-ts (MIT) | `@hey-api/openapi-ts@0.99.0` (the installed `next` snapshot has no tag) | `/packages/openapi-ts/src/ /examples/openapi-ts-tanstack-react-query/ /LICENSE` | `c9dc0b94b0bf` | 607 files, 1.8 MB | 1.7 MB | Plugin sources and the TanStack Query example |
@@ -49,7 +49,7 @@ formats, or typechecks `.repos/**`.
   version. The Better Auth and Hey API docs and sources help in specific cases, and fetching one takes
   seconds.
 - Committed copies must be regenerated in every PR that bumps the dependency, or they describe the wrong
-  version. Effect and Start are RC releases with weekly updates.
+  version. Start is an RC release with weekly updates.
 - Everyone who clones the template would inherit about 6 MB of third-party files and the exclusions they
   require.
 
@@ -71,5 +71,5 @@ To keep a source in git anyway:
    `.repos/<name>` with the repo, tag and commit in the message. Refresh it in each PR that bumps the
    dependency.
 2. **Subtree, only if you want git-native updates for a whole repo:**
-   `git subtree add --prefix=.repos/effect https://github.com/Effect-TS/effect effect@4.0.0-rc.117 --squash`.
+   `git subtree add --prefix=.repos/effect https://github.com/Effect-TS/effect effect@4.0.0 --squash`.
    Run it under a memory cap, and add `!effect/` and `!effect/**` to `.repos/.gitignore` first.

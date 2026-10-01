@@ -28,7 +28,22 @@ minimumReleaseAgeStrict: true
 minimumReleaseAgeExcludePrune: true
 # Exceptions name one exact version and say why, for example a security fix needed before it is a day old:
 #   - 'some-package@1.2.3' # GHSA-xxxx-xxxx-xxxx fix; remove once older than a day (2026-10-01)
-minimumReleaseAgeExclude: []
+minimumReleaseAgeExclude:
+  # Better Auth 1.7.7 (2026-09-30): the atomic rate-limit fix (better-auth#11331), taken for the 0.1.0 release
+  # before it was a day old. Published with provenance. Remove on 2026-10-02 or later.
+  - 'better-auth@1.7.7'
+  - 'auth@1.7.7'
+  - '@better-auth/core@1.7.7'
+  - '@better-auth/drizzle-adapter@1.7.7'
+  - '@better-auth/kysely-adapter@1.7.7'
+  - '@better-auth/memory-adapter@1.7.7'
+  - '@better-auth/mongo-adapter@1.7.7'
+  - '@better-auth/prisma-adapter@1.7.7'
+  - '@better-auth/telemetry@1.7.7'
+  # Effect 4.0.0 (2026-10-01): the first stable release of v4, taken for the 0.1.0 release in place of the release
+  # candidate before it was a day old. Published with provenance. Remove on 2026-10-03 or later.
+  - 'effect@4.0.0'
+  - '@effect/vitest@4.0.0'
 
 # Fails a version published with weaker provenance than an earlier one of the same package (a trusted
 # publisher replaced by a token, the usual sign of a takeover). Versions older than 30 days are not checked:

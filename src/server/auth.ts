@@ -70,8 +70,8 @@ export const auth = betterAuth({
   disabledPaths: env.authSignUp === 'open' ? [] : ['/sign-up/email'],
   // Built-in rules still apply on top of this default: /sign-in/* allows 3 requests per 10 s per IP.
   // Counters live in the app's rate_limit table, so every instance shares them: ./auth-rate-limit.ts, one atomic
-  // upsert per request, because Better Auth's own database storage lets concurrent requests past the limit on
-  // Postgres. A customStorage wins over `storage`, which stays unset so Better Auth does not claim the table.
+  // upsert per request, shared with the business API's write limit. A customStorage wins over `storage`, which
+  // stays unset so Better Auth does not claim the table.
   // /get-session is a read that every page guard makes, so it is not counted. Neither are requests the endpoint
   // allowlist answers with 404 (Better Auth counts before plugins run), so invented paths cannot fill the table.
   rateLimit: {

@@ -39,7 +39,8 @@ export const PageCursor = Schema.String.annotate({
 export type PageCursor = typeof PageCursor.Type
 
 // Query parameters arrive as strings. The pattern keeps "1e1" or " 5" out; the range is checked on the number.
-const PageLimit = Schema.String.check(Schema.isPattern(/^\d{1,3}$/, { expected: 'a whole number' }))
+// Effect exports a pattern to the OpenAPI document only when the RegExp has the `u` flag.
+const PageLimit = Schema.String.check(Schema.isPattern(/^\d{1,3}$/u, { expected: 'a whole number' }))
   .annotate({ description: `Items per page, 1 to ${POSTS_PAGE_MAX}. Default ${POSTS_PAGE_DEFAULT}.` })
   .pipe(
     Schema.decodeTo(

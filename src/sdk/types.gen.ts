@@ -5,63 +5,9 @@ export type ClientOptions = {
   baseUrl: `${string}://${string}` | (string & {});
 };
 
-export type Health = {
-  status: 'ok';
-};
-
-export type ServiceUnavailableEncoded = {
-  _tag: 'ServiceUnavailable';
-  message: string;
-};
-
-/**
- * The signed-in user, without credentials or session data.
- */
-export type User = {
-  id: string;
-  name: string;
-  email: string;
-};
-
 export type UnauthorizedEncoded = {
   _tag: 'Unauthorized';
   message: string;
-};
-
-/**
- * Opaque cursor from `nextCursor` of the previous page. Omit it for the first page.
- */
-export type PageCursor = string;
-
-export type Post = {
-  id: string;
-  body: string;
-  authorName: string;
-  createdAt: string;
-  updatedAt: string;
-};
-
-/**
- * One page of posts, newest first. `nextCursor` is null on the last page.
- */
-export type PostPage = {
-  items: Array<Post>;
-  nextCursor: PageCursor | null;
-};
-
-export type ValidationIssue = {
-  path: Array<string>;
-  message: string;
-};
-
-export type ValidationErrorEncoded = {
-  _tag: 'ValidationError';
-  message: string;
-  issues: Array<ValidationIssue>;
-};
-
-export type PostInput = {
-  body: unknown;
 };
 
 export type RateLimitedEncoded = {
@@ -76,6 +22,60 @@ export type RateLimitedEncoded = {
 export type PostNotFoundEncoded = {
   _tag: 'PostNotFound';
   id: string;
+};
+
+export type ValidationErrorEncoded = {
+  _tag: 'ValidationError';
+  message: string;
+  issues: Array<ValidationIssue>;
+};
+
+export type ValidationIssue = {
+  path: Array<string>;
+  message: string;
+};
+
+export type Post = {
+  id: string;
+  body: string;
+  authorName: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PostInput = {
+  body: unknown;
+};
+
+/**
+ * One page of posts, newest first. `nextCursor` is null on the last page.
+ */
+export type PostPage = {
+  items: Array<Post>;
+  nextCursor: PageCursor | null;
+};
+
+/**
+ * Opaque cursor from `nextCursor` of the previous page. Omit it for the first page.
+ */
+export type PageCursor = string;
+
+/**
+ * The signed-in user, without credentials or session data.
+ */
+export type User = {
+  id: string;
+  name: string;
+  email: string;
+};
+
+export type ServiceUnavailableEncoded = {
+  _tag: 'ServiceUnavailable';
+  message: string;
+};
+
+export type Health = {
+  status: 'ok';
 };
 
 export type SystemHealthData = {

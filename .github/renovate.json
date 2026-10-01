@@ -28,9 +28,8 @@
       "minimumReleaseAgeBehaviour": "timestamp-optional"
     },
     {
-      "description": "Effect 4 is on the rc dist-tag; npm latest is still v3.",
+      "description": "effect and @effect/vitest are released together and move in one PR.",
       "matchPackageNames": ["effect", "@effect/vitest"],
-      "followTag": "rc",
       "groupName": "effect"
     },
     {

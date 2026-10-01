@@ -141,13 +141,13 @@ a refused edit means change the source and run the command.
 ## Version policy
 
 Dependencies are pinned exactly, fresh releases are quarantined for a day, and the pre-release packages
-(`effect`, `@effect/vitest`, `nitro`, `@tanstack/react-start`, `oxfmt`, `@hey-api/openapi-ts`) are upgraded one
+(`nitro`, `@tanstack/react-start`, `oxfmt`, `@hey-api/openapi-ts`) are upgraded one
 per PR with `check`, `check:drift` and `verify:app` passing. The `upgrade-prerelease-deps` skill holds the full
 policy; load it before changing `package.json` or `pnpm-workspace.yaml`.
 
 ## Sharp edges
 
-- **Effect v4 RC.** `effect@latest` on npm is still v3, so most examples on the web use the wrong API. Before
+- **Effect v4.** v4 became stable in October 2026, so most examples on the web still use the v3 API. Before
   writing Effect code, read `node_modules/effect/AGENTS.md` in full; look up APIs in `node_modules/effect/src`.
 - **TypeScript.** The project has one TypeScript, 7.0.2 (no JS compiler API). Hey API stays on its `next`
   snapshot; 0.99.0 crashes on TS 7 ([ADR 0002](docs/decisions/0002-typescript-7.md)). `scripts/*.ts` run through

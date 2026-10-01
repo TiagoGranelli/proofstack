@@ -3,15 +3,8 @@
 // WriteRateLimit (a write budget per user, 429 past it). A feature's own tests check that its endpoints use them.
 import { assert, describe, expect, it, onTestFinished } from '@effect/vitest'
 import { Effect, Layer, Schema } from 'effect'
-import { HttpRouter, HttpServer } from 'effect/unstable/http'
-import {
-  HttpApi,
-  HttpApiBuilder,
-  HttpApiEndpoint,
-  HttpApiError,
-  HttpApiGroup,
-  HttpApiSchema,
-} from 'effect/unstable/httpapi'
+import { HttpRouter, HttpServer } from 'effect/http'
+import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiError, HttpApiGroup, HttpApiSchema } from 'effect/http-api'
 import { ValidationError } from '#/contract/errors.ts'
 import { WRITE_WINDOW_SECONDS, WRITES_PER_WINDOW } from '#/contract/limits.ts'
 import { Authentication, RequestValidation, WriteRateLimit } from '#/contract/middleware.ts'
