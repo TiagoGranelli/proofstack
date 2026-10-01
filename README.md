@@ -48,11 +48,7 @@ A new project has no conventions, no tests to break and nothing that pushes back
 common version it has seen. You can write the rules in a prompt or an `AGENTS.md`, but the agent can skip them,
 and you find out in review. Slopproof writes them as checks.
 
-|        | Step            | What happens                                                                   |
-| ------ | --------------- | ------------------------------------------------------------------------------ |
-| **01** | Ask             | Point Claude Code, Codex or another agent at the repository and ask for a feature. |
-| **02** | The agent checks | It runs `pnpm check`: 14 jobs in about 16 seconds, with no database and no build. |
-| **03** | It fixes        | A broken rule fails with a message that says what to do instead.               |
+![Two workflows side by side. Without Slopproof: you ask, the agent writes, you review, and every mistake comes back to you (reading the database from the UI, one query per row, no test for the error case, a page never tried with a keyboard). With Slopproof: pnpm check sits between the agent and your review and sends failures back to the agent, so you review a diff that already passed architecture boundaries, query budgets, accessibility in five browsers and contract drift. Four gates run in order: a hook on every edit, pnpm check with 14 jobs in about 16 seconds, pnpm verify:app on the built app with a real Postgres, and CI with Lighthouse and an image scan.](docs/assets/with-and-without.png)
 
 ## Is it for you
 
