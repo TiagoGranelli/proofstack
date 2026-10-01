@@ -3,6 +3,7 @@ import { drizzleAdapter } from '@better-auth/drizzle-adapter'
 import { betterAuth } from 'better-auth'
 import { APIError, createAuthMiddleware } from 'better-auth/api'
 import { tanstackStartCookies } from 'better-auth/tanstack-start'
+import { Redacted } from 'effect'
 import { APP_NAME } from '#/config/app.ts'
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '#/contract/limits.ts'
 import { scheduleAuthCleanup } from './auth-cleanup.ts'
@@ -37,7 +38,7 @@ export const auth = betterAuth({
   appName: APP_NAME,
   baseURL: env.appUrl,
   basePath: AUTH_BASE_PATH,
-  secret: env.authSecret,
+  secret: Redacted.value(env.authSecret),
   database: drizzleAdapter(db, { provider: 'pg', schema }),
   emailAndPassword: {
     enabled: true,

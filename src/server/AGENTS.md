@@ -42,6 +42,15 @@ v4 became stable in October 2026, so most examples on the web still use the v3 A
 `effect/http-api` and `effect/http` imports are confined to `src/contract`, `src/server/api`, and
 `scripts/openapi.ts`. Core `effect` is also imported by `src/server/posts` and `src/server/db`.
 
+Two things the compiler checks through Effect, beyond errors and services:
+
+- **Ids are branded** (`src/contract/ids.ts`): `PostId` and `UserId` are strings that do not mix, in the contract,
+  the table columns (`.$type<PostId>()`) and every repository signature. A plain string becomes an id only at a
+  boundary, with `UserId.make(...)` (as the session lookup in `api/web-handler.ts`) or by decoding a request.
+- **Credentials are `Redacted`** (`env.ts`: `databaseUrl`, `authSecret`, `smtp.url`). Printing, logging or
+  serializing one shows `<redacted>`. Call `Redacted.value(...)` only where the value is handed to its library,
+  and wrap a new credential the same way.
+
 ## Better Auth
 
 - `auth.api.*` skips rate limiting, `disabledPaths` and plugin `onRequest` hooks (the endpoint allowlist). Use

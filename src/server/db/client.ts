@@ -2,7 +2,7 @@ import '@tanstack/react-start/server-only'
 import type { ExtractTablesWithRelations } from 'drizzle-orm'
 import { drizzle, type NodePgQueryResultHKT } from 'drizzle-orm/node-postgres'
 import { PgTransaction, type PgDatabase } from 'drizzle-orm/pg-core'
-import { Context, Effect, Exit, Layer, Option } from 'effect'
+import { Context, Effect, Exit, Layer, Option, Redacted } from 'effect'
 import { Pool } from 'pg'
 import { env } from '../env.ts'
 import { onShutdown } from '../lifecycle.ts'
@@ -10,7 +10,7 @@ import { log } from '../log.ts'
 import * as schema from './schema/index.ts'
 
 export const pool = new Pool({
-  connectionString: env.databaseUrl,
+  connectionString: Redacted.value(env.databaseUrl),
   max: env.databasePoolMax,
   idleTimeoutMillis: 10_000,
   // Fail fast instead of queueing forever when Postgres is unreachable or the pool is exhausted,

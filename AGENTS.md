@@ -65,7 +65,8 @@ failure says what was wrong. Oxlint (`.oxlintrc.json`) enforces the numbers; the
   (`explicit-module-boundary-types`); components and hooks infer theirs.
 - **Errors.** A message names the offending value and the shape expected:
   `` `${name} must be an integer between ${min} and ${max} (got "${raw}")` `` (`unicorn/error-message` only
-  rejects an empty one). Never echo a secret, a password or user content: give its length, scheme or path. Across
+  rejects an empty one). Never echo a secret, a password or user content: give its length, scheme or path (`env` holds credentials as
+  `Redacted`, which print as `<redacted>`). Across
   a trust boundary the client gets a generic message and `log` gets the cause (`src/lib/server-function-errors.ts`).
 - **Comments.** Say why, not what. Keep them when you refactor, update them when the reason changes. A line that
   exists because of an upstream bug or limit links the issue (`better-auth#9920`) and says when to remove it.

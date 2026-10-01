@@ -1,5 +1,7 @@
 // src/server/env.ts validates the environment once, at import, and stops the process with a message naming
 // the variable. Each test imports a fresh copy of the module under its own environment.
+import { inspect } from 'node:util'
+import { Redacted } from 'effect'
 import { describe, expect, it, vi } from 'vitest'
 import { stubEnvironment } from './process-fakes.ts'
 
@@ -17,6 +19,14 @@ const BASE = {
   NODE_ENV: 'test',
 }
 
+/** `env` with each Redacted value read, so a test compares the secret itself and not two `<redacted>` wrappers. */
+const revealed = (env: Awaited<ReturnType<typeof load>>) => ({
+  ...env,
+  databaseUrl: Redacted.value(env.databaseUrl),
+  authSecret: Redacted.value(env.authSecret),
+  smtp: env.smtp && { ...env.smtp, url: Redacted.value(env.smtp.url) },
+})
+
 const load = async (overrides: Partial<Record<keyof typeof BASE, string | undefined>> = {}) => {
   stubEnvironment({ ...BASE, ...overrides })
   vi.resetModules()
@@ -25,7 +35,7 @@ const load = async (overrides: Partial<Record<keyof typeof BASE, string | undefi
 
 describe('env', () => {
   it('reads a minimal environment with its defaults', async () => {
-    expect(await load()).toEqual({
+    expect(revealed(await load())).toEqual({
       databaseUrl: BASE.DATABASE_URL,
       databasePoolMax: 10,
       databaseUrlPooled: false,
@@ -38,9 +48,19 @@ describe('env', () => {
     })
   })
 
+  it('never shows a credential when it is printed, logged or serialized', async () => {
+    const smtpUrl = 'smtps://user:mail-not-a-secret@smtp.example.com:465'
+    const env = await load({ SMTP_URL: smtpUrl, MAIL_FROM: 'no-reply@example.com' })
+    // What a log line and `console.log` do with a value.
+    const printed = [JSON.stringify(env), inspect(env, { depth: 5 })]
+    for (const text of printed) {
+      for (const secret of [BASE.DATABASE_URL, BASE.BETTER_AUTH_SECRET, smtpUrl]) expect(text).not.toContain(secret)
+    }
+  })
+
   it('trims values and keeps only the origin of APP_URL', async () => {
     const env = await load({ APP_URL: ' http://localhost:3000/ ', DATABASE_URL: ' postgresql://db/app ' })
-    expect([env.appUrl, env.databaseUrl]).toEqual(['http://localhost:3000', 'postgresql://db/app'])
+    expect([env.appUrl, Redacted.value(env.databaseUrl)]).toEqual(['http://localhost:3000', 'postgresql://db/app'])
   })
 
   it('knows production by NODE_ENV', async () => {
@@ -150,9 +170,9 @@ describe('env', () => {
     })
 
     it('reads SMTP over STARTTLS or TLS with a sender', async () => {
-      expect((await load(smtp)).smtp).toEqual({ url: smtp.SMTP_URL, from: smtp.MAIL_FROM })
+      expect(revealed(await load(smtp)).smtp).toEqual({ url: smtp.SMTP_URL, from: smtp.MAIL_FROM })
       const plain = await load({ SMTP_URL: 'smtp://127.0.0.1:1025', MAIL_FROM: 'no-reply@example.com' })
-      expect(plain.smtp).toEqual({ url: 'smtp://127.0.0.1:1025', from: 'no-reply@example.com' })
+      expect(revealed(plain).smtp).toEqual({ url: 'smtp://127.0.0.1:1025', from: 'no-reply@example.com' })
     })
 
     it.each([

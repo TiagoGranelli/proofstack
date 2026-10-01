@@ -1,4 +1,5 @@
 import '@tanstack/react-start/server-only'
+import { Redacted } from 'effect'
 import { createTransport } from 'nodemailer'
 import type { Mailer } from './mailer.ts'
 
@@ -7,9 +8,9 @@ import type { Mailer } from './mailer.ts'
  * start), with credentials in the userinfo part: `smtps://user:password@smtp.example.com:465`. Timeouts are
  * short because sends run in the background and shutdown waits for them.
  */
-export const createSmtpMailer = (options: { url: string; from: string }): Mailer => {
+export const createSmtpMailer = (options: { url: Redacted.Redacted; from: string }): Mailer => {
   const transport = createTransport({
-    url: options.url,
+    url: Redacted.value(options.url),
     connectionTimeout: 5_000,
     greetingTimeout: 5_000,
     socketTimeout: 15_000,

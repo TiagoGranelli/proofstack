@@ -1,8 +1,12 @@
 import '@tanstack/react-start/server-only'
 import { isIP } from 'node:net'
+import { Redacted } from 'effect'
 
 // Validated once at startup: src/server/nitro/startup.ts imports this module before the server
 // listens, so a bad configuration stops the process with one of these messages.
+//
+// A value that holds a credential is `Redacted`: a log line, an error message or JSON.stringify shows `<redacted>`,
+// and only the one place that hands it to its library reads it, with `Redacted.value`.
 
 const read = (name: string): string => {
   const value = process.env[name]?.trim()
@@ -27,13 +31,13 @@ const readOrigin = (name: string): string => {
   return url.origin
 }
 
-const readSecret = (name: string): string => {
+const readSecret = (name: string): Redacted.Redacted => {
   const value = read(name)
   if (value.length < 32)
     throw new Error(
       `${name} must have at least 32 characters (got ${value.length}; generate one with: openssl rand -base64 32)`,
     )
-  return value
+  return Redacted.make(value, { label: name })
 }
 
 /** IP addresses and CIDR ranges (`10.0.0.0/8`, `::1/128`), comma-separated. Better Auth ignores invalid entries. */
@@ -68,11 +72,11 @@ const readInt = (name: string, bounds: { fallback: number; min: number; max: num
 /** The scheme of a URL-like value, the only part of a connection string safe to print (the rest may hold a password). */
 const schemeOf = (value: string): string => /^([a-z][a-z\d+.-]*):/i.exec(value)?.[1] ?? 'none'
 
-const readDatabaseUrl = (name: string): string => {
+const readDatabaseUrl = (name: string): Redacted.Redacted => {
   const value = read(name)
   if (!/^postgres(ql)?:\/\//.test(value))
     throw new Error(`${name} must be a postgres:// connection string (got scheme "${schemeOf(value)}")`)
-  return value
+  return Redacted.make(value, { label: name })
 }
 
 const readChoice = <const T extends string>(name: string, choices: readonly [T, ...T[]]): T => {
@@ -83,7 +87,7 @@ const readChoice = <const T extends string>(name: string, choices: readonly [T, 
 }
 
 /** SMTP_URL and MAIL_FROM, both or neither. Credentials go in the URL (percent-encoded). */
-const readSmtp = (): { url: string; from: string } | undefined => {
+const readSmtp = (): { url: Redacted.Redacted; from: string } | undefined => {
   const url = process.env.SMTP_URL?.trim()
   if (!url) return undefined
   let parsed: URL
@@ -99,7 +103,7 @@ const readSmtp = (): { url: string; from: string } | undefined => {
   const from = read('MAIL_FROM')
   if (!/@[^@\s>]+>?$/.test(from))
     throw new Error(`MAIL_FROM must be an address such as "Acme <no-reply@example.com>" (got "${from}")`)
-  return { url, from }
+  return { url: Redacted.make(url, { label: 'SMTP_URL' }), from }
 }
 
 export const env = {
