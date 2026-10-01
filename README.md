@@ -1,7 +1,8 @@
-<h1 align="center">Slopproof</h1>
+<p align="center">
+  <img src="docs/assets/banner.png" alt="Slopproof: a full-stack template where a coding agent's mistakes fail a command." width="800">
+</p>
 
 <p align="center">
-  <strong>A full-stack template where a coding agent's mistakes fail a command.</strong><br>
   The rules a careful team would enforce are already checks.<br>
   Each failure tells the agent what to do instead, and it fixes the code before you read the diff.
 </p>
@@ -188,4 +189,11 @@ that a mistake gets through. They can't prove that generated code is correct.
 Contributions are welcome: [CONTRIBUTING.md](.github/CONTRIBUTING.md). Security reports go through
 [SECURITY.md](.github/SECURITY.md). Everyone taking part follows the [Code of Conduct](.github/CODE_OF_CONDUCT.md).
 
-MIT license.
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo-dark.png">
+    <img src="docs/assets/logo.png" alt="" width="72">
+  </picture>
+  <br>
+  MIT license.
+</p>
