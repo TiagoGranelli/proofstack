@@ -1,6 +1,6 @@
 ---
 name: verifier
-description: Runs this repo's slow verification commands (pnpm verify:app, pnpm test:e2e, pnpm test, pnpm test:db, pnpm build, pnpm lighthouse) and reports only what failed. Use it for those commands instead of running them in the main conversation, so their logs stay out of it.
+description: Runs this repo's slow verification commands (pnpm verify:app, pnpm test:e2e, pnpm test, pnpm test:db, pnpm build, pnpm lighthouse) and reports only what failed. Use it for those commands instead of running them in the main conversation, so their logs stay out of it. Call it in the foreground and read its report before you say the work is done: a run still going in the background has verified nothing.
 tools: Bash, Read, Grep, Glob
 model: claude-sonnet-5-5
 effort: low

@@ -44,5 +44,6 @@ The posts feature is the reference for each step: open the one file a step names
 committed with its source. Run `pnpm check` after each layer. At the end, run `pnpm build && pnpm verify:app` through
 the `verifier` subagent; while fixing, rerun only the layer that failed (its summary names the command), then run
 the whole `verify:app` once more. The feature is done only when that last full run passed: contract coverage runs
-only there. Every status the contract declares needs a test that provokes it (the api layer counts): a 400 for
+only there. Wait for the verifier's report each time (call it in the foreground, or wait for a background run to
+finish) and act on it before you report the feature: ending while it still runs hands over unverified work. Every status the contract declares needs a test that provokes it (the api layer counts): a 400 for
 an operation with a body or query, a 429 for a rate-limited write.
