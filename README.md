@@ -3,6 +3,7 @@
 </p>
 
 <p align="center">
+  <strong>Nobody reviews 10,000 lines. Make the codebase refuse the slop instead.</strong><br>
   The rules a careful team would enforce are already checks.<br>
   Each failure tells the agent what to do instead, and it fixes the code before you read the diff.
 </p>
@@ -14,6 +15,7 @@
 </p>
 
 <p align="center">
+  <a href="#review-is-the-bottleneck-now">Why</a> ·
   <a href="#quick-start">Quick start</a> ·
   <a href="#or-let-your-agent-set-it-up">Agent prompt</a> ·
   <a href="#what-gets-checked">Checks</a> ·
@@ -23,6 +25,27 @@
 </p>
 
 ---
+
+## Review is the bottleneck now
+
+Writing code stopped being the slow part. An agent writes a feature in minutes, and it fixes a bug just as fast.
+The slow part is you, reading the diff.
+
+Nobody reads a 10,000-line pull request line by line. People scroll, look at the tests and approve. Once agents
+write most of your code, you have already stopped reviewing the way you used to, whether you say so or not.
+
+So stop pretending. Reading agent output line by line does not scale, and at that volume it catches less than
+you think. What you need is a reason to trust what ships without reading all of it:
+
+- an architecture the agent cannot break without a command failing;
+- tests that run the real thing: the database, five browsers, the keyboard, the security headers;
+- a backup you have restored at least once, and a deploy you can roll back
+  ([docs/operations.md](docs/operations.md#backups-and-restore)).
+
+Slopproof is that, in place before the first feature. Review what the product should do and let the gates judge
+how it was built. When something still gets through, fixing it is as fast as writing it was.
+
+## See it refuse one
 
 Ask an agent to show how many posts there are, and it writes a component that reads the database:
 
@@ -44,9 +67,9 @@ Here, `pnpm check` rejects it and says where the data should come from:
 
 <sub>A real run on a scratch copy of the repository, with a few lines of pnpm and Fallow noise removed.</sub>
 
-A new project has no conventions, no tests to break and nothing that pushes back, so an agent builds the most
-common version it has seen. You can write the rules in a prompt or an `AGENTS.md`, but the agent can skip them,
-and you find out in review. Slopproof writes them as checks.
+An agent builds the most common version it has seen, and a new project has nothing that pushes back. Rules in
+a prompt or an `AGENTS.md` are suggestions: the agent can skip them, and you find out in review, if you look.
+A rule that fails a command is one it cannot skip.
 
 ![Two workflows side by side. Without Slopproof: you ask, the agent writes, you review, and every mistake comes back to you (reading the database from the UI, one query per row, no test for the error case, a page never tried with a keyboard). With Slopproof: pnpm check sits between the agent and your review and sends failures back to the agent, so you review a diff that already passed architecture boundaries, query budgets, accessibility in five browsers and contract drift. Four gates run in order: a hook on every edit, pnpm check with 14 jobs in about 16 seconds, pnpm verify:app on the built app with a real Postgres, and CI with Lighthouse and an image scan.](docs/assets/with-and-without.png)
 
@@ -54,17 +77,19 @@ and you find out in review. Slopproof writes them as checks.
 
 It fits if:
 
-- you start web projects with a coding agent and review what it writes;
-- you want tests, boundaries, accessibility, security and a deploy path on day one;
-- the app will grow and other people, or other agents, will keep changing it.
+- agents write most of your code and you can no longer read every line of it;
+- you want to merge what an agent wrote because it passed, without reading all of it;
+- the app will grow, and other people and other agents will keep changing it.
 
 It does not fit if:
 
 - you want something cheap and fast for a prototype. An agent takes substantially longer to deliver a feature
-  here, because it writes the tests and has to pass every check;
+  here, because it writes the tests and has to pass every check. That time is the review you no longer do;
 - you need production-stable dependencies today ([Status](#status)).
 
 ## What gets checked
+
+Every row is something agents do when nothing stops them, and the check that stops it here.
 
 | An agent tends to | The check |
 | --- | --- |
@@ -80,7 +105,8 @@ It does not fit if:
 | Ship a slow page | Lighthouse on four pages, mobile and desktop: 100 in accessibility, best practices and SEO, 95 in performance |
 | Install whatever is newest | Exact pins, a one-day wait on new releases, `pnpm audit`, a license allowlist, secret and image scans |
 
-Every exception to a check is a visible edit with its reason next to it.
+An agent cannot quietly switch a check off: every exception is a visible edit with its reason next to it, and
+changes to the check files go to a code owner.
 [docs/agents/gates.md](docs/agents/gates.md) describes each check and how to make an exception.
 
 For the agent itself: `AGENTS.md` stays under 200 lines, each multi-step workflow is a skill, and the Claude Code
@@ -168,8 +194,10 @@ Some dependencies are pre-release: Nitro 3 is a beta, Hey API is a `next` snapsh
 itself a release candidate. The project runs on TypeScript 7 and Node 26. Upgrades are pinned and gated, one per
 pull request, but expect some to need work.
 
-The agent evals run with Harbor, but results from real agents are not published yet. The checks lower the chance
-that a mistake gets through. They can't prove that generated code is correct.
+The agent evals run with Harbor, but results from real agents are not published yet.
+
+No set of checks proves that code is correct, and neither does a tired reviewer on page 40 of a diff. The gates
+catch whole classes of mistakes every time, and what gets past them is cheap to fix.
 
 ## Docs
 
