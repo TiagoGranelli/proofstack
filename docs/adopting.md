@@ -167,7 +167,7 @@ template has no shared history with it, so take updates as patches:
 ```sh
 git remote add template https://github.com/TiagoGranelli/slopproof.git
 git fetch template --tags
-git log --oneline v0.1.0..v0.2.0            # what changed between two releases (once tags are published)
+git log --oneline v0.1.0..v0.2.0            # what changed between two releases
 git cherry-pick <commit>                    # one change
 git diff v0.1.0 v0.2.0 -- scripts/ | git apply -3   # or a whole area, with three-way merge
 ```

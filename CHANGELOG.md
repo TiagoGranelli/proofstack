@@ -8,6 +8,8 @@ repository created from the template.
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-01
+
 The first version of the template.
 
 ### Added
