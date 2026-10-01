@@ -84,7 +84,7 @@ jobs:
       - run: pnpm ci:supply-chain
 
   secrets:
-    name: Secret scan (gitleaks, full history)
+    name: Secret scan (Betterleaks, full history)
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:

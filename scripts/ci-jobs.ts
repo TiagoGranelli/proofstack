@@ -5,7 +5,7 @@
 //               scripts/images.ts, and the deploy recipes in deploy/ valid (Docker)
 //   static      pnpm check against the parent commit, without its drift job (the drift job runs every drift check)
 //   supply-chain registry signatures of every installed package, and the vulnerability gate (`pnpm audit:check`)
-//   secrets     gitleaks over every commit of HEAD's history (.config/gitleaks.toml; Docker, a full clone)
+//   secrets     Betterleaks over every commit of HEAD's history (.config/betterleaks.toml; Docker, a full clone)
 //   drift       every drift check, including the database one (DATABASE_URL)
 //   build       the production build, with placeholder configuration
 //   verify      verify:app on all five Playwright projects (DATABASE_URL, the build)
@@ -74,13 +74,14 @@ const deployRecipes = () =>
     ],
   ])
 
-/** The rules, and the fingerprints of reviewed findings in history that cannot be rewritten. */
-const GITLEAKS_CONFIG = ['--config', '.config/gitleaks.toml', '--gitleaks-ignore-path', '.config/gitleaksignore']
+/** The rules, the fake-value convention and the reviewed findings in history that cannot be rewritten. */
+const BETTERLEAKS_CONFIG = ['--config', '.config/betterleaks.toml']
 
 /**
- * gitleaks from its pinned image, offline and read-only, over every commit reachable from HEAD: a secret that
- * was committed and removed later is still in the history. Default rules plus the project's (.config/gitleaks.toml),
- * minus the reviewed findings in .config/gitleaksignore. Findings are printed with the secret redacted.
+ * Betterleaks from its pinned image, offline and read-only, over every commit reachable from HEAD: a secret that
+ * was committed and removed later is still in the history. Default rules plus the project's, minus the reviewed
+ * findings in history, all in .config/betterleaks.toml. Findings are printed (Betterleaks 2 does by default; its
+ * `-v` validates a secret against the provider, which needs the network) with the secret redacted.
  */
 const git = (...gitArgs: string[]) => spawnSync('git', gitArgs, { encoding: 'utf8' }).stdout.trim()
 const secrets = (args: string[]) => {
@@ -101,8 +102,8 @@ const secrets = (args: string[]) => {
     ['run', '--rm', '--network', 'none', '--memory', '512m', ...user]
       .concat(safeDirectory.flatMap((setting) => ['--env', setting]))
       .concat(dirs.flatMap((dir) => ['--volume', `${dir}:${dir}:ro`]))
-      .concat(['--workdir', top, IMAGES.gitleaks, 'git', ...GITLEAKS_CONFIG, '--log-opts=HEAD'])
-      .concat(['--redact', '--verbose', '--no-banner', ...args, '.']),
+      .concat(['--workdir', top, IMAGES.betterleaks, 'git', ...BETTERLEAKS_CONFIG, '--log-opts=HEAD'])
+      .concat(['--redact', '--no-banner', ...args, '.']),
   )
 }
 

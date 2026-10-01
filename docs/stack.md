@@ -19,7 +19,7 @@ What each piece is, why the template uses it, and what could go wrong with it. V
 | Oxlint with tsgolint, Oxfmt, Fallow | Type-aware lint, formatting, dead code, architecture boundaries, complexity and duplication, all fast enough for every commit | Low; Oxfmt is 0.x |
 | Vitest 5, Playwright, axe | Unit, API, component (browser mode) and integration tests in Vitest; end-to-end and accessibility tests in five browser projects | Low |
 | Lighthouse behind Caddy | Page performance measured over HTTPS and HTTP/2, as in production ([ADR 0011](decisions/0011-lighthouse-over-https-http2.md)) | Medium: GitHub's runners score an unchanged page 99 on mobile |
-| lefthook, Renovate, gitleaks, grype, zizmor | Pre-commit jobs, dependency and image-digest updates, secret scanning, image scanning and workflow linting | Low |
+| lefthook, Renovate, Betterleaks, grype, zizmor | Pre-commit jobs, dependency and image-digest updates, secret scanning, image scanning and workflow linting | Low; Betterleaks is a 2.0.0 release candidate |
 
 The pre-release pieces (TanStack Start, Nitro, Oxfmt, Hey API) are upgraded one per pull request with
 every gate passing (skill `upgrade-prerelease-deps`). Most of the churn stays in a few files: the Effect HTTP

@@ -1,0 +1,85 @@
+# Betterleaks configuration (`pnpm ci:secrets`, and the pre-commit hook when a local betterleaks 2 binary exists;
+# both pass it with --config, v2 never discovers a config on its own): Betterleaks' default rules plus two for
+# how this project handles secrets.
+# Values that are safe to commit follow a convention the filter knows: the fixed passwords of the
+# throwaway local, CI and smoke-test databases (app-local, app-ci, app-smoke), build and
+# test placeholders that say so (`...-placeholder-...`, `...-not-a-secret...`), and the documentation example
+# `user:password`. Name a new test value the same way instead of adding a filter entry.
+title = "betterleaks config"
+
+# The v2 format (valueGroup, prefilter, filter): a v1 binary must refuse this file, not half-read it.
+minVersion = "2.0.0-rc.1"
+
+# Skips a whole file or patch before any rule runs; true skips. Added to the default prefilter, not replacing it.
+# Test fixtures: files under tests/fixtures/ hold fake credentials only.
+prefilter = '''
+matchesAny(attributes["path"], [`^tests/fixtures/`])
+'''
+
+# Discards one finding; true discards. Added to the default filter, not replacing it.
+filter = '''
+(
+  // Values that are safe to commit by convention (see the top of this file). generic-credential-uri is the
+  // default rule that overlaps url-credentials, so the same convention applies to it.
+  finding["rule_id"] in ["better-auth-secret", "url-credentials", "generic-credential-uri"] &&
+  matchesAny(finding["secret"], [
+    // Fixed passwords of the throwaway local (compose.yaml), CI and smoke-test databases: <name>-local, -ci, -smoke.
+    // Any name, because older commits in the history the CI job scans used the app's name before `app`.
+    `^[a-z]+-(local|ci|smoke)$`,
+    // Build-time and test placeholders that nothing connects with.
+    `placeholder`,
+    `not-a-secret`,
+    // Dummies and documentation examples: postgres://build:build@127.0.0.1:1/build, smtps://user:password@...
+    `^(build|unused|password)$`,
+    // An expression, not a literal: BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET
+    `^process\.env\.`,
+  ])
+)
+||
+// Reviewed findings in history that cannot be rewritten, each tied to its commit, file, rule and value, so the
+// same value anywhere else still fails. Betterleaks' ignore file (.betterleaksignore) matches a value in every
+// commit and file, which would also allow it in the current tree; a value in the current tree follows the
+// convention above instead.
+(
+  // Both URL rules: the default one reports these when the filter drops the project's.
+  attributes["path"] == "tests/unit/env.test.ts" &&
+  finding["rule_id"] in ["url-credentials", "generic-credential-uri"] && (
+    // Commit f62cfb6 (already on main) added two made-up test URLs, `app:secret` and `user:pass`, before the
+    // convention existed. Nothing ever connected with them; the file now uses `not-a-secret` and `password`.
+    (attributes["git.sha"] == "f62cfb6ce3df07e37666b38a5c8d537cbc78f783" && finding["secret"] in ["secret", "pass"]) ||
+    // Commit be0c75c added a made-up MySQL URL (`user:secret`) as an unsupported-scheme case; the file no longer
+    // has it.
+    (attributes["git.sha"] == "be0c75cff2dfdc4d28d2e1bf745ad5d43edb83ba" && finding["secret"] == "secret")
+  )
+)
+||
+// Commit 89fe6ec set BETTER_AUTH_SECRET to `randomBytes(32).toString('base64')`, an expression the rule reads as a
+// literal; the smoke test now takes its secret from the compose recipe.
+(
+  attributes["path"] == "scripts/docker-smoke.ts" && finding["rule_id"] == "better-auth-secret" &&
+  attributes["git.sha"] == "89fe6ec190b7bc2d69b1735a7fb1333541ecf358" && finding["secret"] == "randomBytes"
+)
+'''
+
+[extend]
+useDefault = true
+# generic-password (new in Betterleaks, low confidence) reports any quoted text after the word `password`: the
+# passwords the tests type into forms and the UI's own messages ("That password is not correct."). Passwords
+# that matter here reach the app through a URL or BETTER_AUTH_SECRET, which the rules below cover.
+disabledRules = ["generic-password"]
+
+[[rules]]
+id = "better-auth-secret"
+description = "BETTER_AUTH_SECRET set to a literal value (it signs every session cookie)"
+# Same line only: `BETTER_AUTH_SECRET=...`, `BETTER_AUTH_SECRET: '...'`. Expressions (process.env..., ${...}) are
+# not literals.
+regex = '''BETTER_AUTH_SECRET["']?[ \t]*[:=][ \t]*["'`]?([A-Za-z0-9+/=_.~-]{8,})'''
+valueGroup = 1
+keywords = ["better_auth_secret"]
+
+[[rules]]
+id = "url-credentials"
+description = "Password embedded in a URL (postgres://user:password@host, smtps://user:password@host)"
+regex = '''\b[a-z][a-z0-9+.-]*://[^\s:/@"'`]+:([^\s:/@"'`$]+)@[^\s"'`]+'''
+valueGroup = 1
+keywords = ["://"]

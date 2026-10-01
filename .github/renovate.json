@@ -28,6 +28,12 @@
       "minimumReleaseAgeBehaviour": "timestamp-optional"
     },
     {
+      "description": "Betterleaks is pinned to a 2.0.0 release candidate. Docker versioning reads `-rc.1` as a platform suffix and would never leave it; semver moves to the next candidate, then to 2.0.0 and stable releases after it.",
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["ghcr.io/betterleaks/betterleaks"],
+      "versioning": "semver"
+    },
+    {
       "description": "effect and @effect/vitest are released together and move in one PR.",
       "matchPackageNames": ["effect", "@effect/vitest"],
       "groupName": "effect"

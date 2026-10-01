@@ -29,8 +29,7 @@
 /.config/grype.yaml           @TiagoGranelli
 /scripts/licenses.ts          @TiagoGranelli
 /scripts/images.ts            @TiagoGranelli
-/.config/gitleaks.toml        @TiagoGranelli
-/.config/gitleaksignore       @TiagoGranelli
+/.config/betterleaks.toml     @TiagoGranelli
 /.config/squawk.toml          @TiagoGranelli
 
 # CI workflows, actions, Renovate (renovate.json), the community files and this file.

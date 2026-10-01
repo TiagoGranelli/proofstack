@@ -10,7 +10,7 @@ covers and how to make an exception.
 
 | Job | What fails it |
 | --- | --- |
-| `secrets` | gitleaks on the staged changes, only when a `gitleaks` binary is installed (CI's `secrets` job always runs) |
+| `secrets` | Betterleaks on the staged changes, only when a `betterleaks` 2 binary is on the `PATH` (CI's `secrets` job always runs). Until 2.0.0 is released Homebrew installs version 1, which the job skips: take 2.0.0-rc.1 from the [release](https://github.com/betterleaks/betterleaks/releases/tag/v2.0.0-rc.1) |
 | `format` | `oxfmt --check` |
 | `lint` | type-aware Oxlint with the `pedantic` category, TanStack Query/Router, Playwright and the repository's syntax rules (below); zero warnings: `--deny-warnings`, every rule is error or off |
 | `typecheck` | `tsc` |

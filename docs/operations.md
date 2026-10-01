@@ -772,7 +772,7 @@ browsers, Postgres and (for `verify`) Mailpit, and moves artifacts. The logic li
 | Script | Job |
 | --- | --- |
 | `pnpm ci:workflows` | actionlint 1.7.12 and zizmor 1.30.1 (images pinned by digest, offline, read-only), a check that `compose.yaml`, `deploy/compose.production.yaml`, `ci.yml` and the `Dockerfile` pin the same images as `scripts/images.ts`, and the deploy recipes (`docker compose config` on the production compose file, kubeconform 0.8.0 on `deploy/kubernetes.yaml`, which downloads the schemas). Needs Docker. |
-| `pnpm ci:secrets` | gitleaks 8.30.1 (image pinned by digest, offline, read-only) over every commit reachable from HEAD, with `.config/gitleaks.toml`. A fake value in the tree follows that file's naming convention; `.config/gitleaksignore` lists, by fingerprint and with a reason, only findings in history that cannot be rewritten. Needs Docker and a full clone (`fetch-depth: 0`). |
+| `pnpm ci:secrets` | Betterleaks 2.0.0-rc.1 (image pinned by digest, offline, read-only) over every commit reachable from HEAD, with `.config/betterleaks.toml`. A fake value in the tree follows that file's naming convention; its `filter` lists, by commit, file, rule and value and with a reason, only findings in history that cannot be rewritten. Needs Docker and a full clone (`fetch-depth: 0`). |
 | `pnpm ci:static` | `pnpm check` without its drift gate (so with the migration lint and the license gate) |
 | `pnpm ci:supply-chain` | `pnpm audit signatures` (registry signatures of every installed package) and `pnpm audit:check`. The frozen install before it already verified the lockfile against `minimumReleaseAge` and `trustPolicy`. Needs the npm registry. |
 | `pnpm ci:drift` | `pnpm check:drift`, all four checks (`DATABASE_URL`) |
@@ -851,7 +851,7 @@ What guards the dependencies, the image and the repository, and where each gate 
 | `pnpm audit:check` | CI `supply-chain` | a high or critical advisory in any package, production or development, not in `auditConfig.ignoreGhsas` (`pnpm-workspace.yaml`) |
 | `pnpm licenses:check` | `pnpm check` | a production dependency whose license is not allowed (`scripts/licenses.ts`) |
 | `pnpm check:migrations` | `pnpm check` | a migration statement that locks or rewrites a busy table ([Migration safety](#migration-safety)) |
-| `pnpm ci:secrets` | CI `secrets`; the pre-commit hook when a `gitleaks` binary is installed | a secret anywhere in the history (`.config/gitleaks.toml`) |
+| `pnpm ci:secrets` | CI `secrets`; the pre-commit hook when a `betterleaks` 2 binary is installed | a secret anywhere in the history (`.config/betterleaks.toml`) |
 | grype in `pnpm ci:docker` | CI `docker` | a high or critical vulnerability with a released fix in the production image (`grype --only-fixed --fail-on high`), unless `.config/grype.yaml` ignores it |
 
 - **Exceptions.** An advisory goes in `auditConfig.ignoreGhsas` (`pnpm-workspace.yaml`, with a comment giving the

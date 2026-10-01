@@ -25,8 +25,12 @@ export const IMAGES = {
   /** Validates deploy/kubernetes.yaml against the Kubernetes schemas in `pnpm ci:workflows`. */
   kubeconform:
     'ghcr.io/yannh/kubeconform:v0.8.0@sha256:faffaf43f95aa6425306e1ab8d6fcad72acb9049158f38e574c085ea1ec0f64e',
-  /** Secret scan over the git history (`pnpm ci:secrets`, .config/gitleaks.toml). */
-  gitleaks: 'ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f',
+  /**
+   * Secret scan over the git history (`pnpm ci:secrets`, .config/betterleaks.toml). A release candidate: Renovate
+   * reads its tag as semver (.github/renovate.json), so it moves to the next candidate and then to 2.0.0.
+   */
+  betterleaks:
+    'ghcr.io/betterleaks/betterleaks:v2.0.0-rc.1@sha256:bd1bfb5a77122e56c0c6b2b0a4d455b1383f86ddd8bf1ec5397a0c25cd368f65',
 } as const
 
 /** The package name (package.json), which names the app's Docker artifacts. */

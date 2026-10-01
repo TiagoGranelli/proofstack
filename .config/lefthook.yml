@@ -13,12 +13,14 @@ pre-commit:
   parallel: false
   jobs:
     # Optional locally (no Docker in the hook); CI's `secrets` job scans every commit (`pnpm ci:secrets`).
+    # Runs only with Betterleaks 2: version 1, which Homebrew installs until 2.0.0 is released, loads the v2 config
+    # without an error and skips what it does not know. No binary prints nothing, so the job passes.
     - name: secrets
       run: >-
-        if command -v gitleaks >/dev/null 2>&1; then gitleaks git --pre-commit --staged --redact --no-banner
-        --config .config/gitleaks.toml --gitleaks-ignore-path .config/gitleaksignore .; fi
+        case "$(betterleaks version 2>/dev/null)" in 2.*) betterleaks git --staged --redact --no-banner
+        --config .config/betterleaks.toml . ;; esac
       fail_text: >-
-        remove the secret from the staged change; a false positive goes in .config/gitleaks.toml with its reason
+        remove the secret from the staged change; a false positive goes in .config/betterleaks.toml with its reason
 
     - name: format
       glob: '**/*.{ts,tsx,js,mjs,cjs,json,jsonc,css,yml,yaml,html,toml}'
