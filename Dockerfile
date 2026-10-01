@@ -35,6 +35,11 @@ RUN DATABASE_URL=postgres://build:build@127.0.0.1:1/build \
 FROM ${NODE_IMAGE} AS runtime
 ENV NODE_ENV=production \
     PORT=3000
+# Debian's security updates as of this build: the base image is rebuilt some days after Debian publishes a fix
+# (the OpenSSL and PCRE2 fixes of 2026-10-01 failed the image scan while the pinned digest was still the newest).
+RUN apt-get update \
+ && apt-get upgrade -y --no-install-recommends \
+ && rm -rf /var/lib/apt/lists/*
 # The server needs only node. npm (and corepack or yarn, which newer base images no longer ship) would add a
 # package manager and its dependency tree to the attack surface and to every vulnerability scan.
 RUN rm -rf /usr/local/lib/node_modules /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \

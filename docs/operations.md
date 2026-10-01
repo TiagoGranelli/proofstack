@@ -863,8 +863,10 @@ What guards the dependencies, the image and the repository, and where each gate 
   last two pinned by digest. An image pinned in several files (`scripts/images.ts`, the compose files, `ci.yml`,
   the Dockerfiles) moves in one PR. It waits 7 days after a release, except for a vulnerability fix: its OSV
   alerts (osv.dev) open that PR at once, since GitHub's dependency graph reads pnpm 12 lockfiles as empty
-  (dependabot/dependabot-core#15904) and GitHub's own alerts miss this project. A grype failure in `ci:docker`
-  is usually fixed by a rebuilt base image digest, which Renovate proposes.
+  (dependabot/dependabot-core#15904) and GitHub's own alerts miss this project. The runtime stage of the
+  `Dockerfile` installs Debian's security updates at build time, so a rebuild picks up a fixed system package
+  before the base image is republished. A grype failure in `ci:docker` that remains is in Node itself, and is
+  fixed by a newer base image digest, which Renovate proposes.
 - **Runtime image.** Only `node`, `.output/` and `drizzle/`: the runtime stage deletes npm and npx, and the
   process runs as the unprivileged `node` user, under Node's permission model: it may read `.output/` and
   use the network, and nothing else (no file writes, child processes, workers or addons;

@@ -1,7 +1,7 @@
 # grype's configuration for the image scan in `pnpm ci:docker` (scripts/docker-smoke.ts), which runs
 # `grype --only-fixed --fail-on high`: a high or critical vulnerability with a released fix fails the job, one
-# without a fix yet is reported and waited for. The fix is usually a newer base image digest, which Renovate
-# proposes. A finding that does not apply to this image gets a rule here, with why and a date to look again:
+# without a fix yet is reported and waited for. The Dockerfile installs Debian's security updates at build time, so
+# a finding that remains is usually in Node itself: the fix is a newer base image digest, which Renovate proposes. A finding that does not apply to this image gets a rule here, with why and a date to look again:
 #
 # ignore:
 #   - vulnerability: CVE-2026-12345
