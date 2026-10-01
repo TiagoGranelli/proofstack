@@ -17,8 +17,8 @@ pre-commit:
     # without an error and skips what it does not know. No binary prints nothing, so the job passes.
     - name: secrets
       run: >-
-        case "$(betterleaks version 2>/dev/null)" in 2.*) betterleaks git --staged --redact --no-banner
-        --config .config/betterleaks.toml . ;; esac
+        if betterleaks version 2>/dev/null | grep -q '^2\.'; then betterleaks git --staged --redact --no-banner
+        --config .config/betterleaks.toml .; fi
       fail_text: >-
         remove the secret from the staged change; a false positive goes in .config/betterleaks.toml with its reason
 
